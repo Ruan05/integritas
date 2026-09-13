@@ -5,8 +5,9 @@
 - Repository: `Ruan05/integritas`
 - Pull request: [#1](https://github.com/Ruan05/integritas/pull/1) — keep draft/unmerged until final production approval.
 - Branch: `integritas-command-center-foundation`
-- Latest code/infra checkpoint before this ledger update: `60d33a832f8e6c22b7d52d31cc7a19d5e633a79d`
-- Public production: `https://integritass.com` — preserve unchanged until explicit publication approval.
+- Verified security/application checkpoint: `fbb90e49a9023eba809e676c57561474019620f9` with CI run #53 PASS.
+- Current branch also includes the post-checkpoint OpenClaw runtime-candidate research in `docs/OPENCLAW_RUNTIME_CANDIDATES.md`.
+- Public production: `https://integritass.com` — freshly verified HTTP 200 and preserve unchanged until explicit publication approval.
 - Existing private admin remains the behavioral baseline and rollback target.
 
 ## Completed in the continuation
@@ -23,8 +24,9 @@
   - source/build secret checks;
   - high-severity dependency audit;
   - Playwright failure artifacts.
-- Playwright now runs one worker in CI for deterministic coverage while retaining desktop Chromium and mobile WebKit projects.
+- Playwright runs one worker in CI for deterministic coverage while retaining desktop Chromium and mobile WebKit projects.
 - Oracle/OpenClaw bootstrap scripts are syntax-checked by CI.
+- CI run #53 passed both the application verification job and the database-security job on head `fbb90e49a9023eba809e676c57561474019620f9`.
 
 ### Supabase RLS — staged, not production-applied
 
@@ -38,24 +40,21 @@
   - keep all browser writes server-gated;
   - use least-privilege row policies for admin/case/thread/change-set/repository reads;
   - keep deploy, E2E-token, MCP allowlist and OpenCode transport tables server-only;
-  - use `security definer` helpers with an empty `search_path` and fully-qualified references.
+  - place `security definer` helpers in dedicated `integritas_private` schema with empty `search_path`, fully-qualified references and explicit schema/function privileges.
 - Expanded the policy contract to require policies on all 26 advisor-reported protected tables.
-- Added behavioral authorization assertions for:
-  - anonymous denial;
-  - browser-write denial;
-  - server-only internal tables;
-  - authorized case-only reads;
-  - cross-case isolation;
-  - admin behavior.
+- Added behavioral authorization assertions for anonymous denial, browser-write denial, server-only internal tables, authorized-case reads, cross-case isolation, admin behavior and private helper-schema privilege boundaries.
 - Added and tested a safe rollback that returns browser roles to server-only/default-deny without restoring historical broad grants.
-- CI run #40 passed the forward migration, authorization behavior, and rollback sequence on a disposable PostgreSQL database. A paid Supabase preview branch is no longer required to prove the staged RLS contract.
+- CI run #53 passed the forward migration, authorization behavior, and rollback sequence on a disposable PostgreSQL database. A paid Supabase preview branch is no longer required to prove the staged RLS contract.
+- Production remains intentionally unchanged; the live Supabase advisor still reports the same 26 no-policy notices until explicit production approval.
 
 ### Runtime preparation
 
 - Added `infra/oracle/bootstrap-ubuntu.sh` to install only the Ubuntu/Docker prerequisites; it intentionally opens no application ports, injects no secrets, installs no local LLM, and does not create a GitHub self-hosted runner.
+- Added `infra/oracle/verify-host.sh` for read-only host verification after provisioning.
 - Added `infra/openclaw/verify-image.sh` to reject mutable OpenClaw image references and require a pinned `linux/arm64` digest.
 - Added `infra/openclaw/sandbox.example.json5` as a restrictive baseline: explicit sandboxing, per-session scope, no network by default, read-only root, dropped capabilities, no-new-privileges and resource limits. Validate exact keys against the ultimately pinned OpenClaw release before deployment.
 - Added `infra/openclaw/README.md` with the Oracle/OCI Cloud Shell handoff, smoke-test requirements, secret boundary and production gates.
+- Added `docs/OPENCLAW_RUNTIME_CANDIDATES.md` with current release discovery and selection gates. At capture time the current stable observed was `2026.9.4`; its official `2026.9.4-browser` package exposes a Linux ARM64 immutable pull reference, but fresh 2026.9.x P0/update-regression reports mean it is a smoke-test candidate, not an automatic production choice. Extended Stable `2026.6.35` should also be compared on-host before selection.
 - Recorded live Supabase Edge Function versions/hashes in `docs/LIVE_BACKEND_MANIFEST.md` for drift detection without publishing backend source or secrets into the public repository.
 
 ## Verified security rulings
@@ -68,21 +67,33 @@
 - Do not attach the Oracle production VM as a general GitHub self-hosted runner for this public repository.
 - Do not place a broad Supabase service-role credential on the Oracle model/tool host if a scoped worker API can mediate the required operations.
 
+## Current Oracle browser blocker
+
+- The first Oracle secure-takeover window successfully opened once, so Oracle login itself is not yet proven to be the blocker.
+- The subsequent failure reported a two-session Work browser-concurrency limit after cleanup, which is consistent with a stale/stranded takeover session consuming capacity.
+- Recovery order for Work:
+  1. Do **not** immediately spawn another browser session.
+  2. Reuse the original Oracle/takeover session if it is still addressable.
+  3. If Work exposes browser-session controls, close only the failed/stale Oracle takeover session and keep any healthy required session.
+  4. Retry Oracle login inside the reclaimed slot.
+  5. Ask the user for secure takeover only at the actual password/MFA step; never request credentials in chat.
+  6. Only if no stale session can be reclaimed and the connector still reports the concurrency limit should the run stop on browser-session capacity.
+
 ## Remaining work for ChatGPT Work
 
 ### Human-authenticated infrastructure
 
-1. Open Oracle Cloud through Work cloud browser.
-2. Request secure browser takeover for legitimate login/MFA; never request credentials in chat.
+1. Recover/reuse the existing Oracle takeover session before creating a new browser session.
+2. Complete Oracle Cloud login/MFA through secure takeover; never request credentials in chat.
 3. Prefer OCI Cloud Shell for bootstrap so the workflow does not depend on the user's Mac.
 4. Inspect actual tenancy/home-region/free-resource limits and create only a resource explicitly shown as zero additional cost.
 5. If genuine Always Free A1 capacity is unavailable after bounded legitimate attempts, report that exact blocker before proposing any paid host.
 
 ### OpenClaw runtime
 
-1. Inspect current official OpenClaw release/Extended Stable/P0-P1 issues at execution time.
-2. Smoke-test a fresh `linux/arm64` browser-capable candidate in disposable state.
-3. Pin the exact tested image digest and a rollback digest; never track `latest` in production.
+1. Read `docs/OPENCLAW_RUNTIME_CANDIDATES.md` first; do not repeat basic release discovery unless current state has changed.
+2. On the actual Oracle ARM64 host, compare current stable browser image against current Extended Stable browser image using immutable digests.
+3. Pin the exact tested production image digest and a rollback digest; never track `latest` or `extended-stable` alone in production.
 4. Run the prepared Ubuntu bootstrap and adapt the restrictive sandbox baseline to the exact release schema.
 5. Prove gateway, model call, session/restart, sandbox tool, browser/Playwright and Integritas reconnect behavior.
 
@@ -111,7 +122,8 @@ Leaked-password protection should be classified `PLAN_LIMITED` if the current Su
 - Do not move OpenCode credentials to Oracle for architectural neatness.
 - Do not add n8n, Temporal, Kubernetes or a local LLM unless fresh evidence establishes a requirement.
 - Do not treat Work-only plugins as permanent Oracle runtime credentials.
+- Do not burn browser-session capacity by spawning repeated Oracle takeover sessions before trying to reclaim the original failed slot.
 
 ## Next execution step
 
-Finish verification of the newest branch head. Then authenticate to Oracle and provision/test the persistent OpenClaw runtime using the prepared `infra/` artifacts. Production RLS/merge/deploy remain explicit approval gates.
+Recover/reuse the original Oracle secure-browser session, complete authenticated tenancy inspection, then provision/test the persistent OpenClaw runtime using the prepared `infra/` artifacts and current candidate review. Production RLS/merge/deploy remain explicit approval gates.
