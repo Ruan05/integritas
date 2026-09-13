@@ -1,33 +1,41 @@
 \set ON_ERROR_STOP on
 
-create extension if not exists pgtap;
-select plan(14);
+create or replace function pg_temp.assert_true(condition boolean, message text)
+returns void
+language plpgsql
+as $$
+begin
+  if not coalesce(condition, false) then
+    raise exception 'ASSERTION FAILED: %', message;
+  end if;
+end;
+$$;
 
-select ok(
+select pg_temp.assert_true(
   not has_table_privilege('anon', 'public.integritas_cases', 'SELECT'),
   'anon cannot read Integritas cases'
 );
-select ok(
+select pg_temp.assert_true(
   not has_table_privilege('anon', 'public.integritas_agent_messages', 'SELECT'),
   'anon cannot read agent messages'
 );
-select ok(
+select pg_temp.assert_true(
   not has_table_privilege('anon', 'public.mcp_allowed_email_hashes', 'SELECT'),
   'anon cannot read allowlist hashes'
 );
-select ok(
+select pg_temp.assert_true(
   not has_table_privilege('authenticated', 'public.integritas_cases', 'INSERT'),
   'browser authenticated role cannot insert cases directly'
 );
-select ok(
+select pg_temp.assert_true(
   not has_table_privilege('authenticated', 'public.integritas_findings', 'UPDATE'),
   'browser authenticated role cannot update findings directly'
 );
-select ok(
+select pg_temp.assert_true(
   not has_table_privilege('authenticated', 'public.integritas_deploy_jobs', 'SELECT'),
   'deploy jobs remain server-only'
 );
-select ok(
+select pg_temp.assert_true(
   not has_table_privilege('authenticated', 'public.integritas_e2e_runs', 'SELECT'),
   'E2E token table remains server-only'
 );
@@ -44,47 +52,40 @@ insert into public.integritas_documents(id, case_id) values
   ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002');
 
 set role authenticated;
-select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', true);
-
-select is(
-  (select count(*)::int from public.integritas_cases),
-  1,
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', false);
+select pg_temp.assert_true(
+  (select count(*) from public.integritas_cases) = 1,
   'case member sees only authorized case'
 );
-select is(
-  (select count(*)::int from public.integritas_documents),
-  1,
+select pg_temp.assert_true(
+  (select count(*) from public.integritas_documents) = 1,
   'case member sees only authorized case documents'
 );
-select is(
-  (select count(*)::int from public.integritas_admin_users),
-  0,
+select pg_temp.assert_true(
+  (select count(*) from public.integritas_admin_users) = 0,
   'non-admin cannot read another admin identity'
 );
 
 reset role;
 set role authenticated;
-select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
-select is(
-  (select count(*)::int from public.integritas_cases),
-  2,
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
+select pg_temp.assert_true(
+  (select count(*) from public.integritas_cases) = 2,
   'admin can read all cases'
 );
-select is(
-  (select count(*)::int from public.integritas_documents),
-  2,
+select pg_temp.assert_true(
+  (select count(*) from public.integritas_documents) = 2,
   'admin can read all case documents'
 );
-select is(
-  (select count(*)::int from public.integritas_admin_users),
-  1,
+select pg_temp.assert_true(
+  (select count(*) from public.integritas_admin_users) = 1,
   'admin can read own admin identity only'
 );
-
 reset role;
-select ok(
+
+select pg_temp.assert_true(
   has_function_privilege('authenticated', 'public.integritas_can_access_case(uuid)', 'EXECUTE'),
   'authenticated role can execute case access helper'
 );
 
-select * from finish();
+select 'RLS behavior assertions passed' as result;
