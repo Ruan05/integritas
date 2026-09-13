@@ -1,23 +1,32 @@
-import { Activity, AlertTriangle, CheckCircle2, FileSearch, Gavel, History, Play, Shield, UploadCloud } from 'lucide-react';
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  FileSearch,
+  Gavel,
+  History,
+  Play,
+  Shield,
+  UploadCloud,
+} from 'lucide-react';
 import { isSupabaseConfigured } from './lib/supabase';
-import type { CaseSummary, PipelineStep } from './types';
 
-const pipeline: PipelineStep[] = [
-  { label: 'Upload validation', status: 'done' },
-  { label: 'Entity and claim extraction', status: 'done' },
-  { label: 'Browser research', status: 'active' },
-  { label: 'Cross-checking', status: 'waiting' },
-  { label: 'Analyst approval', status: 'waiting' },
-];
+const capabilityStates = [
+  ['Investigation', 'Server-gated'],
+  ['Development', 'Approval-gated'],
+  ['Admin Agent', 'Server-gated'],
+  ['Maximum Guarded', 'Approval-gated'],
+] as const;
 
-const cases: CaseSummary[] = [
-  { id: 'INT-001', name: 'Synthetic trade due diligence', risk: 'High', status: 'Researching', updatedAt: 'Today' },
-  { id: 'INT-002', name: 'Buyer identity verification', risk: 'Medium', status: 'Needs review', updatedAt: 'Yesterday' },
-  { id: 'INT-003', name: 'Seller source-of-funds screen', risk: 'Low', status: 'Completed', updatedAt: 'Sep 11' },
-];
-
-function StatusDot({ status }: { status: PipelineStep['status'] }) {
-  return <span className={`status-dot ${status}`} aria-label={status} />;
+function ConfigurationHealth() {
+  return (
+    <div className={isSupabaseConfigured ? 'health warn' : 'health warn'}>
+      {isSupabaseConfigured ? <AlertTriangle size={18} /> : <AlertTriangle size={18} />}
+      {isSupabaseConfigured
+        ? 'Configuration detected - health not verified'
+        : 'Preview env not configured'}
+    </div>
+  );
 }
 
 export function App() {
@@ -28,13 +37,13 @@ export function App() {
           <span className="brand-mark">I</span>
           <div>
             <strong>Integritas</strong>
-            <small>Command Center</small>
+            <small>Command Center Preview</small>
           </div>
         </div>
         <nav>
           <a className="active" href="#dashboard"><Activity size={18} />Dashboard</a>
           <a href="#cases"><FileSearch size={18} />Cases</a>
-          <a href="#evidence"><Shield size={18} />Evidence</a>
+          <a href="#investigation"><Shield size={18} />Investigation</a>
           <a href="#findings"><Gavel size={18} />Findings</a>
           <a href="#audit"><History size={18} />Audit</a>
         </nav>
@@ -46,76 +55,67 @@ export function App() {
             <p className="eyebrow">Private Admin Workspace</p>
             <h1>AI investigation control panel</h1>
           </div>
-          <div className={isSupabaseConfigured ? 'health ok' : 'health warn'}>
-            {isSupabaseConfigured ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
-            {isSupabaseConfigured ? 'Supabase configured' : 'Preview env not configured'}
-          </div>
+          <ConfigurationHealth />
         </header>
 
         <section className="command-card" id="dashboard">
           <div>
-            <p className="eyebrow">Start Investigation</p>
-            <h2>Upload documents, route work to workers, keep review gates human-controlled.</h2>
+            <p className="eyebrow">Investigation control</p>
+            <h2>Authenticated case access and live worker health are required before an investigation can start.</h2>
           </div>
           <div className="actions">
-            <button type="button" className="secondary"><UploadCloud size={18} />Upload</button>
-            <button type="button"><Play size={18} />Start Deep Investigation</button>
+            <button type="button" className="secondary" disabled title="Requires an authenticated case session">
+              <UploadCloud size={18} />Upload
+            </button>
+            <button type="button" disabled title="Requires an authenticated case session">
+              <Play size={18} />Start Deep Investigation
+            </button>
           </div>
         </section>
 
         <section className="grid">
           <article className="panel" id="cases">
             <div className="panel-head">
-              <h2>Active cases</h2>
-              <span>3 open</span>
+              <h2>Cases</h2>
+              <span>Server-gated</span>
             </div>
-            <div className="case-list">
-              {cases.map((item) => (
-                <div className="case-row" key={item.id}>
-                  <div>
-                    <strong>{item.id}</strong>
-                    <p>{item.name}</p>
-                  </div>
-                  <span className={`risk ${item.risk.toLowerCase()}`}>{item.risk}</span>
-                  <small>{item.status}</small>
-                </div>
-              ))}
-            </div>
+            <p className="muted">No case data is loaded in this preview. The production admin API remains the source of truth for case-scoped access.</p>
           </article>
 
-          <article className="panel">
+          <article className="panel" id="investigation">
             <div className="panel-head">
-              <h2>Current pipeline</h2>
-              <span>Live</span>
+              <h2>Capability state</h2>
+              <span>Truthful status</span>
             </div>
-            <ol className="pipeline">
-              {pipeline.map((step) => (
-                <li key={step.label}>
-                  <StatusDot status={step.status} />
-                  <span>{step.label}</span>
+            <ul className="pipeline">
+              {capabilityStates.map(([name, state]) => (
+                <li key={name}>
+                  <span className="status-dot waiting" aria-label={state} />
+                  <span>{name}</span>
+                  <small>{state}</small>
                 </li>
               ))}
-            </ol>
-          </article>
-
-          <article className="panel" id="evidence">
-            <div className="panel-head">
-              <h2>Evidence and sources</h2>
-              <span>Source-linked</span>
-            </div>
-            <p className="muted">Document hashes, browser evidence, extracted claims, unresolved checks, and report artifacts should persist in Supabase with case-level access checks.</p>
+            </ul>
           </article>
 
           <article className="panel" id="findings">
             <div className="panel-head">
-              <h2>Required controls</h2>
-              <span>Before production</span>
+              <h2>Evidence and findings</h2>
+              <span>Case-scoped</span>
+            </div>
+            <p className="muted">Entities, contradictions, unresolved checks, findings, sources, reports, approvals, and artifacts are loaded only after the server verifies case access.</p>
+          </article>
+
+          <article className="panel" id="audit">
+            <div className="panel-head">
+              <h2>Guardrails</h2>
+              <span>Required</span>
             </div>
             <ul className="checks">
-              <li>RLS policies for every Integritas table</li>
-              <li>Human approval before production deploys</li>
-              <li>Sandboxed workers with no secret access</li>
-              <li>Retry, cancel, timeout, and audit trails</li>
+              <li>Durable job state remains in Supabase, not in the browser.</li>
+              <li>Development changes require branch, tests, PR, and review.</li>
+              <li>Production deploys and destructive actions require approval.</li>
+              <li>Untrusted documents and web content cannot alter permissions.</li>
             </ul>
           </article>
         </section>
