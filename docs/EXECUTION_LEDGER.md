@@ -5,7 +5,7 @@
 - Repository: `Ruan05/integritas`
 - Pull request: [#1](https://github.com/Ruan05/integritas/pull/1) (draft, unmerged)
 - Branch: `integritas-command-center-foundation`
-- Current SHA: `fc5850b71e197fee66e6be6b25813b48f26d721d`
+- Current SHA: `af54b53339f509ab066da63be5aa6d27fa91ef8b`
 - Public production: `https://integritass.com` (verified unchanged)
 
 ## Completed
@@ -24,8 +24,8 @@
 
 ## Latest verification
 
-- CI run #24 passed at SHA `fc5850b71e197fee66e6be6b25813b48f26d721d`.
-- CI stages passed: install, typecheck, unit tests, build, Chromium/WebKit installation, Playwright E2E, and high-severity npm audit.
+- CI run #28 passed at SHA `af54b53339f509ab066da63be5aa6d27fa91ef8b`.
+- CI stages passed: install, typecheck, unit tests, build, source/build secret verification, Chromium/WebKit installation, Playwright E2E, and high-severity npm audit.
 - Previous CI failures were preserved and fixed:
   - Vitest collected Playwright specs: narrowed Vitest include pattern.
   - WebKit was absent: installed explicitly in CI.
