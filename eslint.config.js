@@ -9,7 +9,7 @@ export default [
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
       ecmaVersion: 2022,
-      globals: globals.browser,
+      globals: { ...globals.browser, ...globals.vitest },
       parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
     },
     plugins: {
