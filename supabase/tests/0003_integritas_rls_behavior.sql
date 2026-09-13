@@ -24,6 +24,14 @@ select pg_temp.assert_true(
   'anon cannot read allowlist hashes'
 );
 select pg_temp.assert_true(
+  not has_schema_privilege('anon', 'integritas_private', 'USAGE'),
+  'anon cannot use private policy helper schema'
+);
+select pg_temp.assert_true(
+  has_schema_privilege('authenticated', 'integritas_private', 'USAGE'),
+  'authenticated role can resolve private policy helpers'
+);
+select pg_temp.assert_true(
   not has_table_privilege('authenticated', 'public.integritas_cases', 'INSERT'),
   'browser authenticated role cannot insert cases directly'
 );
@@ -46,6 +54,10 @@ select pg_temp.assert_true(
 select pg_temp.assert_true(
   not has_table_privilege('authenticated', 'public.opencode_jobs', 'SELECT'),
   'OpenCode job transport remains server-only'
+);
+select pg_temp.assert_true(
+  to_regprocedure('public.integritas_can_access_case(uuid)') is null,
+  'security-definer helper is not exposed from public schema'
 );
 
 insert into public.integritas_admin_users(user_id)
@@ -92,8 +104,12 @@ select pg_temp.assert_true(
 reset role;
 
 select pg_temp.assert_true(
-  has_function_privilege('authenticated', 'public.integritas_can_access_case(uuid)', 'EXECUTE'),
-  'authenticated role can execute case access helper'
+  has_function_privilege('authenticated', 'integritas_private.integritas_can_access_case(uuid)', 'EXECUTE'),
+  'authenticated role can execute private case access helper'
+);
+select pg_temp.assert_true(
+  not has_function_privilege('anon', 'integritas_private.integritas_can_access_case(uuid)', 'EXECUTE'),
+  'anon cannot execute private case access helper'
 );
 
 select 'RLS behavior assertions passed' as result;
