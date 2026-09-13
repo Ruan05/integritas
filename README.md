@@ -14,7 +14,7 @@ This branch seeds the GitHub-controlled foundation for the approved workflow:
 ## Local setup
 
 ```bash
-npm ci
+npm install
 cp .env.example .env
 npm run dev
 ```
