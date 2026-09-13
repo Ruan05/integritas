@@ -1,0 +1,41 @@
+// Non-secret baseline only. Validate against the exact pinned OpenClaw release before use.
+// Sandboxing is intentionally explicit and restrictive.
+{
+  agents: {
+    defaults: {
+      sandbox: {
+        mode: "all",
+        scope: "session",
+        workspaceAccess: "none",
+        docker: {
+          network: "none",
+          readOnlyRoot: true,
+          capDrop: ["ALL"],
+          securityOpt: ["no-new-privileges:true"],
+          pidsLimit: 128,
+          memory: "768m",
+          cpus: 0.75,
+          tmpfs: [
+            "/tmp:rw,noexec,nosuid,size=256m",
+            "/run:rw,noexec,nosuid,size=64m"
+          ]
+        }
+      }
+    }
+  },
+  tools: {
+    // Keep high-risk infrastructure tools out of model sandboxes.
+    deny: [
+      "docker",
+      "host_shell",
+      "production_deploy",
+      "secret_manager",
+      "auth_admin"
+    ]
+  },
+  browser: {
+    // Browser isolation is separate from the general tool sandbox.
+    enabled: true,
+    sandbox: true
+  }
+}
