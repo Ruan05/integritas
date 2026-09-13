@@ -5,7 +5,7 @@
 - Repository: `Ruan05/integritas`
 - Pull request: [#1](https://github.com/Ruan05/integritas/pull/1) (draft, unmerged)
 - Branch: `integritas-command-center-foundation`
-- Current SHA: `416936fbe48302f159b26c07072e57c8f259e69a`
+- Current SHA: `fc5850b71e197fee66e6be6b25813b48f26d721d`
 - Public production: `https://integritass.com` (verified unchanged)
 
 ## Completed
@@ -20,10 +20,11 @@
   - `supabase/migrations/0002_integritas_browser_read_policies.sql`
   - `supabase/tests/0002_integritas_browser_read_policies.sql`
 - Verified Oracle Console is reachable but not authenticated. No resource was created.
+- Removed fabricated cases and LIVE/READY states from the GitHub preview; added a server-gated feature-parity matrix.
 
 ## Latest verification
 
-- CI run #19 passed at SHA `416936fbe48302f159b26c07072e57c8f259e69a`.
+- CI run #24 passed at SHA `fc5850b71e197fee66e6be6b25813b48f26d721d`.
 - CI stages passed: install, typecheck, unit tests, build, Chromium/WebKit installation, Playwright E2E, and high-severity npm audit.
 - Previous CI failures were preserved and fixed:
   - Vitest collected Playwright specs: narrowed Vitest include pattern.
