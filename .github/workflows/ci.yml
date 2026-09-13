@@ -33,6 +33,7 @@ jobs:
       - name: Syntax-check infrastructure scripts
         run: |
           bash -n infra/oracle/bootstrap-ubuntu.sh
+          bash -n infra/oracle/verify-host.sh
           bash -n infra/openclaw/verify-image.sh
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
