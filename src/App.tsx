@@ -1,7 +1,6 @@
 import {
   Activity,
   AlertTriangle,
-  CheckCircle2,
   FileSearch,
   Gavel,
   History,
