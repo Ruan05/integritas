@@ -32,12 +32,20 @@ select pg_temp.assert_true(
   'browser authenticated role cannot update findings directly'
 );
 select pg_temp.assert_true(
+  not has_table_privilege('authenticated', 'public.integritas_repositories', 'INSERT'),
+  'browser authenticated role cannot create repository records directly'
+);
+select pg_temp.assert_true(
   not has_table_privilege('authenticated', 'public.integritas_deploy_jobs', 'SELECT'),
   'deploy jobs remain server-only'
 );
 select pg_temp.assert_true(
   not has_table_privilege('authenticated', 'public.integritas_e2e_runs', 'SELECT'),
   'E2E token table remains server-only'
+);
+select pg_temp.assert_true(
+  not has_table_privilege('authenticated', 'public.opencode_jobs', 'SELECT'),
+  'OpenCode job transport remains server-only'
 );
 
 insert into public.integritas_admin_users(user_id)
