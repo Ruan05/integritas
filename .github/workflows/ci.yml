@@ -30,6 +30,10 @@ jobs:
       - run: npm run build
       - run: npm run verify:secrets
       - run: npm run verify:secrets -- dist
+      - name: Syntax-check infrastructure scripts
+        run: |
+          bash -n infra/oracle/bootstrap-ubuntu.sh
+          bash -n infra/openclaw/verify-image.sh
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
       - run: npm run audit
