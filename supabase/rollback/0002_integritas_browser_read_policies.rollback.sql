@@ -93,11 +93,13 @@ begin
 end;
 $$;
 
-revoke all on function public.integritas_is_admin() from public, authenticated, service_role;
-revoke all on function public.integritas_can_access_case(uuid) from public, authenticated, service_role;
-revoke all on function public.integritas_can_access_thread(uuid) from public, authenticated, service_role;
-drop function if exists public.integritas_can_access_thread(uuid);
-drop function if exists public.integritas_can_access_case(uuid);
-drop function if exists public.integritas_is_admin();
+revoke all on function integritas_private.integritas_is_admin() from public, anon, authenticated, service_role;
+revoke all on function integritas_private.integritas_can_access_case(uuid) from public, anon, authenticated, service_role;
+revoke all on function integritas_private.integritas_can_access_thread(uuid) from public, anon, authenticated, service_role;
+drop function if exists integritas_private.integritas_can_access_thread(uuid);
+drop function if exists integritas_private.integritas_can_access_case(uuid);
+drop function if exists integritas_private.integritas_is_admin();
+revoke all on schema integritas_private from public, anon, authenticated, service_role;
+drop schema if exists integritas_private;
 
 commit;
