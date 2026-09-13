@@ -1,6 +1,6 @@
 -- Integritas browser read policy baseline.
--- Review and apply first on a Supabase development branch. Service-role workers bypass RLS
--- and retain the existing server-side enqueue/sync access pattern.
+-- Browser roles receive explicit read-only access where required. All writes continue through
+-- the authenticated server-side Admin API/service-role path so audit and approval guards remain authoritative.
 begin;
 
 create or replace function public.integritas_is_admin()
@@ -8,7 +8,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
   select exists (
     select 1
@@ -22,7 +22,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
   select public.integritas_is_admin()
     or exists (
@@ -38,14 +38,16 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
-  select exists (
-    select 1
-    from public.integritas_agent_threads
-    where id = thread_uuid
-      and public.integritas_can_access_case(case_id)
-  );
+  select public.integritas_is_admin()
+    or exists (
+      select 1
+      from public.integritas_agent_threads
+      where id = thread_uuid
+        and created_by = auth.uid()
+        and (case_id is null or public.integritas_can_access_case(case_id))
+    );
 $$;
 
 revoke all on function public.integritas_is_admin() from public;
@@ -54,6 +56,67 @@ revoke all on function public.integritas_can_access_thread(uuid) from public;
 grant execute on function public.integritas_is_admin() to authenticated, service_role;
 grant execute on function public.integritas_can_access_case(uuid) to authenticated, service_role;
 grant execute on function public.integritas_can_access_thread(uuid) to authenticated, service_role;
+
+-- Revoke legacy/default browser grants first. Server-side service_role access is intentionally preserved.
+do $$
+declare
+  table_name text;
+begin
+  foreach table_name in array array[
+    'integritas_admin_users',
+    'integritas_agent_lessons',
+    'integritas_agent_messages',
+    'integritas_agent_threads',
+    'integritas_audit_events',
+    'integritas_case_access',
+    'integritas_case_jobs',
+    'integritas_cases',
+    'integritas_change_sets',
+    'integritas_checks',
+    'integritas_deploy_jobs',
+    'integritas_documents',
+    'integritas_e2e_runs',
+    'integritas_entities',
+    'integritas_findings',
+    'integritas_relationships',
+    'integritas_reports',
+    'integritas_repositories',
+    'integritas_sources',
+    'integritas_tool_invocations',
+    'mcp_allowed_email_hashes',
+    'opencode_efficiency_test',
+    'opencode_jobs',
+    'opencode_runs',
+    'opencode_selftest',
+    'opencode_sessions'
+  ]
+  loop
+    execute format('revoke all on table public.%I from anon, authenticated', table_name);
+  end loop;
+end;
+$$;
+
+-- Read-only browser grants. Direct inserts/updates/deletes remain server API responsibilities.
+grant select on table
+  public.integritas_admin_users,
+  public.integritas_case_access,
+  public.integritas_cases,
+  public.integritas_case_jobs,
+  public.integritas_documents,
+  public.integritas_entities,
+  public.integritas_checks,
+  public.integritas_findings,
+  public.integritas_relationships,
+  public.integritas_reports,
+  public.integritas_sources,
+  public.integritas_tool_invocations,
+  public.integritas_audit_events,
+  public.integritas_agent_threads,
+  public.integritas_agent_messages,
+  public.integritas_change_sets,
+  public.integritas_repositories,
+  public.integritas_agent_lessons
+  to authenticated;
 
 drop policy if exists "read own admin identity" on public.integritas_admin_users;
 create policy "read own admin identity"
@@ -70,11 +133,6 @@ create policy "read authorized cases"
   on public.integritas_cases for select to authenticated
   using (public.integritas_can_access_case(id));
 
-drop policy if exists "create admin-owned cases" on public.integritas_cases;
-create policy "create admin-owned cases"
-  on public.integritas_cases for insert to authenticated
-  with check (public.integritas_is_admin() and created_by = auth.uid());
-
 do $$
 declare
   table_name text;
@@ -89,8 +147,7 @@ begin
     'integritas_reports',
     'integritas_sources',
     'integritas_tool_invocations',
-    'integritas_audit_events',
-    'integritas_agent_threads'
+    'integritas_audit_events'
   ]
   loop
     execute format('drop policy if exists "read authorized case rows" on public.%I', table_name);
@@ -101,6 +158,17 @@ begin
   end loop;
 end;
 $$;
+
+drop policy if exists "read authorized agent threads" on public.integritas_agent_threads;
+create policy "read authorized agent threads"
+  on public.integritas_agent_threads for select to authenticated
+  using (
+    public.integritas_is_admin()
+    or (
+      created_by = auth.uid()
+      and (case_id is null or public.integritas_can_access_case(case_id))
+    )
+  );
 
 drop policy if exists "read authorized thread messages" on public.integritas_agent_messages;
 create policy "read authorized thread messages"
@@ -117,18 +185,34 @@ create policy "read own repositories"
   on public.integritas_repositories for select to authenticated
   using (requested_by = auth.uid() or public.integritas_is_admin());
 
-drop policy if exists "create own repositories" on public.integritas_repositories;
-create policy "create own repositories"
-  on public.integritas_repositories for insert to authenticated
-  with check (requested_by = auth.uid());
-
 drop policy if exists "read agent lessons as admin" on public.integritas_agent_lessons;
 create policy "read agent lessons as admin"
   on public.integritas_agent_lessons for select to authenticated
   using (public.integritas_is_admin());
 
--- Intentionally no browser policy for deploy jobs or E2E tokens. Those tables carry
--- bearer-token hashes and remain server-only. Browser writes to investigation records
--- remain server API responsibilities, preserving audit and approval guards.
+-- Explicit policies on server-only tables keep the RLS contract complete while browser table grants stay revoked.
+do $$
+declare
+  table_name text;
+begin
+  foreach table_name in array array[
+    'integritas_deploy_jobs',
+    'integritas_e2e_runs',
+    'mcp_allowed_email_hashes',
+    'opencode_efficiency_test',
+    'opencode_jobs',
+    'opencode_runs',
+    'opencode_selftest',
+    'opencode_sessions'
+  ]
+  loop
+    execute format('drop policy if exists "deny browser access" on public.%I', table_name);
+    execute format(
+      'create policy "deny browser access" on public.%I for select to authenticated using (false)',
+      table_name
+    );
+  end loop;
+end;
+$$;
 
 commit;
