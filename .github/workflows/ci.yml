@@ -77,3 +77,7 @@ jobs:
         run: psql -f supabase/tests/0002_integritas_browser_read_policies.sql
       - name: Verify authorization behavior
         run: psql -f supabase/tests/0003_integritas_rls_behavior.sql
+      - name: Apply safe rollback
+        run: psql -f supabase/rollback/0002_integritas_browser_read_policies.rollback.sql
+      - name: Verify safe rollback
+        run: psql -f supabase/tests/0004_integritas_rls_rollback.sql
