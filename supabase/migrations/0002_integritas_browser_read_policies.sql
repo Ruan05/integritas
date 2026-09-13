@@ -3,7 +3,13 @@
 -- the authenticated server-side Admin API/service-role path so audit and approval guards remain authoritative.
 begin;
 
-create or replace function public.integritas_is_admin()
+-- Keep SECURITY DEFINER helpers out of the API-exposed public schema.
+create schema if not exists integritas_private;
+revoke all on schema integritas_private from public;
+revoke all on schema integritas_private from anon;
+grant usage on schema integritas_private to authenticated, service_role;
+
+create or replace function integritas_private.integritas_is_admin()
 returns boolean
 language sql
 stable
@@ -17,14 +23,14 @@ as $$
   );
 $$;
 
-create or replace function public.integritas_can_access_case(case_uuid uuid)
+create or replace function integritas_private.integritas_can_access_case(case_uuid uuid)
 returns boolean
 language sql
 stable
 security definer
 set search_path = ''
 as $$
-  select public.integritas_is_admin()
+  select integritas_private.integritas_is_admin()
     or exists (
       select 1
       from public.integritas_case_access
@@ -33,29 +39,32 @@ as $$
     );
 $$;
 
-create or replace function public.integritas_can_access_thread(thread_uuid uuid)
+create or replace function integritas_private.integritas_can_access_thread(thread_uuid uuid)
 returns boolean
 language sql
 stable
 security definer
 set search_path = ''
 as $$
-  select public.integritas_is_admin()
+  select integritas_private.integritas_is_admin()
     or exists (
       select 1
       from public.integritas_agent_threads
       where id = thread_uuid
         and created_by = auth.uid()
-        and (case_id is null or public.integritas_can_access_case(case_id))
+        and (case_id is null or integritas_private.integritas_can_access_case(case_id))
     );
 $$;
 
-revoke all on function public.integritas_is_admin() from public;
-revoke all on function public.integritas_can_access_case(uuid) from public;
-revoke all on function public.integritas_can_access_thread(uuid) from public;
-grant execute on function public.integritas_is_admin() to authenticated, service_role;
-grant execute on function public.integritas_can_access_case(uuid) to authenticated, service_role;
-grant execute on function public.integritas_can_access_thread(uuid) to authenticated, service_role;
+revoke all on function integritas_private.integritas_is_admin() from public;
+revoke all on function integritas_private.integritas_is_admin() from anon;
+revoke all on function integritas_private.integritas_can_access_case(uuid) from public;
+revoke all on function integritas_private.integritas_can_access_case(uuid) from anon;
+revoke all on function integritas_private.integritas_can_access_thread(uuid) from public;
+revoke all on function integritas_private.integritas_can_access_thread(uuid) from anon;
+grant execute on function integritas_private.integritas_is_admin() to authenticated, service_role;
+grant execute on function integritas_private.integritas_can_access_case(uuid) to authenticated, service_role;
+grant execute on function integritas_private.integritas_can_access_thread(uuid) to authenticated, service_role;
 
 -- Revoke legacy/default browser grants first. Server-side service_role access is intentionally preserved.
 do $$
@@ -131,7 +140,7 @@ create policy "read own case access"
 drop policy if exists "read authorized cases" on public.integritas_cases;
 create policy "read authorized cases"
   on public.integritas_cases for select to authenticated
-  using (public.integritas_can_access_case(id));
+  using (integritas_private.integritas_can_access_case(id));
 
 do $$
 declare
@@ -152,7 +161,7 @@ begin
   loop
     execute format('drop policy if exists "read authorized case rows" on public.%I', table_name);
     execute format(
-      'create policy "read authorized case rows" on public.%I for select to authenticated using (public.integritas_can_access_case(case_id))',
+      'create policy "read authorized case rows" on public.%I for select to authenticated using (integritas_private.integritas_can_access_case(case_id))',
       table_name
     );
   end loop;
@@ -163,32 +172,32 @@ drop policy if exists "read authorized agent threads" on public.integritas_agent
 create policy "read authorized agent threads"
   on public.integritas_agent_threads for select to authenticated
   using (
-    public.integritas_is_admin()
+    integritas_private.integritas_is_admin()
     or (
       created_by = auth.uid()
-      and (case_id is null or public.integritas_can_access_case(case_id))
+      and (case_id is null or integritas_private.integritas_can_access_case(case_id))
     )
   );
 
 drop policy if exists "read authorized thread messages" on public.integritas_agent_messages;
 create policy "read authorized thread messages"
   on public.integritas_agent_messages for select to authenticated
-  using (public.integritas_can_access_thread(thread_id));
+  using (integritas_private.integritas_can_access_thread(thread_id));
 
 drop policy if exists "read own change sets" on public.integritas_change_sets;
 create policy "read own change sets"
   on public.integritas_change_sets for select to authenticated
-  using (requested_by = auth.uid() or public.integritas_is_admin());
+  using (requested_by = auth.uid() or integritas_private.integritas_is_admin());
 
 drop policy if exists "read own repositories" on public.integritas_repositories;
 create policy "read own repositories"
   on public.integritas_repositories for select to authenticated
-  using (requested_by = auth.uid() or public.integritas_is_admin());
+  using (requested_by = auth.uid() or integritas_private.integritas_is_admin());
 
 drop policy if exists "read agent lessons as admin" on public.integritas_agent_lessons;
 create policy "read agent lessons as admin"
   on public.integritas_agent_lessons for select to authenticated
-  using (public.integritas_is_admin());
+  using (integritas_private.integritas_is_admin());
 
 -- Explicit policies on server-only tables keep the RLS contract complete while browser table grants stay revoked.
 do $$
