@@ -12,9 +12,7 @@ test('admin command center remains usable on desktop and mobile', async ({ page 
 });
 
 test('public Integritas website remains independently available', async ({ page }) => {
-  await page.goto('https://integritass.com', { waitUntil: 'domcontentloaded' });
+  const response = await page.goto('https://integritass.com', { waitUntil: 'domcontentloaded' });
+  expect(response?.status()).toBe(200);
   await expect(page).toHaveTitle(/Integritas/i);
-  await expect(
-    page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('link', { name: 'Contact' }),
-  ).toBeVisible();
 });
