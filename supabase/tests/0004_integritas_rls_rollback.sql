@@ -34,16 +34,20 @@ select pg_temp.assert_true(
   'rollback removes staged policies cleanly'
 );
 select pg_temp.assert_true(
+  to_regnamespace('integritas_private') is null,
+  'rollback removes dedicated private helper schema'
+);
+select pg_temp.assert_true(
   to_regprocedure('public.integritas_is_admin()') is null,
-  'rollback removes admin helper'
+  'no admin helper remains in public schema'
 );
 select pg_temp.assert_true(
   to_regprocedure('public.integritas_can_access_case(uuid)') is null,
-  'rollback removes case access helper'
+  'no case helper remains in public schema'
 );
 select pg_temp.assert_true(
   to_regprocedure('public.integritas_can_access_thread(uuid)') is null,
-  'rollback removes thread access helper'
+  'no thread helper remains in public schema'
 );
 
 select 'RLS rollback assertions passed' as result;
