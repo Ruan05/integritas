@@ -14,5 +14,7 @@ test('admin command center remains usable on desktop and mobile', async ({ page 
 test('public Integritas website remains independently available', async ({ page }) => {
   await page.goto('https://integritass.com', { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveTitle(/Integritas/i);
-  await expect(page.getByRole('link', { name: /contact/i })).toBeVisible();
+  await expect(
+    page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('link', { name: 'Contact' }),
+  ).toBeVisible();
 });
