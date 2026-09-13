@@ -19,6 +19,8 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      - run: npm run verify:secrets
+      - run: npm run verify:secrets -- dist
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
       - run: npm run audit
