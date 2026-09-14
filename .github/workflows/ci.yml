@@ -22,7 +22,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 24.19.0
           cache: npm
       - run: npm ci
       - run: npm run lint
@@ -30,11 +30,17 @@ jobs:
       - run: npm run build
       - run: npm run verify:secrets
       - run: npm run verify:secrets -- dist
+      - name: Verify Oracle/OpenClaw policy
+        run: node scripts/verify-oracle-openclaw-infra.mjs
       - name: Syntax-check infrastructure scripts
         run: |
           bash -n infra/oracle/bootstrap-ubuntu.sh
           bash -n infra/oracle/verify-host.sh
+          bash -n infra/oracle/bootstrap-oracle-linux.sh
+          bash -n infra/oracle/provision-always-free-a1.sh
+          bash -n infra/oracle/run-command.sh
           bash -n infra/openclaw/verify-image.sh
+          bash -n infra/openclaw/install-native.sh
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
       - run: npm run audit
