@@ -82,7 +82,7 @@ grant select on table
   public.integritas_control_commands,
   public.integritas_runtime_heartbeats,
   public.integritas_control_audit
-  to authenticated;
+  to authenticated, service_role;
 
 create policy "admins read control commands"
   on public.integritas_control_commands for select to authenticated
