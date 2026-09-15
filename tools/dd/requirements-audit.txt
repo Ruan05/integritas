@@ -1,0 +1,2 @@
+# Optional PDF audit dependency; core capture/validation/rendering use stdlib only.
+PyMuPDF==1.26.6
