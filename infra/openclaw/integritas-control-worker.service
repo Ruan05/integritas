@@ -9,6 +9,8 @@ User=integritas-control
 Group=integritas-control
 EnvironmentFile=/etc/integritas/control-worker.env
 Environment=INTEGRITAS_REPO_ROOT=/opt/integritas/current
+LoadCredential=control-token:/etc/integritas/control-worker.token
+Environment=INTEGRITAS_CONTROL_WORKER_TOKEN_FILE=%d/control-token
 WorkingDirectory=/opt/integritas/current/infra/openclaw/control-worker
 ExecStart=/usr/bin/node /opt/integritas/current/infra/openclaw/control-worker/src/index.mjs
 Restart=on-failure
