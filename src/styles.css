@@ -1,0 +1,61 @@
+:root {
+  color: #f8f3e7;
+  background: #080706;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: #080706; }
+button, a { font: inherit; }
+
+.shell { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+.sidebar { border-right: 1px solid rgba(212, 175, 55, 0.2); padding: 24px; background: #0d0b08; }
+.brand { display: flex; gap: 12px; align-items: center; margin-bottom: 32px; }
+.brand-mark { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid #d4af37; border-radius: 8px; color: #d4af37; font-weight: 800; }
+.brand strong, .brand small { display: block; }
+.brand small, .muted, .case-row p, .topbar p { color: #b7ab91; }
+nav { display: grid; gap: 8px; }
+nav a { display: flex; align-items: center; gap: 10px; color: #d7cbb2; text-decoration: none; padding: 10px 12px; border-radius: 8px; }
+nav a.active, nav a:hover { background: rgba(212, 175, 55, 0.12); color: #fff5d6; }
+.workspace { padding: 28px; }
+.topbar { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 24px; }
+h1, h2, p { margin: 0; }
+h1 { font-size: clamp(30px, 4vw, 52px); letter-spacing: 0; }
+h2 { font-size: 20px; }
+.eyebrow { color: #d4af37; text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+.health { display: inline-flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 8px; white-space: nowrap; }
+.health.ok { color: #bff7d0; background: rgba(39, 174, 96, 0.12); }
+.health.warn { color: #ffe2a7; background: rgba(212, 175, 55, 0.12); }
+.command-card { display: flex; justify-content: space-between; gap: 20px; align-items: center; padding: 22px; border: 1px solid rgba(212, 175, 55, 0.28); border-radius: 8px; background: linear-gradient(135deg, rgba(212, 175, 55, 0.16), rgba(255,255,255,0.03)); margin-bottom: 18px; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+button { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #d4af37; border-radius: 8px; padding: 10px 14px; background: #d4af37; color: #151007; cursor: pointer; font-weight: 700; }
+button.secondary { background: transparent; color: #f8f3e7; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.panel { border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: #100e0b; padding: 18px; min-height: 220px; }
+.panel-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 16px; color: #f8f3e7; }
+.panel-head span { color: #d4af37; font-size: 13px; }
+.case-list { display: grid; gap: 10px; }
+.case-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; padding: 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; }
+.case-row p { margin-top: 3px; }
+.risk { padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+.risk.high { color: #ffc5b8; background: rgba(231, 76, 60, 0.16); }
+.risk.medium { color: #ffe2a7; background: rgba(212, 175, 55, 0.15); }
+.risk.low { color: #bff7d0; background: rgba(39, 174, 96, 0.15); }
+.pipeline { display: grid; gap: 14px; padding: 0; margin: 0; list-style: none; }
+.pipeline li { display: flex; gap: 10px; align-items: center; color: #e8dcc1; }
+.status-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #6c6048; }
+.status-dot.done { background: #3ed47a; border-color: #3ed47a; }
+.status-dot.active { background: #d4af37; border-color: #ffe08a; box-shadow: 0 0 0 5px rgba(212,175,55,0.12); }
+.checks { color: #d7cbb2; display: grid; gap: 10px; padding-left: 20px; }
+
+@media (max-width: 820px) {
+  .shell { grid-template-columns: 1fr; }
+  .sidebar { border-right: 0; border-bottom: 1px solid rgba(212, 175, 55, 0.2); }
+  nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspace { padding: 18px; }
+  .topbar, .command-card { flex-direction: column; align-items: stretch; }
+  .grid { grid-template-columns: 1fr; }
+  .case-row { grid-template-columns: 1fr; }
+}

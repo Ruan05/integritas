@@ -1,0 +1,10 @@
+// Allow only the dedicated Integritas control worker to restart the single OpenClaw gateway unit.
+// Read-only status queries do not require this rule.
+polkit.addRule(function(action, subject) {
+  if (action.id === "org.freedesktop.systemd1.manage-units" &&
+      subject.user === "integritas-control" &&
+      action.lookup("unit") === "openclaw-gateway.service" &&
+      action.lookup("verb") === "restart") {
+    return polkit.Result.YES;
+  }
+});
