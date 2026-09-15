@@ -56,6 +56,7 @@ if (!errors.length) {
   if (unit.includes('User=root')) errors.push('Gateway must not run as root');
   if (cloudInit.includes('NOPASSWD: ALL')) errors.push('unbounded sudo is forbidden');
   if (runCommand.includes('bash -c "$')) errors.push('arbitrary remote shell is forbidden');
+  if (runCommand.includes('commandString')) errors.push('OCI Run Command must use TEXT source only; commandString duplication is forbidden');
   if (/\blatest\b/.test(installer)) errors.push('mutable latest release reference is forbidden');
   if (config.includes('/var/run/docker.sock')) errors.push('model config must not expose the Docker socket');
 }
