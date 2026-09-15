@@ -31,6 +31,11 @@ jobs:
         run: |
           python3 -m unittest discover -s tools/dd -p 'test_*.py'
           node --test scripts/harden-opencode-worker.test.mjs
+      - name: Verify ChatGPT/OpenClaw control bridge
+        run: |
+          node --test infra/openclaw/control-worker/test/*.test.mjs
+          node scripts/test-integritas-control-contract.mjs
+          node scripts/verify-control-bridge-policy.mjs
       - run: npm run build
       - run: npm run verify:secrets
       - run: npm run verify:secrets -- dist
@@ -45,12 +50,13 @@ jobs:
           bash -n infra/oracle/run-command.sh
           bash -n infra/openclaw/verify-image.sh
           bash -n infra/openclaw/install-native.sh
+          bash -n infra/openclaw/install-control-worker.sh
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
       - run: npm run audit
       - name: Upload Playwright report
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@ea165f8d65e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-report
           path: playwright-report/
@@ -92,7 +98,20 @@ jobs:
         run: psql -f supabase/tests/0002_integritas_browser_read_policies.sql
       - name: Verify authorization behavior
         run: psql -f supabase/tests/0003_integritas_rls_behavior.sql
-      - name: Apply safe rollback
+      - name: Apply staged control bridge migrations
+        run: |
+          psql -f supabase/migrations/0003_integritas_control_bridge.sql
+          psql -f supabase/migrations/0004_integritas_control_api_wrappers.sql
+      - name: Verify control bridge contract
+        run: |
+          psql -f supabase/tests/0005_integritas_control_bridge.sql
+          psql -f supabase/tests/0006_integritas_control_api_wrappers.sql
+      - name: Roll back staged control bridge
+        run: |
+          psql -f supabase/rollback/0004_integritas_control_api_wrappers.rollback.sql
+          psql -f supabase/rollback/0003_integritas_control_bridge.rollback.sql
+          psql -f supabase/tests/0007_integritas_control_bridge_rollback.sql
+      - name: Apply safe browser-policy rollback
         run: psql -f supabase/rollback/0002_integritas_browser_read_policies.rollback.sql
-      - name: Verify safe rollback
+      - name: Verify safe browser-policy rollback
         run: psql -f supabase/tests/0004_integritas_rls_rollback.sql
