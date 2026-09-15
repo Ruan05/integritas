@@ -1,14 +1,18 @@
+import { readFileSync } from 'node:fs';
 import { ControlClient } from './client.mjs';
 import { executeCommand } from './commands.mjs';
 
 const baseUrl = process.env.INTEGRITAS_CONTROL_URL;
-const workerToken = process.env.INTEGRITAS_CONTROL_WORKER_TOKEN;
+const workerTokenFile = process.env.INTEGRITAS_CONTROL_WORKER_TOKEN_FILE;
+const workerToken = process.env.INTEGRITAS_CONTROL_WORKER_TOKEN || (
+  workerTokenFile ? readFileSync(workerTokenFile, 'utf8').trim() : ''
+);
 const workerId = process.env.INTEGRITAS_WORKER_ID || 'oracle-primary';
 const pollMs = Number(process.env.INTEGRITAS_CONTROL_POLL_MS || 5000);
 const workerVersion = process.env.INTEGRITAS_CONTROL_WORKER_VERSION || '0.1.0';
 
 if (!baseUrl || !workerToken) {
-  console.error('INTEGRITAS_CONTROL_URL and INTEGRITAS_CONTROL_WORKER_TOKEN are required');
+  console.error('INTEGRITAS_CONTROL_URL and a worker-token credential are required');
   process.exit(2);
 }
 
