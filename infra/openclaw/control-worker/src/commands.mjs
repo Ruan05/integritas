@@ -52,10 +52,10 @@ export async function executeCommand(command, {
       return { ok: true, component: 'integritas-control-worker' };
 
     case 'openclaw_status': {
-      const active = await runner('/usr/bin/sudo', ['-n', '/usr/bin/systemctl', 'is-active', 'openclaw-gateway.service']);
+      const active = await runner('/usr/bin/systemctl', ['is-active', 'openclaw-gateway.service']);
       let version = '';
       try {
-        const v = await runner('/usr/bin/openclaw', ['--version']);
+        const v = await runner('/opt/openclaw/bin/openclaw', ['--version']);
         version = v.stdout.slice(0, 200);
       } catch {
         version = 'unavailable';
@@ -64,8 +64,8 @@ export async function executeCommand(command, {
     }
 
     case 'restart_openclaw': {
-      await runner('/usr/bin/sudo', ['-n', '/usr/bin/systemctl', 'restart', 'openclaw-gateway.service']);
-      const active = await runner('/usr/bin/sudo', ['-n', '/usr/bin/systemctl', 'is-active', 'openclaw-gateway.service']);
+      await runner('/usr/bin/systemctl', ['restart', 'openclaw-gateway.service']);
+      const active = await runner('/usr/bin/systemctl', ['is-active', 'openclaw-gateway.service']);
       if (active.stdout !== 'active') throw new Error('openclaw gateway did not return active');
       return { ok: true, service: 'active' };
     }
