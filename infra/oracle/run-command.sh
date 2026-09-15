@@ -25,7 +25,7 @@ case "${ACTION}" in
 esac
 
 TARGET="$(jq -nc --arg id "${INSTANCE_ID}" '{instanceId:$id}')"
-CONTENT="$(jq -nc --arg cmd "${REMOTE}" '{source:{sourceType:"TEXT",text:$cmd},output:{outputType:"TEXT"},commandString:$cmd}')"
+CONTENT="$(jq -nc --arg cmd "${REMOTE}" '{source:{sourceType:"TEXT",text:$cmd},output:{outputType:"TEXT"}}')"
 COMMAND_ID="$(oci instance-agent command create \
   --compartment-id "${COMPARTMENT_ID}" \
   --content "${CONTENT}" \
