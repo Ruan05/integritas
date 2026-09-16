@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { App } from './App';
 
 describe('Integritas Command Center', () => {
-  it('renders the private case workflow without fabricating case data', () => {
+  it('renders the private case workflow without fabricating case data or OpenClaw readiness', () => {
     render(<App />);
 
     expect(screen.getByRole('heading', { name: /AI investigation control panel/i })).toBeInTheDocument();
@@ -11,7 +11,9 @@ describe('Integritas Command Center', () => {
     expect(screen.getByRole('link', { name: /Evidence & Sources/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Unresolved Checks/i })).toBeInTheDocument();
     expect(screen.getByText(/SHA-256 deduplicated/i)).toBeInTheDocument();
-    expect(screen.getByText(/Infrastructure controls use typed, audited commands/i)).toBeInTheDocument();
+    expect(screen.getByText(/OpenClaw due-diligence runner/i)).toBeInTheDocument();
+    expect(screen.getByText(/Preflight required/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not expose the gateway or an arbitrary shell/i)).toBeInTheDocument();
     expect(screen.queryByText('INT-001')).not.toBeInTheDocument();
   });
 });
