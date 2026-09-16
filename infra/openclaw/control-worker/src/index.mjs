@@ -1,7 +1,10 @@
+import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { promisify } from 'node:util';
 import { ControlClient } from './client.mjs';
 import { executeCommand } from './commands.mjs';
 
+const execFileAsync = promisify(execFile);
 const baseUrl = process.env.INTEGRITAS_CONTROL_URL;
 const workerTokenFile = process.env.INTEGRITAS_CONTROL_WORKER_TOKEN_FILE;
 const workerToken = process.env.INTEGRITAS_CONTROL_WORKER_TOKEN || (
@@ -23,12 +26,25 @@ process.on('SIGINT', () => { stopping = true; });
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function probeOpenClaw() {
+  const [service, version] = await Promise.all([
+    execFileAsync('/usr/bin/systemctl', ['is-active', 'openclaw-gateway.service'])
+      .then(({ stdout }) => stdout.trim().slice(0, 80))
+      .catch(() => 'inactive'),
+    execFileAsync('/opt/openclaw/bin/openclaw', ['--version'])
+      .then(({ stdout }) => stdout.trim().slice(0, 200))
+      .catch(() => 'unavailable'),
+  ]);
+  return { service, version };
+}
+
 async function sendHeartbeat() {
   try {
+    const openclaw = await probeOpenClaw();
     await client.heartbeat({
       runtime_version: process.version,
-      openclaw_version: null,
-      openclaw_status: 'unknown',
+      openclaw_version: openclaw.version,
+      openclaw_status: openclaw.service,
       worker_version: workerVersion,
       capability_flags: { bounded_control: true, arbitrary_shell: false, docker_socket: false },
     });
