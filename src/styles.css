@@ -85,3 +85,8 @@ select:disabled, input:disabled { opacity: 0.6; }
 .runtime-summary small, .job-summary { color: #9f947d; }
 .job-summary { margin-top: 16px; }
 .compact-checks { margin-top: 16px; }
+.login-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 320px) auto; gap: 12px; align-items: end; padding: 18px; margin-bottom: 18px; border: 1px solid rgba(212, 175, 55, 0.28); border-radius: 8px; background: #100e0b; }
+.login-card label { color: #d4af37; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.login-card input { width: 100%; border: 1px solid rgba(212, 175, 55, 0.28); border-radius: 8px; padding: 10px; color: #f8f3e7; background: #0b0907; }
+.session-actions { display: flex; justify-content: flex-end; margin: -8px 0 18px; }
+@media (max-width: 820px) { .login-card { grid-template-columns: 1fr; } }

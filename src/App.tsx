@@ -8,6 +8,7 @@ import {
   createIntegritasBrowserClient,
   getIntegritasFunctionUrls,
   isInvestigationRuntimeReady,
+  SUPPORTED_CASE_FILE_ACCEPT,
   validateCaseDocumentSelection,
   type InvestigationDepth,
   type RuntimeStatus,
@@ -55,6 +56,7 @@ function ConfigurationHealth({ authenticated, runtimeReady }: { authenticated: b
 
 export function App() {
   const [token, setToken] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
   const [cases, setCases] = useState<CaseRow[]>([]);
   const [selectedCaseId, setSelectedCaseId] = useState('');
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
@@ -95,20 +97,23 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!token || !supabase) { setCases([]); setSelectedCaseId(''); return; }
+    if (!token || !browserClient) { setCases([]); setSelectedCaseId(''); return; }
     let cancelled = false;
-    supabase.from('integritas_cases')
-      .select('id,title,revision,created_at')
-      .order('created_at', { ascending: false })
-      .then(({ data, error }) => {
+    browserClient.listCases(token)
+      .then((data) => {
         if (cancelled) return;
-        if (error) { setNotice(error.message); return; }
-        const rows = (data ?? []) as CaseRow[];
+        const rows = data as CaseRow[];
         setCases(rows);
         setSelectedCaseId((current) => rows.some((row) => row.id === current) ? current : (rows[0]?.id ?? ''));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setCases([]);
+        setSelectedCaseId('');
+        setNotice(error instanceof Error ? error.message : String(error));
       });
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, browserClient]);
 
   useEffect(() => {
     if (!token || !browserClient) { setRuntime(null); return; }
@@ -170,6 +175,30 @@ export function App() {
     const interval = window.setInterval(refresh, 5_000);
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [token, browserClient, job?.id, job?.control_command_id, selectedCaseId]);
+
+  const sendMagicLink = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!supabase || !isSupabaseConfigured) { setNotice('Supabase sign-in is not configured for this deployment.'); return; }
+    const address = email.trim();
+    if (!address) return;
+    setBusy(true); setNotice('Sending secure sign-in link…');
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: address,
+        options: { emailRedirectTo: window.location.href, shouldCreateUser: true },
+      });
+      if (error) throw error;
+      setNotice('Check your email and open the secure sign-in link on this device.');
+    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
+
+  const signOut = async () => {
+    if (!supabase) return;
+    setBusy(true);
+    try { await supabase.auth.signOut(); setNotice('Signed out.'); }
+    finally { setBusy(false); }
+  };
 
   const onFileSelection = (nextFiles: File[]) => {
     try {
@@ -249,6 +278,16 @@ export function App() {
           <ConfigurationHealth authenticated={!!token} runtimeReady={runtimeReady} />
         </header>
 
+        {!token && (
+          <form className="login-card" onSubmit={sendMagicLink}>
+            <div><p className="eyebrow">Authorized analysts only</p><h2>Secure email sign-in</h2></div>
+            <label htmlFor="admin-email">Email address</label>
+            <input id="admin-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+            <button type="submit" disabled={!isSupabaseConfigured || busy || !email.trim()}>Send secure sign-in link</button>
+          </form>
+        )}
+        {token && <div className="session-actions"><button type="button" className="secondary" onClick={signOut} disabled={busy}>Sign out</button></div>}
+
         <section className="command-card" id="dashboard">
           <div>
             <p className="eyebrow">Case intake and investigation</p>
@@ -286,7 +325,7 @@ export function App() {
                 {cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
               </select>
               <label htmlFor="case-documents">Case documents</label>
-              <input ref={fileInputRef} id="case-documents" type="file" accept=".pdf,.txt,.md,.csv,.doc,.docx,.xls,.xlsx" multiple disabled={!token || !selectedCase || busy} onChange={(event) => onFileSelection(Array.from(event.target.files ?? []))} />
+              <input ref={fileInputRef} id="case-documents" type="file" accept={SUPPORTED_CASE_FILE_ACCEPT} multiple disabled={!token || !selectedCase || busy} onChange={(event) => onFileSelection(Array.from(event.target.files ?? []))} />
               <small>Upload up to 20 documents per case. {documents.length}/20 are currently registered.</small>
               {documents.length > 0 && <ul className="document-list">{documents.map((document) => <li key={document.id}>{document.name}</li>)}</ul>}
               <button type="button" className="secondary" disabled={!token || !selectedCase || files.length === 0 || busy} onClick={uploadSelected}>

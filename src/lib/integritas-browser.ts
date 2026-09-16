@@ -1,4 +1,5 @@
 export const MAX_CASE_DOCUMENTS = 20;
+export const SUPPORTED_CASE_FILE_ACCEPT = '.pdf,.txt,.md,.csv';
 
 export function getIntegritasFunctionUrls(supabaseUrl: string) {
   const base = supabaseUrl.replace(/\/$/, '');
@@ -77,6 +78,16 @@ type StartInvestigationInput = {
 };
 export function createIntegritasBrowserClient(options: BrowserClientOptions) {
   const fetchImpl = options.fetchImpl ?? fetch;
+  async function adminRequest(token: string, body: Record<string, unknown>) {
+    const response = await fetchImpl(options.adminApiUrl, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(String(payload?.error || 'Admin request failed.'));
+    return payload;
+  }
   async function controlRequest(token: string, body: Record<string, unknown>) {
     const response = await fetchImpl(options.controlApiUrl, {
       method: 'POST',
@@ -88,6 +99,10 @@ export function createIntegritasBrowserClient(options: BrowserClientOptions) {
     return payload;
   }
   return {
+    async listCases(token: string) {
+      const payload = await adminRequest(token, { action: 'list_cases' });
+      return Array.isArray(payload.cases) ? payload.cases : [];
+    },
     async runtimeStatus(token: string) {
       const payload = await controlRequest(token, { action: 'runtime_status' });
       return Array.isArray(payload.runtimes) ? payload.runtimes : [];

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   MAX_CASE_DOCUMENTS,
+  SUPPORTED_CASE_FILE_ACCEPT,
   canStartInvestigation,
   createIntegritasBrowserClient,
   getIntegritasFunctionUrls,
@@ -9,6 +10,20 @@ import {
 } from './integritas-browser';
 
 describe('Integritas browser adapter', () => {
+  it('pins the browser picker to server-supported evidence types', () => {
+    expect(SUPPORTED_CASE_FILE_ACCEPT).toBe('.pdf,.txt,.md,.csv');
+  });
+
+  it('bootstraps admin authorization through the server API before browser RLS reads', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ cases: [{ id: 'case-1', title: 'Case 1', revision: 2 }] }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const client = createIntegritasBrowserClient({ adminApiUrl: 'https://example.test/admin', controlApiUrl: 'https://example.test/control', fetchImpl });
+    expect(await client.listCases('token')).toHaveLength(1);
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe('https://example.test/admin');
+    expect(init.headers).toEqual({ authorization: 'Bearer token', 'content-type': 'application/json' });
+    expect(JSON.parse(String(init.body))).toEqual({ action: 'list_cases' });
+  });
+
   it('rejects selections that would take a case above 20 documents', () => {
     const files = Array.from({ length: 3 }, (_, i) => new File(['x'], `doc-${i}.txt`, { type: 'text/plain' }));
     expect(MAX_CASE_DOCUMENTS).toBe(20);

@@ -16,7 +16,14 @@ describe('Integritas Command Center', () => {
     render(<App />);
     const input = screen.getByLabelText(/case documents/i) as HTMLInputElement;
     expect(input.multiple).toBe(true);
+    expect(input.accept).toBe('.pdf,.txt,.md,.csv');
     expect(screen.getByText(/up to 20 documents/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /upload selected documents/i })).toBeDisabled();
+  });
+
+  it('offers magic-link sign-in while unauthenticated', () => {
+    render(<App />);
+    expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /send secure sign-in link/i })).toBeInTheDocument();
   });
 });
