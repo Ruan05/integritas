@@ -43,6 +43,14 @@ const investigationStages = [
   'Drafting report',
 ] as const;
 
+const openClawPreflight = [
+  'Fresh Oracle runtime heartbeat and verified control-worker version',
+  'Integritas DD skill installed in the verified OpenClaw workspace',
+  'Browser/research tool capability and selected model provider attested',
+  'Explicit case access, case revision, and structured job payload verified',
+  'Evidence/result persistence and analyst-review guards exercised',
+] as const;
+
 function ConfigurationHealth() {
   return (
     <div className="health warn" role="status">
@@ -92,7 +100,7 @@ export function App() {
             <button type="button" className="secondary" disabled title="Requires an authenticated case session">
               <UploadCloud size={18} />Upload evidence
             </button>
-            <button type="button" disabled title="Requires an authenticated case session">
+            <button type="button" disabled title="Requires authenticated case access and OpenClaw DD preflight">
               <Play size={18} />Start Deep Investigation
             </button>
           </div>
@@ -148,10 +156,13 @@ export function App() {
 
           <article className="panel" id="jobs">
             <div className="panel-head">
-              <h2>Research jobs and reports</h2>
-              <span>Durable state</span>
+              <h2>OpenClaw due-diligence runner</h2>
+              <span>Preflight required</span>
             </div>
-            <p className="muted" id="reports">Jobs, report revisions, review decisions, and finalisation guards are retained in Supabase. The browser is never the system of record.</p>
+            <p className="muted" id="reports">The panel will dispatch only typed, case-scoped research jobs to OpenClaw. It does not expose the gateway or an arbitrary shell.</p>
+            <ul className="checks compact-checks">
+              {openClawPreflight.map((check) => <li key={check}>{check}</li>)}
+            </ul>
           </article>
 
           <article className="panel wide" id="audit">
