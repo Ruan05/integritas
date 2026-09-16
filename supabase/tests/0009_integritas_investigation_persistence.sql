@@ -145,30 +145,30 @@ select pg_temp.assert_checkpoint_rejected(
   :'runtime_control_command_id'::uuid, :'runtime_case_job_id'::uuid,
   4, 'researching', 70, 'terminal investigation stage is immutable'
 );
-select public.integritas_register_case_job_output(
+select * from public.integritas_register_case_job_output(
   :'runtime_control_command_id'::uuid, 'oracle-primary', :'runtime_case_job_id'::uuid, 4,
   'bundle', 'application/json',
   format('cases/%s/jobs/%s/outputs/bundle.json', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', :'runtime_case_job_id'),
   repeat('c', 64), 123, '{"artifact":"bundle"}'::jsonb
-);
-select public.integritas_register_case_job_output(
+)
+\gset first_output_
+select * from public.integritas_register_case_job_output(
   :'runtime_control_command_id'::uuid, 'oracle-primary', :'runtime_case_job_id'::uuid, 4,
   'bundle', 'application/json',
   format('cases/%s/jobs/%s/outputs/bundle.json', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', :'runtime_case_job_id'),
   repeat('c', 64), 123, '{"artifact":"bundle"}'::jsonb
-);
+)
+\gset second_output_
 select pg_temp.assert_true(
-  (select count(*) = 1 from public.integritas_case_job_outputs
-   where case_job_id = :'runtime_case_job_id'::uuid and output_type = 'bundle'),
+  :'first_output_id'::uuid = :'second_output_id'::uuid,
   'output registration is idempotent for the same job/type/digest'
 );
 select pg_temp.assert_true(
-  not exists (
-    select 1 from public.integritas_case_job_outputs
-    where safe_metadata::text like '%/storage/v1/object/sign/%'
-       or storage_path like 'http%'
-  ),
-  'persisted output metadata and paths contain no signed URLs'
+  :'first_output_storage_path' not like 'http%'
+    and :'second_output_storage_path' not like 'http%'
+    and :'first_output_safe_metadata' not like '%/storage/v1/object/sign/%'
+    and :'second_output_safe_metadata' not like '%/storage/v1/object/sign/%',
+  'returned output metadata and paths contain no signed URLs'
 );
 update public.integritas_cases
 set revision = 5

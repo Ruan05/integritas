@@ -41,3 +41,6 @@ for (const requiredDefault of [
 assert.match(persistenceTest, /wrapper-test-health-0001/, 'persistence test must identify the older queued wrapper fixture');
 assert.match(persistenceTest, /integritas_control_complete/, 'persistence test must drain prior synthetic commands through the bounded complete RPC');
 assert.ok(!persistenceTest.includes('update public.integritas_control_commands'), 'persistence test must not directly mutate control commands');
+assert.ok(!persistenceTest.includes('from public.integritas_case_job_outputs'), 'persistence test must verify outputs through bounded RPC returns, not direct table reads');
+assert.match(persistenceTest, /\gset first_output_/, 'persistence test must capture the first output RPC return');
+assert.match(persistenceTest, /\gset second_output_/, 'persistence test must capture the second output RPC return');
