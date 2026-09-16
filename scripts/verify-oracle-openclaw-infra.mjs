@@ -30,6 +30,7 @@ if (!errors.length) {
   const provision = read('infra/oracle/provision-always-free-a1.sh');
 
   const mustContain = [
+    [config, 'mode: "local"', 'local Gateway mode'],
     [config, 'bind: "loopback"', 'loopback-only gateway'],
     [config, 'backend: "docker"', 'Docker sandbox backend'],
     [config, 'network: "none"', 'sandbox network disabled'],
@@ -41,6 +42,7 @@ if (!errors.length) {
     [unit, 'NoNewPrivileges=true', 'systemd no-new-privileges'],
     [unit, 'ProtectSystem=strict', 'systemd filesystem protection'],
     [installer, 'OPENCLAW_VERSION="2026.9.4"', 'pinned OpenClaw stable version'],
+    [installer, 'chmod 0755 "${PREFIX}/bin/openclaw"', 'readable executable OpenClaw CLI'],
     [installer, 'v${TARGET_VERSION}', 'pinned OpenClaw source tag'],
     [cloudInit, 'ocarun', 'OCI Run Command user'],
     [runCommand, 'oci instance-agent command create', 'OCI Run Command create call'],
