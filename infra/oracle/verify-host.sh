@@ -24,19 +24,17 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 2
 fi
 
-if ! docker info >/dev/null 2>&1; then
-  echo "Docker daemon is not healthy or the current user cannot access it." >&2
+if ! systemctl is-active docker >/dev/null 2>&1; then
+  echo "Docker service is not active." >&2
   exit 3
 fi
 
 printf 'Docker: %s\n' "$(docker --version)"
 printf 'Compose: %s\n' "$(docker compose version)"
-printf 'Running containers: %s\n' "$(docker ps -q | wc -l | tr -d ' ')"
+echo "Docker service: active"
+echo "Docker socket/container enumeration intentionally skipped for the restricted integritas-control worker."
 
 echo "Listening TCP sockets (review before exposing anything):"
 ss -ltnp 2>/dev/null || ss -ltn
-
-echo "Published Docker ports (should be empty before deliberate runtime exposure):"
-docker ps --format '{{.Names}} {{.Ports}}'
 
 echo "Host verification complete. This script made no changes."
