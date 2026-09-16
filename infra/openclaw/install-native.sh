@@ -37,6 +37,7 @@ INSTALLER="$(mktemp)"
 trap 'rm -f "${INSTALLER}"' EXIT
 curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install-cli.sh -o "${INSTALLER}"
 bash "${INSTALLER}" --prefix "${PREFIX}" --version "${TARGET_VERSION}" --node-version "${NODE_VERSION}" --no-onboard
+chmod 0755 "${PREFIX}/bin/openclaw"
 "${PREFIX}/bin/openclaw" --version | grep -F "${TARGET_VERSION}" >/dev/null
 
 rm -rf "${SOURCE_DIR}"
