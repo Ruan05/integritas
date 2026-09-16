@@ -15,6 +15,7 @@ export class ControlClient {
       headers: {
         'content-type': 'application/json',
         'x-integritas-worker-token': this.workerToken,
+        'x-integritas-worker-id': this.workerId,
       },
       body: JSON.stringify({ action, worker_id: this.workerId, ...body }),
     });
