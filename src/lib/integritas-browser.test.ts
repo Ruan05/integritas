@@ -5,6 +5,7 @@ import {
   canStartInvestigation,
   createIntegritasBrowserClient,
   getIntegritasFunctionUrls,
+  getAuthRedirectUrl,
   isInvestigationRuntimeReady,
   validateCaseDocumentSelection,
 } from './integritas-browser';
@@ -62,11 +63,23 @@ describe('Integritas browser adapter', () => {
     expect(isInvestigationRuntimeReady({ ...runtime, last_seen_at: '2026-09-16T21:57:00Z' }, now)).toBe(false);
   });
 
-  it('derives same-project function URLs and keeps start gated', () => {
+  it('supports same-origin proxy overrides while retaining Supabase defaults', () => {
     expect(getIntegritasFunctionUrls('https://abc.supabase.co')).toEqual({
       adminApiUrl: 'https://abc.supabase.co/functions/v1/integritas-admin-api',
       controlApiUrl: 'https://abc.supabase.co/functions/v1/integritas-control',
     });
+    expect(getIntegritasFunctionUrls('https://abc.supabase.co', { adminApiUrl: '/api/admin', controlApiUrl: '/api/control' })).toEqual({
+      adminApiUrl: '/api/admin',
+      controlApiUrl: '/api/control',
+    });
+  });
+
+  it('uses a configured auth bridge redirect when provided', () => {
+    expect(getAuthRedirectUrl('https://bridge.example/auth', 'https://app.example/')).toBe('https://bridge.example/auth');
+    expect(getAuthRedirectUrl(undefined, 'https://app.example/')).toBe('https://app.example/');
+  });
+
+  it('keeps start gated', () => {
     expect(canStartInvestigation({ authenticated: true, hasCase: true, documentCount: 2, runtimeReady: true, busy: false })).toBe(true);
     expect(canStartInvestigation({ authenticated: true, hasCase: true, documentCount: 0, runtimeReady: true, busy: false })).toBe(false);
     expect(canStartInvestigation({ authenticated: true, hasCase: true, documentCount: 2, runtimeReady: false, busy: false })).toBe(false);

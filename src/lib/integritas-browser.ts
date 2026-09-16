@@ -1,12 +1,19 @@
 export const MAX_CASE_DOCUMENTS = 20;
 export const SUPPORTED_CASE_FILE_ACCEPT = '.pdf,.txt,.md,.csv';
 
-export function getIntegritasFunctionUrls(supabaseUrl: string) {
+export function getIntegritasFunctionUrls(
+  supabaseUrl: string,
+  overrides: { adminApiUrl?: string; controlApiUrl?: string } = {},
+) {
   const base = supabaseUrl.replace(/\/$/, '');
   return {
-    adminApiUrl: `${base}/functions/v1/integritas-admin-api`,
-    controlApiUrl: `${base}/functions/v1/integritas-control`,
+    adminApiUrl: overrides.adminApiUrl?.trim() || `${base}/functions/v1/integritas-admin-api`,
+    controlApiUrl: overrides.controlApiUrl?.trim() || `${base}/functions/v1/integritas-control`,
   };
+}
+
+export function getAuthRedirectUrl(configured: string | undefined, currentUrl: string) {
+  return configured?.trim() || currentUrl;
 }
 
 export function canStartInvestigation(input: { authenticated: boolean; hasCase: boolean; documentCount: number; runtimeReady: boolean; busy: boolean; hasCurrentRevisionJob?: boolean }) {

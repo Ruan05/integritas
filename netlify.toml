@@ -12,3 +12,15 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+[[redirects]]
+  from = "/api/admin"
+  to = "https://leuixjgmlueptefintgo.supabase.co/functions/v1/integritas-admin-api"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/control"
+  to = "https://leuixjgmlueptefintgo.supabase.co/functions/v1/integritas-control"
+  status = 200
+  force = true

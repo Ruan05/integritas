@@ -7,6 +7,7 @@ import {
   canStartInvestigation,
   createIntegritasBrowserClient,
   getIntegritasFunctionUrls,
+  getAuthRedirectUrl,
   isInvestigationRuntimeReady,
   SUPPORTED_CASE_FILE_ACCEPT,
   validateCaseDocumentSelection,
@@ -70,7 +71,10 @@ export function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const browserClient = useMemo(() => {
     if (!supabaseUrl) return null;
-    const urls = getIntegritasFunctionUrls(supabaseUrl);
+    const urls = getIntegritasFunctionUrls(supabaseUrl, {
+      adminApiUrl: import.meta.env.VITE_INTEGRITAS_ADMIN_API_URL as string | undefined,
+      controlApiUrl: import.meta.env.VITE_INTEGRITAS_CONTROL_API_URL as string | undefined,
+    });
     return createIntegritasBrowserClient(urls);
   }, []);
   const selectedCase = useMemo(() => cases.find((item) => item.id === selectedCaseId) ?? null, [cases, selectedCaseId]);
@@ -185,7 +189,10 @@ export function App() {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: address,
-        options: { emailRedirectTo: window.location.href, shouldCreateUser: true },
+        options: {
+          emailRedirectTo: getAuthRedirectUrl(import.meta.env.VITE_AUTH_REDIRECT_URL as string | undefined, window.location.href),
+          shouldCreateUser: true,
+        },
       });
       if (error) throw error;
       setNotice('Check your email and open the secure sign-in link on this device.');
