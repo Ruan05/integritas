@@ -31,11 +31,11 @@ begin
   create table public.integritas_documents (
     id uuid primary key,
     case_id uuid not null,
-    name text not null,
-    mime_type text not null,
-    size_bytes bigint not null,
-    sha256 text not null,
-    storage_path text not null,
+    name text not null default 'Fixture document',
+    mime_type text not null default 'application/octet-stream',
+    size_bytes bigint not null default 0,
+    sha256 text not null default repeat('0', 64),
+    storage_path text not null default 'fixture/path',
     extraction_status text not null default 'pending',
     created_at timestamptz not null default now()
   );

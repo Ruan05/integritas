@@ -26,3 +26,12 @@ for (const required of ['title text', 'purpose text', 'authorized_scope text', '
 }
 assert.ok(fixture.includes('updated_at timestamptz'), 'CI job fixture must support checkpoint timestamps');
 assert.match(migration, /terminal investigation stage is immutable/, 'terminal investigation stages must not resume through checkpoint updates');
+for (const requiredDefault of [
+  "name text not null default 'Fixture document'",
+  "mime_type text not null default 'application/octet-stream'",
+  'size_bytes bigint not null default 0',
+  "sha256 text not null default repeat('0', 64)",
+  "storage_path text not null default 'fixture/path'",
+]) {
+  assert.ok(fixture.includes(requiredDefault), `CI document fixture must provide ${requiredDefault}`);
+}
