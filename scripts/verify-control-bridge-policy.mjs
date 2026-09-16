@@ -10,6 +10,11 @@ const client = read('infra/openclaw/control-worker/src/client.mjs');
 const polkit = read('infra/openclaw/49-integritas-openclaw-control.rules');
 const edge = read('supabase/functions/integritas-control/index.ts');
 const verifyHost = read('infra/oracle/verify-host.sh');
+const investigation = read('infra/openclaw/control-worker/src/investigation.mjs');
+const investigationUnit = read('infra/openclaw/integritas-openclaw-investigation@.service');
+const investigationRunner = read('infra/openclaw/investigation-agent-runner.mjs');
+const investigationConfig = read('infra/openclaw/integritas-investigation.json5');
+const installer = read('infra/openclaw/install-control-worker.sh');
 
 assert.match(gateway, /bind:\s*["']loopback["']/, 'OpenClaw Gateway must remain loopback-only');
 assert.match(service, /^User=integritas-control$/m, 'control worker must use dedicated non-root account');
@@ -21,9 +26,12 @@ assert.ok(!service.includes('/var/run/docker.sock'), 'control worker must not re
 assert.ok(!service.match(/^ExecStart=.*\b(sudo|sh -c|bash -c)\b/m), 'service must not launch through sudo or a shell string');
 
 assert.match(polkit, /subject\.user === "integritas-control"/, 'Polkit rule must be scoped to worker account');
-assert.match(polkit, /action\.lookup\("unit"\) === "openclaw-gateway\.service"/, 'Polkit rule must target only OpenClaw Gateway');
-assert.match(polkit, /action\.lookup\("verb"\) === "restart"/, 'Polkit rule must permit only restart');
+assert.match(polkit, /unit === "openclaw-gateway\.service"/, 'Polkit must preserve the exact Gateway restart target');
+assert.match(polkit, /verb === "restart"/, 'Polkit must preserve the Gateway restart verb');
 assert.ok(!polkit.includes('polkit.Result.AUTH_ADMIN_KEEP'), 'Polkit rule must not create a reusable admin grant');
+assert.match(polkit, /integritas-openclaw-investigation@/, 'Polkit must name only the investigation runner template');
+assert.match(polkit, /verb === "start"/, 'Polkit must allow runner start only');
+assert.match(polkit, /\[0-9a-f\]\{8\}/, 'Polkit runner unit match must constrain UUID instances');
 
 assert.match(commands, /execFile/, 'bounded worker may use execFile');
 assert.ok(!commands.match(/\bexec\s*\(/), 'generic child_process exec must not be used');
@@ -32,6 +40,27 @@ assert.ok(!commands.includes('/var/run/docker.sock'), 'worker dispatcher must no
 for (const prohibited of ['exec_shell', 'read_environment', 'read_secret', 'plugin_install', 'send_email', 'delete_evidence']) {
   assert.ok(!commands.includes(`'${prohibited}'`), `worker must not implement ${prohibited}`);
 }
+
+assert.match(investigationUnit, /^User=openclaw$/m, 'investigation runner must execute as openclaw');
+assert.match(investigationUnit, /^SupplementaryGroups=.*integritas-openclaw.*docker/m, 'runner gets only shared spool + sandbox group memberships');
+assert.match(investigationUnit, /^WorkingDirectory=\/var\/lib\/integritas-runner\/jobs\/%i$/m, 'runner working directory must be the UUID-scoped spool');
+assert.match(investigationUnit, /^NoNewPrivileges=true$/m, 'investigation runner must retain NoNewPrivileges');
+assert.match(investigationUnit, /^ProtectSystem=strict$/m, 'investigation runner must retain a read-only system view');
+assert.ok(!investigationUnit.includes('/var/run/docker.sock'), 'investigation unit must not mount the Docker socket explicitly');
+assert.match(investigationRunner, /const args = \[\s*'agent', 'exec'/, 'runner arguments must begin with OpenClaw agent exec');
+assert.match(investigationRunner, /execFileAsync\('\/opt\/openclaw\/bin\/openclaw', args/, 'runner must execute only the fixed OpenClaw binary');
+assert.match(investigationRunner, /--config/, 'runner must pin the dedicated exec config');
+assert.match(investigationRunner, /--state-dir/, 'runner must use existing OpenClaw state without copying secrets');
+assert.ok(!investigationRunner.includes('shell: true'), 'runner must never execute through a shell');
+assert.match(investigationConfig, /\$include:\s*["']\.\/openclaw\.json["']/, 'investigation config must inherit the pinned OpenClaw config');
+assert.match(investigationConfig, /workspaceAccess:\s*["']rw["']/, 'only the dedicated investigation exec config may expose its job workspace rw');
+assert.match(investigationConfig, /alsoAllow:\s*\[[^\]]*["']browser["']/, 'investigation runner must explicitly permit browser research');
+assert.match(installer, /integritas-openclaw/, 'installer must provision the shared investigation group');
+assert.match(installer, /2770/, 'shared spool must use setgid owner-group permissions');
+assert.match(installer, /integritas-openclaw-investigation@\.service/, 'installer must install the fixed runner template');
+assert.match(investigation, /document digest mismatch/, 'worker must verify downloaded evidence digests');
+assert.match(investigation, /url\.hostname !== controlHost/, 'worker must bind signed downloads to the control-plane origin');
+assert.match(investigation, /systemctlRunner\('\/usr\/bin\/systemctl', \['start', '--wait'/, 'worker must start only the fixed oneshot runner via systemd');
 
 assert.match(worker, /INTEGRITAS_CONTROL_WORKER_TOKEN_FILE/, 'worker should support credential-file token loading');
 assert.ok(!worker.includes('console.log(workerToken)'), 'worker token must never be logged');

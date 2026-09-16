@@ -8,50 +8,68 @@ fi
 
 REPO_ROOT=${INTEGRITAS_REPO_ROOT:-/opt/integritas/current}
 SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-control-worker.service"
+RUNNER_SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-openclaw-investigation@.service"
+RUNNER_SCRIPT_SRC="$REPO_ROOT/infra/openclaw/investigation-agent-runner.mjs"
+RUNNER_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-investigation.json5"
 POLKIT_SRC="$REPO_ROOT/infra/openclaw/49-integritas-openclaw-control.rules"
 ENV_DIR=/etc/integritas
 ENV_FILE="$ENV_DIR/control-worker.env"
 TOKEN_FILE="$ENV_DIR/control-worker.token"
 STATE_DIR=/var/lib/integritas-control
+RUNNER_ROOT=/var/lib/integritas-runner
+SHARED_GROUP=integritas-openclaw
 
-for required in /usr/bin/node /usr/bin/systemctl /usr/bin/bash /usr/bin/getent /usr/sbin/useradd; do
+for required in /usr/bin/node /usr/bin/systemctl /usr/bin/systemd-analyze /usr/bin/getent /usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/sbin/runuser; do
   [[ -x "$required" ]] || { echo "Missing required executable: $required" >&2; exit 1; }
 done
-[[ -f "$SERVICE_SRC" ]] || { echo "Missing service file: $SERVICE_SRC" >&2; exit 1; }
-[[ -f "$POLKIT_SRC" ]] || { echo "Missing Polkit rule: $POLKIT_SRC" >&2; exit 1; }
+for required in "$SERVICE_SRC" "$RUNNER_SERVICE_SRC" "$RUNNER_SCRIPT_SRC" "$RUNNER_CONFIG_SRC" "$POLKIT_SRC"; do
+  [[ -f "$required" ]] || { echo "Missing required file: $required" >&2; exit 1; }
+done
 [[ -d /etc/polkit-1/rules.d ]] || { echo "Polkit rules directory is unavailable" >&2; exit 1; }
+/usr/bin/getent passwd openclaw >/dev/null || { echo "OpenClaw runtime user is missing" >&2; exit 1; }
+/usr/bin/getent group docker >/dev/null || { echo "Docker group is missing" >&2; exit 1; }
 
 if ! /usr/bin/getent passwd integritas-control >/dev/null; then
   /usr/sbin/useradd --system --home-dir "$STATE_DIR" --create-home --shell /usr/sbin/nologin integritas-control
 fi
+if ! /usr/bin/getent group "$SHARED_GROUP" >/dev/null; then
+  /usr/sbin/groupadd --system "$SHARED_GROUP"
+fi
+/usr/sbin/usermod -a -G "$SHARED_GROUP" integritas-control
+/usr/sbin/usermod -a -G "$SHARED_GROUP" openclaw
 
 install -d -o root -g root -m 0755 "$ENV_DIR"
 install -d -o integritas-control -g integritas-control -m 0700 "$STATE_DIR"
+install -d -o integritas-control -g "$SHARED_GROUP" -m 2770 "$RUNNER_ROOT" "$RUNNER_ROOT/jobs"
 install -o root -g root -m 0644 "$SERVICE_SRC" /etc/systemd/system/integritas-control-worker.service
+install -o root -g root -m 0644 "$RUNNER_SERVICE_SRC" /etc/systemd/system/integritas-openclaw-investigation@.service
+install -o root -g root -m 0755 "$RUNNER_SCRIPT_SRC" /opt/integritas/current/infra/openclaw/investigation-agent-runner.mjs
+install -o root -g openclaw -m 0640 "$RUNNER_CONFIG_SRC" /etc/openclaw/integritas-investigation.json
 install -o root -g root -m 0644 "$POLKIT_SRC" /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
 
 if [[ ! -f "$ENV_FILE" ]]; then
   cat >"$ENV_FILE" <<'EOF'
 # Non-secret Integritas outbound control-worker settings.
-# Set INTEGRITAS_CONTROL_URL to the deployed Supabase integritas-control endpoint before starting.
 INTEGRITAS_CONTROL_URL=
 INTEGRITAS_WORKER_ID=oracle-primary
 INTEGRITAS_CONTROL_POLL_MS=5000
-INTEGRITAS_CONTROL_WORKER_VERSION=0.1.0
+INTEGRITAS_CONTROL_WORKER_VERSION=0.2.0
 EOF
   chmod 0600 "$ENV_FILE"
   chown root:root "$ENV_FILE"
 fi
-
 if [[ ! -f "$TOKEN_FILE" ]]; then
   install -o root -g root -m 0600 /dev/null "$TOKEN_FILE"
   echo "Created empty $TOKEN_FILE. Provision the scoped worker token through an authenticated operator path before starting the service." >&2
 fi
 
+/usr/sbin/runuser -u openclaw -- env \
+  HOME=/var/lib/openclaw OPENCLAW_HOME=/var/lib/openclaw OPENCLAW_STATE_DIR=/var/lib/openclaw \
+  OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-investigation.json \
+  /opt/openclaw/bin/openclaw config validate
 /usr/bin/systemctl daemon-reload
-
-# Validate the unit without starting it. The service is deliberately not enabled until URL/token are provisioned.
 /usr/bin/systemd-analyze verify /etc/systemd/system/integritas-control-worker.service >/dev/null
+/usr/bin/systemd-analyze verify /etc/systemd/system/integritas-openclaw-investigation@.service >/dev/null
 
-echo "Integritas control worker installed but not started."
-echo "Provision the non-secret control URL in $ENV_FILE and the scoped token in $TOKEN_FILE, then enable/start the service."
+echo "Integritas control worker and bounded OpenClaw investigation runner installed."
+echo "Provision/retain the scoped worker token and control URL, then restart integritas-control-worker.service."

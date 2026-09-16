@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 User=integritas-control
 Group=integritas-control
+SupplementaryGroups=integritas-openclaw
 EnvironmentFile=/etc/integritas/control-worker.env
 Environment=INTEGRITAS_REPO_ROOT=/opt/integritas/current
 LoadCredential=control-token:/etc/integritas/control-worker.token
@@ -31,7 +32,7 @@ LockPersonality=true
 CapabilityBoundingSet=
 AmbientCapabilities=
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-ReadWritePaths=/var/lib/integritas-control
+ReadWritePaths=/var/lib/integritas-control /var/lib/integritas-runner
 UMask=0077
 
 [Install]

@@ -2,7 +2,8 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { ControlClient } from './client.mjs';
-import { executeCommand } from './commands.mjs';
+import { executeCommand, validateCommand } from './commands.mjs';
+import { executeInvestigation } from './investigation.mjs';
 
 const execFileAsync = promisify(execFile);
 const baseUrl = process.env.INTEGRITAS_CONTROL_URL;
@@ -77,7 +78,13 @@ while (!stopping) {
 
     try {
       await client.touch(command.id);
-      const result = await executeCommand(command);
+      const validated = validateCommand(command);
+      const result = validated.command_type === 'run_case_investigation'
+        ? await executeInvestigation(validated, {
+          client,
+          repoRoot: process.env.INTEGRITAS_REPO_ROOT || '/opt/integritas/current',
+        })
+        : await executeCommand(validated);
       await client.complete(command.id, result);
     } catch (error) {
       await client.fail(command.id, 'execution_failed', String(error.message || error).slice(0, 1000));

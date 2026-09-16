@@ -1,0 +1,13 @@
+{
+  $include: "./openclaw.json",
+  agents: {
+    defaults: {
+      sandbox: {
+        workspaceAccess: "rw",
+      },
+    },
+  },
+  tools: {
+    alsoAllow: ["browser"],
+  },
+}

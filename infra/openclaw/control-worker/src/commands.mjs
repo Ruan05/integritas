@@ -2,8 +2,6 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const CASE_INVESTIGATION_RUNNER = '/opt/integritas/current/infra/openclaw/run-case-investigation.sh';
-const CASE_INVESTIGATION_CWD = '/opt/integritas/current';
 const SAFE_EXEC_ENV = { PATH: '/usr/bin:/bin', LANG: 'C' };
 
 export const ALLOWED_COMMANDS = new Set([
@@ -93,17 +91,8 @@ export async function executeCommand(command, {
       return { ok: true, summary: result.stdout.slice(-4000) };
     }
 
-    case 'run_case_investigation': {
-      const { case_id, case_job_id, case_revision, depth } = validated.payload;
-      const result = await runner('/usr/bin/bash', [
-        CASE_INVESTIGATION_RUNNER,
-        case_id,
-        case_job_id,
-        String(case_revision),
-        depth,
-      ], { cwd: CASE_INVESTIGATION_CWD });
-      return { ok: true, summary: result.stdout.slice(-4000) };
-    }
+    case 'run_case_investigation':
+      throw new Error('investigation command requires dedicated investigation executor');
 
     default:
       throw new Error('unsupported command');

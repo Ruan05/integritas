@@ -73,31 +73,19 @@ test('run_case_investigation rejects unbounded or malformed payloads', () => {
   assert.throws(() => validateCommand({ command_type: 'run_case_investigation', payload: { ...base, prompt: 'arbitrary' } }), /unexpected payload key/);
 });
 
-test('run_case_investigation executes only the fixed runner with bounded positional arguments', async () => {
-  const calls = [];
-  const runner = async (file, args, options) => {
-    calls.push([file, args, options]);
-    return { stdout: 'started', stderr: '' };
-  };
-  const result = await executeCommand({
-    command_type: 'run_case_investigation',
-    payload: {
-      case_id: '11111111-1111-4111-8111-111111111111',
-      case_job_id: '22222222-2222-4222-8222-222222222222',
-      case_revision: 3,
-      depth: 'maximum',
-    },
-  }, { runner });
-  assert.equal(result.ok, true);
-  assert.deepEqual(calls, [[
-    '/usr/bin/bash',
-    [
-      '/opt/integritas/current/infra/openclaw/run-case-investigation.sh',
-      '11111111-1111-4111-8111-111111111111',
-      '22222222-2222-4222-8222-222222222222',
-      '3',
-      'maximum',
-    ],
-    { cwd: '/opt/integritas/current' },
-  ]]);
+test('run_case_investigation is not executed by the generic host dispatcher', async () => {
+  let called = false;
+  await assert.rejects(
+    executeCommand({
+      command_type: 'run_case_investigation',
+      payload: {
+        case_id: '11111111-1111-4111-8111-111111111111',
+        case_job_id: '22222222-2222-4222-8222-222222222222',
+        case_revision: 3,
+        depth: 'maximum',
+      },
+    }, { runner: async () => { called = true; return { stdout: '', stderr: '' }; } }),
+    /dedicated investigation executor/,
+  );
+  assert.equal(called, false);
 });
