@@ -10,17 +10,17 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; background: #080706; }
 button, a { font: inherit; }
 
-.shell { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
-.sidebar { border-right: 1px solid rgba(212, 175, 55, 0.2); padding: 24px 16px; background: #0d0b08; }
+.shell { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 100vh; }
+.sidebar { border-right: 1px solid rgba(212, 175, 55, 0.2); padding: 24px 16px; background: #0d0b08; min-width: 0; }
 .brand { display: flex; gap: 12px; align-items: center; margin: 0 8px 32px; }
-.brand-mark { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid #d4af37; border-radius: 8px; color: #d4af37; font-weight: 800; }
+.brand-mark { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid #d4af37; border-radius: 8px; color: #d4af37; font-weight: 800; flex: none; }
 .brand strong, .brand small { display: block; }
 .brand small, .muted, .topbar p { color: #b7ab91; }
-nav { display: grid; gap: 4px; }
-nav a { display: flex; align-items: center; gap: 10px; color: #d7cbb2; text-decoration: none; padding: 9px 12px; border-radius: 8px; }
+nav { display: grid; gap: 4px; min-width: 0; }
+nav a { display: flex; align-items: center; gap: 10px; color: #d7cbb2; text-decoration: none; padding: 9px 12px; border-radius: 8px; min-width: 0; }
 nav a.active, nav a:hover { background: rgba(212, 175, 55, 0.12); color: #fff5d6; }
 
-.workspace { padding: 28px; max-width: 1540px; width: 100%; }
+.workspace { padding: 28px; max-width: 1540px; width: 100%; min-width: 0; }
 .topbar { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 24px; }
 h1, h2, p { margin: 0; }
 h1 { font-size: clamp(30px, 4vw, 52px); letter-spacing: 0; }
@@ -36,13 +36,13 @@ button:disabled { cursor: not-allowed; opacity: 0.78; }
 button.secondary { background: transparent; color: #f8f3e7; }
 
 .workflow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; border: 1px solid rgba(212, 175, 55, 0.2); border-radius: 8px; overflow: hidden; background: rgba(212, 175, 55, 0.2); margin-bottom: 18px; }
-.workflow-step { display: grid; gap: 5px; padding: 14px; background: #100e0b; }
+.workflow-step { display: grid; gap: 5px; padding: 14px; background: #100e0b; min-width: 0; }
 .workflow-step span { color: #151007; display: grid; place-items: center; background: #d4af37; border-radius: 999px; font-size: 12px; font-weight: 800; width: 22px; height: 22px; }
-.workflow-step strong { font-size: 14px; }
-.workflow-step small { color: #b7ab91; font-size: 12px; }
+.workflow-step strong { font-size: 14px; overflow-wrap: anywhere; }
+.workflow-step small { color: #b7ab91; font-size: 12px; overflow-wrap: anywhere; }
 
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.panel { border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: #100e0b; padding: 18px; min-height: 205px; }
+.panel { border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: #100e0b; padding: 18px; min-height: 205px; min-width: 0; }
 .panel.wide { grid-column: 1 / -1; min-height: auto; }
 .panel-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 16px; color: #f8f3e7; }
 .panel-head span { color: #d4af37; font-size: 13px; }
@@ -55,7 +55,7 @@ button.secondary { background: transparent; color: #f8f3e7; }
 .checks { color: #d7cbb2; display: grid; gap: 10px; padding-left: 20px; margin: 0; }
 
 @media (max-width: 1060px) {
-  .shell { grid-template-columns: 230px 1fr; }
+  .shell { grid-template-columns: 230px minmax(0, 1fr); }
   .workflow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
@@ -63,9 +63,10 @@ button.secondary { background: transparent; color: #f8f3e7; }
   .shell { grid-template-columns: 1fr; }
   .sidebar { border-right: 0; border-bottom: 1px solid rgba(212, 175, 55, 0.2); }
   nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  nav a { font-size: 13px; }
+  nav a { font-size: 13px; overflow-wrap: anywhere; }
   .workspace { padding: 18px; }
   .topbar, .command-card { flex-direction: column; align-items: stretch; }
+  .health { white-space: normal; }
   .workflow, .grid, .pipeline { grid-template-columns: 1fr; }
   .panel.wide { grid-column: auto; }
 }
