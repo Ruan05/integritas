@@ -8,6 +8,9 @@ assert.match(source, /x-integritas-worker-token/, 'worker token header must be i
 assert.match(source, /x-integritas-worker-id/, 'worker id header must be required for scoped worker authentication');
 assert.match(source, /integritas_control_worker_credentials/, 'worker credentials must be validated against the production credential table');
 assert.match(source, /x-integritas-connector-token/, 'connector token header must be implemented');
+assert.match(source, /INTEGRITAS_CONTROL_ALLOWED_ORIGINS/, 'control API must support an explicit origin allowlist');
+assert.match(source, /integritas-private-admin\.ruansch1\.chatgpt\.site/, 'private admin origin must be explicitly allowlisted');
+assert.ok(!source.includes("'access-control-allow-origin': '*'"), 'CORS must not allow wildcard origins');
 assert.match(source, /integritas_admin_users/, 'admin membership must be checked server-side');
 assert.match(source, /idempotency-key/, 'enqueue must require an idempotency key');
 assert.match(source, /integritas_control_enqueue/, 'enqueue must use the bounded database RPC');
@@ -45,7 +48,6 @@ for (const dangerous of [
   assert.ok(!source.includes(dangerous), `dangerous connector action ${dangerous} must not be implemented`);
 }
 
-assert.ok(!source.includes("'access-control-allow-origin': '*'"), 'CORS must not allow wildcard origins');
 assert.ok(!source.includes('Deno.Command'), 'Edge Function must not execute operating-system commands');
 assert.ok(!source.includes('child_process'), 'Edge Function must not gain local process execution');
 

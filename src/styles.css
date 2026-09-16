@@ -70,3 +70,18 @@ button.secondary { background: transparent; color: #f8f3e7; }
   .workflow, .grid, .pipeline { grid-template-columns: 1fr; }
   .panel.wide { grid-column: auto; }
 }
+
+.health.ok { color: #dff7c8; background: rgba(116, 168, 74, 0.16); }
+.notice { margin: -6px 0 18px; padding: 11px 13px; border: 1px solid rgba(212, 175, 55, 0.22); border-radius: 8px; color: #e8dcc1; background: #100e0b; }
+.evidence-intake { display: grid; gap: 10px; margin-top: 18px; }
+.evidence-intake label, #jobs label { color: #d4af37; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+select, input[type="file"] { width: 100%; border: 1px solid rgba(212, 175, 55, 0.28); border-radius: 8px; padding: 10px; color: #f8f3e7; background: #0b0907; }
+select:disabled, input:disabled { opacity: 0.6; }
+.document-list { margin: 0; padding-left: 20px; color: #d7cbb2; max-height: 130px; overflow: auto; }
+.document-list li { margin: 4px 0; overflow-wrap: anywhere; }
+.status-dot.active { border-color: #d4af37; background: #d4af37; }
+.status-dot.done { border-color: #8cae68; background: #8cae68; }
+.runtime-summary { display: grid; gap: 3px; margin: 14px 0; padding: 10px; border: 1px solid rgba(212, 175, 55, 0.18); border-radius: 8px; }
+.runtime-summary small, .job-summary { color: #9f947d; }
+.job-summary { margin-top: 16px; }
+.compact-checks { margin-top: 16px; }

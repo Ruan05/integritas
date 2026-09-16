@@ -13,7 +13,7 @@ const workerToken = process.env.INTEGRITAS_CONTROL_WORKER_TOKEN || (
 );
 const workerId = process.env.INTEGRITAS_WORKER_ID || 'oracle-primary';
 const pollMs = Number(process.env.INTEGRITAS_CONTROL_POLL_MS || 5000);
-const workerVersion = process.env.INTEGRITAS_CONTROL_WORKER_VERSION || '0.1.0';
+const workerVersion = process.env.INTEGRITAS_CONTROL_WORKER_VERSION || '0.2.0';
 
 if (!baseUrl || !workerToken) {
   console.error('INTEGRITAS_CONTROL_URL and a worker-token credential are required');
@@ -47,7 +47,7 @@ async function sendHeartbeat() {
       openclaw_version: openclaw.version,
       openclaw_status: openclaw.service,
       worker_version: workerVersion,
-      capability_flags: { bounded_control: true, arbitrary_shell: false, docker_socket: false },
+      capability_flags: { bounded_control: true, arbitrary_shell: false, docker_socket: false, case_investigation: true, signed_manifests: true, durable_checkpoints: true },
     });
   } catch (error) {
     console.error(`heartbeat failed: ${error.message}`);

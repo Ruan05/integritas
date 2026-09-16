@@ -4,7 +4,13 @@ import { normalizeLeaseCommand } from './lease.ts';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const CONNECTOR_TOKEN = Deno.env.get('INTEGRITAS_CONTROL_CONNECTOR_TOKEN') ?? '';
-const ALLOWED_ORIGIN = Deno.env.get('INTEGRITAS_CONTROL_ALLOWED_ORIGIN') ?? 'https://integritass.com';
+const ALLOWED_ORIGINS = new Set([
+  'https://integritass.com',
+  'https://www.integritass.com',
+  'https://integritas-private-admin.ruansch1.chatgpt.site',
+  ...(Deno.env.get('INTEGRITAS_CONTROL_ALLOWED_ORIGINS') ?? '')
+    .split(',').map((value) => value.trim()).filter(Boolean),
+]);
 
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
   throw new Error('Supabase runtime secrets are unavailable');
@@ -55,13 +61,17 @@ async function sha256Hex(value: string): Promise<string> {
 }
 
 function cors(origin: string | null) {
-  const allowed = origin && origin === ALLOWED_ORIGIN ? origin : ALLOWED_ORIGIN;
-  return {
-    'access-control-allow-origin': allowed,
+  const headers: Record<string, string> = {
     'access-control-allow-headers': 'authorization, content-type, x-integritas-worker-token, x-integritas-worker-id, x-integritas-connector-token, idempotency-key',
     'access-control-allow-methods': 'POST, OPTIONS',
     'vary': 'Origin',
   };
+  if (origin && ALLOWED_ORIGINS.has(origin)) headers['access-control-allow-origin'] = origin;
+  return headers;
+}
+
+function originAllowed(origin: string | null) {
+  return !origin || ALLOWED_ORIGINS.has(origin);
 }
 
 function json(body: unknown, status = 200, origin: string | null = null) {
@@ -163,7 +173,10 @@ async function rpc(name: string, args: Record<string, unknown>) {
 
 Deno.serve(async (req) => {
   const origin = req.headers.get('origin');
-  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) });
+  if (req.method === 'OPTIONS') {
+    if (!originAllowed(origin)) return new Response(null, { status: 403, headers: cors(origin) });
+    return new Response(null, { status: 204, headers: cors(origin) });
+  }
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, origin);
 
   try {
