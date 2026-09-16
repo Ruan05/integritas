@@ -2,12 +2,16 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
+const CASE_INVESTIGATION_RUNNER = '/opt/integritas/current/infra/openclaw/run-case-investigation.sh';
+const CASE_INVESTIGATION_CWD = '/opt/integritas/current';
+const SAFE_EXEC_ENV = { PATH: '/usr/bin:/bin', LANG: 'C' };
 
 export const ALLOWED_COMMANDS = new Set([
   'health',
   'openclaw_status',
   'restart_openclaw',
   'verify_runtime',
+  'run_case_investigation',
 ]);
 
 const FORBIDDEN_PAYLOAD_KEYS = new Set([
@@ -26,6 +30,19 @@ export function validateCommand(command) {
     if (FORBIDDEN_PAYLOAD_KEYS.has(key)) throw new Error(`forbidden payload key: ${key}`);
   }
   if (JSON.stringify(payload).length > 32768) throw new Error('payload too large');
+
+  if (command.command_type === 'run_case_investigation') {
+    const allowed = new Set(['case_id', 'case_job_id', 'case_revision', 'depth']);
+    for (const key of Object.keys(payload)) {
+      if (!allowed.has(key)) throw new Error(`unexpected payload key: ${key}`);
+    }
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (typeof payload.case_id !== 'string' || !uuid.test(payload.case_id)) throw new Error('invalid case_id');
+    if (typeof payload.case_job_id !== 'string' || !uuid.test(payload.case_job_id)) throw new Error('invalid case_job_id');
+    if (!Number.isInteger(payload.case_revision) || payload.case_revision < 0) throw new Error('invalid case_revision');
+    if (!['fast', 'standard', 'deep', 'maximum'].includes(payload.depth)) throw new Error('invalid depth');
+  }
+
   return { ...command, payload };
 }
 
@@ -34,6 +51,7 @@ async function defaultRunner(file, args, options = {}) {
     timeout: 60_000,
     maxBuffer: 1024 * 1024,
     ...options,
+    env: SAFE_EXEC_ENV,
   });
   return {
     stdout: result.stdout?.trim() ?? '',
@@ -72,6 +90,18 @@ export async function executeCommand(command, {
 
     case 'verify_runtime': {
       const result = await runner('/usr/bin/bash', [`${repoRoot}/infra/oracle/verify-host.sh`], { cwd: repoRoot });
+      return { ok: true, summary: result.stdout.slice(-4000) };
+    }
+
+    case 'run_case_investigation': {
+      const { case_id, case_job_id, case_revision, depth } = validated.payload;
+      const result = await runner('/usr/bin/bash', [
+        CASE_INVESTIGATION_RUNNER,
+        case_id,
+        case_job_id,
+        String(case_revision),
+        depth,
+      ], { cwd: CASE_INVESTIGATION_CWD });
       return { ok: true, summary: result.stdout.slice(-4000) };
     }
 

@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
+import { normalizeLeaseCommand } from './lease.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -19,6 +20,23 @@ const CONNECTOR_COMMANDS = new Set([
   'restart_openclaw',
   'verify_runtime',
 ]);
+const CASE_INVESTIGATION_COMMANDS = new Set(['run_case_investigation']);
+const CASE_INVESTIGATION_DEPTHS = new Set(['fast', 'standard', 'deep', 'maximum']);
+const CASE_INVESTIGATION_STAGES = new Set([
+  'queued','extracting','analyzing_documents','mapping_entities','planning_research',
+  'researching','verifying','cross_checking','independent_review','drafting_report',
+  'completed','incomplete','failed','cancelled','research_limit_reached',
+]);
+const CHECKPOINT_METADATA_KEYS = new Set([
+  'branch_count','unresolved_branches','evidence_count','source_count','check_count',
+  'output_refs','limitations_count','message',
+]);
+const INVESTIGATION_OUTPUT_TYPES = new Set(['bundle','report_html','evidence','execution_log']);
+const INVESTIGATION_CONTENT_TYPES = new Set(['application/json','text/html','application/octet-stream','text/plain']);
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const CASE_FILES_BUCKET = 'integritas-case-files';
+const MAX_INVESTIGATION_ARTIFACT_BYTES = 5 * 1024 * 1024;
 
 function secureEquals(a: string, b: string): boolean {
   if (!a || !b || a.length !== b.length) return false;
@@ -27,10 +45,13 @@ function secureEquals(a: string, b: string): boolean {
   return diff === 0;
 }
 
-async function sha256Hex(value: string): Promise<string> {
-  const bytes = new TextEncoder().encode(value);
+async function sha256Bytes(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  return await sha256Bytes(new TextEncoder().encode(value));
 }
 
 function cors(origin: string | null) {
@@ -54,14 +75,42 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+function validUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID_PATTERN.test(value);
+}
+
+function validCheckpointMetadata(value: unknown): value is Record<string, unknown> {
+  if (!isObject(value)) return false;
+  const keys = Object.keys(value);
+  if (keys.some((key) => !CHECKPOINT_METADATA_KEYS.has(key))) return false;
+  const encoded = JSON.stringify(value);
+  return encoded.length <= 16384 && !encoded.includes('/storage/v1/object/sign/');
+}
+
+function decodeArtifactContent(content: unknown, encoding: unknown): Uint8Array | null {
+  if (typeof content !== 'string' || content.length > MAX_INVESTIGATION_ARTIFACT_BYTES * 2) return null;
+  try {
+    if (encoding === 'base64') {
+      const raw = atob(content);
+      return Uint8Array.from(raw, (char) => char.charCodeAt(0));
+    }
+    if (encoding == null || encoding === 'utf8') return new TextEncoder().encode(content);
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function outputExtension(contentType: string): string {
+  if (contentType === 'application/json') return 'json';
+  if (contentType === 'text/html') return 'html';
+  if (contentType === 'text/plain') return 'txt';
+  return 'bin';
+}
+
 function safeError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.replace(/(bearer|token|password|secret|key)\s*[:=]\s*\S+/gi, '$1=[redacted]').slice(0, 800);
-}
-
-function normalizeLeaseCommand(data: unknown): unknown {
-  if (Array.isArray(data)) return data[0] ?? null;
-  return data ?? null;
 }
 
 async function authenticateAdmin(req: Request) {
@@ -151,6 +200,94 @@ Deno.serve(async (req) => {
       const commandId = typeof body.command_id === 'string' ? body.command_id : '';
       if (!/^[0-9a-f-]{36}$/i.test(commandId)) return json({ error: 'invalid_command_id' }, 400, origin);
 
+      if (action === 'worker_manifest') {
+        const caseJobId = body.case_job_id;
+        if (!validUuid(caseJobId)) return json({ error: 'invalid_case_job_id' }, 400, origin);
+        const rawContext = await rpc('integritas_investigation_manifest_context', {
+          p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
+        });
+        if (!isObject(rawContext) || !Array.isArray(rawContext.documents)) {
+          throw new Error('invalid investigation manifest context');
+        }
+        const documents = rawContext.documents.filter(isObject);
+        const paths = documents.map((document) => document.storage_path).filter((value): value is string => typeof value === 'string');
+        if (paths.length !== documents.length || paths.length < 1 || paths.length > 20) {
+          throw new Error('invalid investigation document manifest');
+        }
+        const { data: signed, error: signedError } = await service.storage
+          .from(CASE_FILES_BUCKET).createSignedUrls(paths, 600);
+        if (signedError || !signed || signed.length !== paths.length) throw signedError ?? new Error('signed URL generation failed');
+        const signedByPath = new Map(signed.map((item) => [item.path, item.signedUrl]));
+        const manifestDocuments = documents.map((document) => ({
+          ...document,
+          download_url: signedByPath.get(String(document.storage_path)) ?? null,
+        }));
+        if (manifestDocuments.some((document) => !document.download_url)) throw new Error('incomplete signed document manifest');
+        return json({ manifest: { ...rawContext, documents: manifestDocuments, expires_in_seconds: 600 } }, 200, origin);
+      }
+
+      if (action === 'worker_checkpoint') {
+        const caseJobId = body.case_job_id;
+        const caseRevision = body.case_revision;
+        const stage = body.stage;
+        const progress = body.progress;
+        const safeMetadata = body.safe_metadata ?? {};
+        if (!validUuid(caseJobId)
+          || !Number.isInteger(caseRevision) || Number(caseRevision) < 0
+          || typeof stage !== 'string' || !CASE_INVESTIGATION_STAGES.has(stage)
+          || !Number.isInteger(progress) || Number(progress) < 0 || Number(progress) > 100
+          || !validCheckpointMetadata(safeMetadata)) {
+          return json({ error: 'invalid_checkpoint' }, 400, origin);
+        }
+        const checkpoint = await rpc('integritas_checkpoint_case_investigation', {
+          p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
+          p_case_revision: caseRevision, p_stage: stage, p_progress: progress,
+          p_safe_metadata: safeMetadata,
+        });
+        return json({ checkpoint }, 200, origin);
+      }
+
+      if (action === 'worker_publish_output') {
+        const caseJobId = body.case_job_id;
+        const caseRevision = body.case_revision;
+        const outputType = body.output_type;
+        const contentType = body.content_type;
+        const expectedSha = body.sha256;
+        if (!validUuid(caseJobId)
+          || !Number.isInteger(caseRevision) || Number(caseRevision) < 0
+          || typeof outputType !== 'string' || !INVESTIGATION_OUTPUT_TYPES.has(outputType)
+          || typeof contentType !== 'string' || !INVESTIGATION_CONTENT_TYPES.has(contentType)
+          || typeof expectedSha !== 'string' || !SHA256_PATTERN.test(expectedSha)) {
+          return json({ error: 'invalid_output_metadata' }, 400, origin);
+        }
+        const bytes = decodeArtifactContent(body.content, body.encoding);
+        if (!bytes || bytes.byteLength > MAX_INVESTIGATION_ARTIFACT_BYTES) {
+          return json({ error: 'invalid_output_content' }, 400, origin);
+        }
+        if ((contentType === 'application/json' || contentType === 'text/html' || contentType === 'text/plain')
+          && new TextDecoder().decode(bytes).includes('/storage/v1/object/sign/')) {
+          return json({ error: 'signed_url_persistence_forbidden' }, 400, origin);
+        }
+        const actualSha = await sha256Bytes(bytes);
+        if (!secureEquals(actualSha, expectedSha)) return json({ error: 'output_digest_mismatch' }, 400, origin);
+        const context = await rpc('integritas_investigation_manifest_context', {
+          p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
+        });
+        if (!isObject(context) || !validUuid(context.case_id)) throw new Error('invalid output job context');
+        const storagePath = `cases/${context.case_id}/jobs/${caseJobId}/outputs/${outputType}/${actualSha}.${outputExtension(contentType)}`;
+        const { error: uploadError } = await service.storage.from(CASE_FILES_BUCKET).upload(storagePath, bytes, {
+          contentType, upsert: true,
+        });
+        if (uploadError) throw uploadError;
+        const output = await rpc('integritas_register_case_job_output', {
+          p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
+          p_case_revision: caseRevision, p_output_type: outputType, p_content_type: contentType,
+          p_storage_path: storagePath, p_sha256: actualSha, p_size_bytes: bytes.byteLength,
+          p_safe_metadata: {},
+        });
+        return json({ output }, 200, origin);
+      }
+
       if (action === 'worker_touch') {
         const ok = await rpc('integritas_control_touch', { p_command_id: commandId, p_worker_id: workerId, p_lease_seconds: 90 });
         return json({ ok: !!ok }, ok ? 200 : 409, origin);
@@ -196,6 +333,45 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) throw error;
       return json({ command: data ?? null }, data ? 200 : 404, origin);
+    }
+
+    if (action === 'start_case_investigation') {
+      if (principal.kind !== 'admin' || !CASE_INVESTIGATION_COMMANDS.has('run_case_investigation')) {
+        return json({ error: 'action_not_allowed' }, 403, origin);
+      }
+      const caseId = body.case_id;
+      const caseRevision = body.case_revision;
+      const depth = body.depth;
+      if (!validUuid(caseId)
+        || !Number.isInteger(caseRevision) || caseRevision < 0
+        || typeof depth !== 'string' || !CASE_INVESTIGATION_DEPTHS.has(depth)) {
+        return json({ error: 'invalid_investigation_request' }, 400, origin);
+      }
+      const idempotencyKey = typeof body.idempotency_key === 'string'
+        ? body.idempotency_key
+        : (req.headers.get('idempotency-key') ?? '');
+      if (idempotencyKey.trim().length < 8 || idempotencyKey.length > 200) {
+        return json({ error: 'invalid_idempotency_key' }, 400, origin);
+      }
+      const { data: access, error: accessError } = await service
+        .from('integritas_case_access')
+        .select('case_id')
+        .eq('case_id', caseId)
+        .eq('user_id', principal.userId)
+        .maybeSingle();
+      if (accessError) throw accessError;
+      if (!access) return json({ error: 'case_access_denied' }, 403, origin);
+
+      const data = await rpc('integritas_start_case_investigation', {
+        p_case_id: caseId,
+        p_case_revision: caseRevision,
+        p_depth: depth,
+        p_requested_by: principal.userId,
+        p_idempotency_key: idempotencyKey,
+      });
+      const investigation = Array.isArray(data) ? data[0] ?? null : data;
+      if (!investigation) throw new Error('investigation start returned no result');
+      return json({ investigation }, 202, origin);
     }
 
     if (action === 'enqueue') {

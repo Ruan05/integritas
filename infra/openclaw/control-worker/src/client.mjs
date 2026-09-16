@@ -31,4 +31,11 @@ export class ControlClient {
   touch(commandId) { return this.call('worker_touch', { command_id: commandId }); }
   complete(commandId, result) { return this.call('worker_complete', { command_id: commandId, result_summary: result }); }
   fail(commandId, code, summary) { return this.call('worker_fail', { command_id: commandId, error_code: code, error_summary: summary }); }
+  manifest(commandId, caseJobId) { return this.call('worker_manifest', { command_id: commandId, case_job_id: caseJobId }); }
+  checkpoint(commandId, caseJobId, caseRevision, stage, progress, safeMetadata = {}) {
+    return this.call('worker_checkpoint', { command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision, stage, progress, safe_metadata: safeMetadata });
+  }
+  publishOutput(commandId, caseJobId, caseRevision, outputType, contentType, content, sha256) {
+    return this.call('worker_publish_output', { command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision, output_type: outputType, content_type: contentType, content, sha256 });
+  }
 }
