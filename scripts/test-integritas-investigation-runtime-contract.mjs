@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 const migration = readFileSync('supabase/migrations/0006_integritas_investigation_persistence.sql', 'utf8');
 const rollback = readFileSync('supabase/rollback/0006_integritas_investigation_persistence.rollback.sql', 'utf8');
 const edge = readFileSync('supabase/functions/integritas-control/index.ts', 'utf8');
+const persistenceTest = readFileSync('supabase/tests/0009_integritas_investigation_persistence.sql', 'utf8');
 
 assert.match(migration, /create table public\.integritas_case_job_checkpoints/, 'checkpoint table is required');
 assert.match(migration, /create table public\.integritas_case_job_outputs/, 'output metadata table is required');
@@ -35,3 +36,8 @@ for (const requiredDefault of [
 ]) {
   assert.ok(fixture.includes(requiredDefault), `CI document fixture must provide ${requiredDefault}`);
 }
+
+
+assert.match(persistenceTest, /wrapper-test-health-0001/, 'persistence test must identify the older queued wrapper fixture');
+assert.match(persistenceTest, /integritas_control_complete/, 'persistence test must drain prior synthetic commands through the bounded complete RPC');
+assert.ok(!persistenceTest.includes('update public.integritas_control_commands'), 'persistence test must not directly mutate control commands');

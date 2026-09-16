@@ -37,6 +37,28 @@ where case_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 \gset runtime_
 
 select id as command_id
+from public.integritas_control_commands
+where idempotency_key = 'wrapper-test-health-0001'
+  and status = 'queued'
+\gset prior_
+
+select id as command_id
+from public.integritas_control_lease('oracle-primary', 600)
+\gset drained_
+select pg_temp.assert_true(
+  :'drained_command_id'::uuid = :'prior_command_id'::uuid,
+  'persistence test drains the known older synthetic wrapper command first'
+);
+select pg_temp.assert_true(
+  public.integritas_control_complete(
+    :'drained_command_id'::uuid,
+    'oracle-primary',
+    '{"test_cleanup":true}'::jsonb
+  ),
+  'synthetic wrapper command is completed through the bounded RPC'
+);
+
+select id as command_id
 from public.integritas_control_lease('oracle-primary', 600)
 \gset leased_
 select pg_temp.assert_true(
