@@ -2,7 +2,6 @@ import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-const WORKER_TOKEN = Deno.env.get('INTEGRITAS_CONTROL_WORKER_TOKEN') ?? '';
 const CONNECTOR_TOKEN = Deno.env.get('INTEGRITAS_CONTROL_CONNECTOR_TOKEN') ?? '';
 const ALLOWED_ORIGIN = Deno.env.get('INTEGRITAS_CONTROL_ALLOWED_ORIGIN') ?? 'https://integritass.com';
 
@@ -28,11 +27,17 @@ function secureEquals(a: string, b: string): boolean {
   return diff === 0;
 }
 
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 function cors(origin: string | null) {
   const allowed = origin && origin === ALLOWED_ORIGIN ? origin : ALLOWED_ORIGIN;
   return {
     'access-control-allow-origin': allowed,
-    'access-control-allow-headers': 'authorization, content-type, x-integritas-worker-token, x-integritas-connector-token, idempotency-key',
+    'access-control-allow-headers': 'authorization, content-type, x-integritas-worker-token, x-integritas-worker-id, x-integritas-connector-token, idempotency-key',
     'access-control-allow-methods': 'POST, OPTIONS',
     'vary': 'Origin',
   };
@@ -52,6 +57,11 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function safeError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.replace(/(bearer|token|password|secret|key)\s*[:=]\s*\S+/gi, '$1=[redacted]').slice(0, 800);
+}
+
+function normalizeLeaseCommand(data: unknown): unknown {
+  if (Array.isArray(data)) return data[0] ?? null;
+  return data ?? null;
 }
 
 async function authenticateAdmin(req: Request) {
@@ -75,8 +85,16 @@ async function authenticateAdmin(req: Request) {
 async function authenticate(req: Request) {
   const worker = req.headers.get('x-integritas-worker-token') ?? '';
   if (worker) {
-    if (!secureEquals(worker, WORKER_TOKEN)) return null;
-    return { kind: 'worker' as const, actor: 'oracle-worker', userId: null };
+    const workerId = (req.headers.get('x-integritas-worker-id') ?? '').trim();
+    if (!workerId || workerId.length > 200) return null;
+    const digest = await sha256Hex(worker);
+    const { data: credential, error } = await service
+      .from('integritas_control_worker_credentials')
+      .select('worker_id,token_sha256,enabled')
+      .eq('worker_id', workerId)
+      .maybeSingle();
+    if (error || !credential || !credential.enabled || !secureEquals(digest, credential.token_sha256)) return null;
+    return { kind: 'worker' as const, actor: `worker:${workerId}`, userId: null, workerId };
   }
 
   const connector = req.headers.get('x-integritas-connector-token') ?? '';
@@ -100,19 +118,18 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, origin);
 
   try {
-    const principal = await authenticate(req);
-    if (!principal) return json({ error: 'unauthorized' }, 401, origin);
-
     const body = await req.json().catch(() => ({}));
     if (!isObject(body) || typeof body.action !== 'string') {
       return json({ error: 'invalid_request' }, 400, origin);
     }
 
+    const principal = await authenticate(req);
+    if (!principal) return json({ error: 'unauthorized' }, 401, origin);
     const action = body.action;
 
     if (principal.kind === 'worker') {
-      const workerId = typeof body.worker_id === 'string' ? body.worker_id.trim() : '';
-      if (!workerId || workerId.length > 200) return json({ error: 'invalid_worker_id' }, 400, origin);
+      const workerId = principal.workerId;
+      if (body.worker_id != null && body.worker_id !== workerId) return json({ error: 'worker_identity_mismatch' }, 403, origin);
 
       if (action === 'worker_heartbeat') {
         const data = await rpc('integritas_control_heartbeat', {
@@ -128,7 +145,7 @@ Deno.serve(async (req) => {
 
       if (action === 'worker_lease') {
         const data = await rpc('integritas_control_lease', { p_worker_id: workerId, p_lease_seconds: 90 });
-        return json({ command: data ?? null }, 200, origin);
+        return json({ command: normalizeLeaseCommand(data) }, 200, origin);
       }
 
       const commandId = typeof body.command_id === 'string' ? body.command_id : '';
