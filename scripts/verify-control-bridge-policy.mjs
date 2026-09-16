@@ -58,6 +58,8 @@ assert.match(investigationConfig, /alsoAllow:\s*\[[^\]]*["']browser["']/, 'inves
 assert.match(installer, /integritas-openclaw/, 'installer must provision the shared investigation group');
 assert.match(installer, /2770/, 'shared spool must use setgid owner-group permissions');
 assert.match(installer, /integritas-openclaw-investigation@\.service/, 'installer must install the fixed runner template');
+assert.match(installer, /RUNNER_SCRIPT_DEST/, 'installer must use an explicit runner destination');
+assert.match(installer, /RUNNER_SCRIPT_SRC.*RUNNER_SCRIPT_DEST|RUNNER_SCRIPT_DEST.*RUNNER_SCRIPT_SRC/s, 'installer must handle source/destination identity safely');
 assert.match(investigation, /document digest mismatch/, 'worker must verify downloaded evidence digests');
 assert.match(investigation, /url\.hostname !== controlHost/, 'worker must bind signed downloads to the control-plane origin');
 assert.match(investigation, /systemctlRunner\('\/usr\/bin\/systemctl', \['start', '--wait'/, 'worker must start only the fixed oneshot runner via systemd');

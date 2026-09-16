@@ -10,6 +10,7 @@ REPO_ROOT=${INTEGRITAS_REPO_ROOT:-/opt/integritas/current}
 SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-control-worker.service"
 RUNNER_SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-openclaw-investigation@.service"
 RUNNER_SCRIPT_SRC="$REPO_ROOT/infra/openclaw/investigation-agent-runner.mjs"
+RUNNER_SCRIPT_DEST=/opt/integritas/current/infra/openclaw/investigation-agent-runner.mjs
 RUNNER_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-investigation.json5"
 POLKIT_SRC="$REPO_ROOT/infra/openclaw/49-integritas-openclaw-control.rules"
 ENV_DIR=/etc/integritas
@@ -43,7 +44,12 @@ install -d -o integritas-control -g integritas-control -m 0700 "$STATE_DIR"
 install -d -o integritas-control -g "$SHARED_GROUP" -m 2770 "$RUNNER_ROOT" "$RUNNER_ROOT/jobs"
 install -o root -g root -m 0644 "$SERVICE_SRC" /etc/systemd/system/integritas-control-worker.service
 install -o root -g root -m 0644 "$RUNNER_SERVICE_SRC" /etc/systemd/system/integritas-openclaw-investigation@.service
-install -o root -g root -m 0755 "$RUNNER_SCRIPT_SRC" /opt/integritas/current/infra/openclaw/investigation-agent-runner.mjs
+if [[ "$RUNNER_SCRIPT_SRC" == "$RUNNER_SCRIPT_DEST" ]]; then
+  chown root:root "$RUNNER_SCRIPT_DEST"
+  chmod 0755 "$RUNNER_SCRIPT_DEST"
+else
+  install -o root -g root -m 0755 "$RUNNER_SCRIPT_SRC" "$RUNNER_SCRIPT_DEST"
+fi
 install -o root -g openclaw -m 0640 "$RUNNER_CONFIG_SRC" /etc/openclaw/integritas-investigation.json
 install -o root -g root -m 0644 "$POLKIT_SRC" /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
 
