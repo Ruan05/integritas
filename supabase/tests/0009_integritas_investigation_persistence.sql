@@ -36,11 +36,13 @@ where case_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
   and runtime_provider = 'openclaw-oracle'
 \gset runtime_
 
-update public.integritas_control_commands
-set status = 'running',
-    lease_owner = 'oracle-primary',
-    lease_expires_at = now() + interval '10 minutes'
-where id = :'runtime_control_command_id'::uuid;
+select id as command_id
+from public.integritas_control_lease('oracle-primary', 600)
+\gset leased_
+select pg_temp.assert_true(
+  :'leased_command_id'::uuid = :'runtime_control_command_id'::uuid,
+  'investigation persistence uses the leased runtime command'
+);
 
 insert into public.integritas_documents(
   id, case_id, name, mime_type, size_bytes, sha256, storage_path, extraction_status
