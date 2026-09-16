@@ -9,6 +9,7 @@ const worker = read('infra/openclaw/control-worker/src/index.mjs');
 const client = read('infra/openclaw/control-worker/src/client.mjs');
 const polkit = read('infra/openclaw/49-integritas-openclaw-control.rules');
 const edge = read('supabase/functions/integritas-control/index.ts');
+const verifyHost = read('infra/oracle/verify-host.sh');
 
 assert.match(gateway, /bind:\s*["']loopback["']/, 'OpenClaw Gateway must remain loopback-only');
 assert.match(service, /^User=integritas-control$/m, 'control worker must use dedicated non-root account');
@@ -44,6 +45,10 @@ assert.ok(!edge.includes('child_process'), 'Edge Function must not execute local
 for (const prohibited of ['exec_shell', 'read_environment', 'read_secret', 'plugin_install', 'send_email', 'delete_evidence']) {
   assert.ok(!edge.includes(`'${prohibited}'`), `control API must not implement ${prohibited}`);
 }
+
+assert.match(verifyHost, /systemctl is-active docker/, 'runtime verifier must check Docker health without Docker socket access');
+assert.ok(!verifyHost.includes('docker info'), 'runtime verifier must not require Docker daemon socket access');
+assert.ok(!verifyHost.match(/docker ps\b/), 'runtime verifier must not enumerate containers through the Docker socket');
 
 for (const file of [commands, worker, client, service, edge]) {
   assert.ok(!file.match(/sb_service_role_[A-Za-z0-9_-]+/), 'service-role credential literal must not be committed');
