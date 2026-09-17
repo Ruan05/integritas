@@ -41,8 +41,6 @@ begin
   );
 
   foreach t in array array[
-    'integritas_entities','integritas_checks','integritas_findings',
-    'integritas_relationships','integritas_reports','integritas_sources',
     'integritas_tool_invocations','integritas_audit_events'
   ] loop
     execute format('create table public.%I (id uuid primary key, case_id uuid)', t);
@@ -82,6 +80,40 @@ begin
     unresolved integer not null default 0,
     cancel_requested boolean not null default false,
     updated_at timestamptz not null default now()
+  );
+  create table public.integritas_entities (
+    id uuid primary key default gen_random_uuid(), case_id uuid not null,
+    entity_type text not null, display_name text not null, identifiers jsonb not null default '{}'::jsonb,
+    match_status text not null default 'proposed', match_confidence numeric, aliases text[] not null default '{}',
+    created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+  );
+  create table public.integritas_findings (
+    id uuid primary key default gen_random_uuid(), case_id uuid not null, entity_id uuid, case_job_id uuid,
+    finding_type text not null, claim text not null, evidence_status text not null, materiality text not null default 'informational',
+    analyst_note text not null default '', evidence_excerpt text not null default '', reliability text not null default 'unknown',
+    case_revision integer not null default 0, reviewed_at timestamptz, reviewed_by uuid,
+    created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+  );
+  create table public.integritas_sources (
+    id uuid primary key default gen_random_uuid(), case_id uuid not null, finding_id uuid not null,
+    source_type text not null, title text not null, url text, document_id uuid, page_reference text, excerpt text not null default '',
+    reliability_note text not null default '', retrieved_at timestamptz not null default now(),
+    evidence_origin text not null default 'submitted_document', tool_invocation_id uuid
+  );
+  create table public.integritas_relationships (
+    id uuid primary key default gen_random_uuid(), case_id uuid not null, from_entity_id uuid not null, to_entity_id uuid not null,
+    relationship_type text not null, claim text not null default '', evidence_status text not null default 'uncertain', source_id uuid,
+    created_at timestamptz not null default now()
+  );
+  create table public.integritas_checks (
+    id uuid primary key default gen_random_uuid(), case_id uuid not null, entity_id uuid, check_type text not null,
+    description text not null, status text not null default 'open', outcome text not null default '', priority text not null default 'medium',
+    required_source text not null default '', related_job_id uuid, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+  );
+  create table public.integritas_reports (
+    id uuid primary key default gen_random_uuid(), case_id uuid not null, based_on_revision integer not null, status text not null default 'draft',
+    summary text not null default '', content_markdown text not null default '', limitations text not null default '',
+    reviewed_at timestamptz, finalized_at timestamptz, reviewed_by uuid, finalized_by uuid, created_at timestamptz not null default now()
   );
   create table public.opencode_runs (id uuid primary key);
   create table public.opencode_selftest (id uuid primary key);
