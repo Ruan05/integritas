@@ -4,6 +4,11 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  VITE_SUPABASE_URL = "https://leuixjgmlueptefintgo.supabase.co"
+  VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_SMrqk1H95oGcGjSEtD3W9w_n6RVAl0I"
+  VITE_INTEGRITAS_ADMIN_API_URL = "/api/admin"
+  VITE_INTEGRITAS_CONTROL_API_URL = "/api/control"
+  VITE_AUTH_REDIRECT_URL = "https://integritas-private-admin.netlify.app/"
 
 [[headers]]
   for = "/*"
