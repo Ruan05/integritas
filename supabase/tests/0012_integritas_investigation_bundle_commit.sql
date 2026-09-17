@@ -195,6 +195,8 @@ delete from public.integritas_findings where case_job_id=:'bundle_job_case_job_i
 delete from public.integritas_checks where case_job_id=:'bundle_job_case_job_id'::uuid;
 delete from public.integritas_reports where case_job_id=:'bundle_job_case_job_id'::uuid;
 delete from public.integritas_entities where case_job_id=:'bundle_job_case_job_id'::uuid;
-delete from public.integritas_case_job_outputs where case_job_id=:'bundle_job_case_job_id'::uuid;
 reset role;
+-- The service role intentionally has no direct DELETE grant on server-only output rows.
+-- Cleanup that disposable fixture row as the database owner instead of weakening production grants.
+delete from public.integritas_case_job_outputs where case_job_id=:'bundle_job_case_job_id'::uuid;
 select 'investigation bundle commit assertions passed' as result;
