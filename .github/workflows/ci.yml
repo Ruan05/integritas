@@ -106,6 +106,7 @@ jobs:
           psql -f supabase/migrations/0005_integritas_openclaw_investigation_runtime.sql
           psql -f supabase/migrations/0006_integritas_investigation_persistence.sql
           psql -f supabase/migrations/0007_integritas_document_limit.sql
+          psql -f supabase/migrations/0008_integritas_document_limit_privileges.sql
       - name: Verify control bridge contract
         run: |
           psql -f supabase/tests/0005_integritas_control_bridge.sql
@@ -113,6 +114,7 @@ jobs:
           psql -f supabase/tests/0008_integritas_openclaw_runtime.sql
           psql -f supabase/tests/0009_integritas_investigation_persistence.sql
           psql -f supabase/tests/0010_integritas_document_limit.sql
+          psql -f supabase/tests/0011_integritas_document_limit_privileges.sql
       - name: Verify investigation rollback preflight
         run: |
           if psql -v ON_ERROR_STOP=1 -f supabase/rollback/0005_integritas_openclaw_investigation_runtime.rollback.sql; then
