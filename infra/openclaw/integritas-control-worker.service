@@ -6,8 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=integritas-control
-Group=integritas-control
-SupplementaryGroups=integritas-openclaw
+Group=integritas-openclaw
 EnvironmentFile=/etc/integritas/control-worker.env
 Environment=INTEGRITAS_REPO_ROOT=/opt/integritas/current
 LoadCredential=control-token:/etc/integritas/control-worker.token

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { chmod, copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, chown, copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { validateInvestigationBundle } from './bundle.mjs';
@@ -11,7 +11,7 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 256 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 5 * 1024 * 1024;
-const SHARED_DIR_MODE = 0o2770;
+const SHARED_DIR_MODE = 0o770;
 const SHARED_FILE_MODE = 0o640;
 const SAFE_EXEC_ENV = { PATH: '/usr/bin:/bin', LANG: 'C' };
 const STAGE_ORDER = [
@@ -56,7 +56,11 @@ async function sha256File(filePath) {
 async function stageDocument(document, target, fetchImpl) {
   try {
     const existing = await stat(target);
-    if (existing.isFile() && existing.size === document.size_bytes && await sha256File(target) === document.sha256) return;
+    if (existing.isFile() && existing.size === document.size_bytes && await sha256File(target) === document.sha256) {
+      await chown(target, -1, process.getgid());
+      await chmod(target, SHARED_FILE_MODE);
+      return;
+    }
   } catch {}
   const response = await fetchImpl(document.download_url, { redirect: 'error' });
   if (!response?.ok) throw new Error(`document download failed: ${response?.status ?? 'unknown'}`);
@@ -64,17 +68,20 @@ async function stageDocument(document, target, fetchImpl) {
   if (bytes.length !== document.size_bytes) throw new Error('document size mismatch');
   const digest = createHash('sha256').update(bytes).digest('hex');
   if (digest !== document.sha256) throw new Error('document digest mismatch');
-  await writeFile(target, bytes, { mode: 0o640 });
-  await chmod(target, 0o640);
+  await writeFile(target, bytes, { mode: SHARED_FILE_MODE });
+  await chown(target, -1, process.getgid());
+  await chmod(target, SHARED_FILE_MODE);
 }
 
 async function ensureSharedDirectory(rootDir, targetDir) {
   await mkdir(targetDir, { recursive: true, mode: SHARED_DIR_MODE });
+  await chown(rootDir, -1, process.getgid());
   await chmod(rootDir, SHARED_DIR_MODE);
   const relative = path.relative(rootDir, targetDir);
   let current = rootDir;
   for (const segment of relative.split(path.sep).filter(Boolean)) {
     current = path.join(current, segment);
+    await chown(current, -1, process.getgid());
     await chmod(current, SHARED_DIR_MODE);
   }
 }
@@ -92,6 +99,7 @@ async function copySupport(repoRoot, jobDir) {
     const target = path.join(jobDir, targetRel);
     await ensureSharedDirectory(jobDir, path.dirname(target));
     await copyFile(path.join(repoRoot, sourceRel), target);
+    await chown(target, -1, process.getgid());
     await chmod(target, SHARED_FILE_MODE);
   }
 }
@@ -188,6 +196,7 @@ export async function executeInvestigation(command, {
   if (!UUID.test(jobId)) throw new Error('invalid investigation job id');
   const jobDir = path.join(spoolRoot, jobId);
   await mkdir(jobDir, { recursive: true, mode: SHARED_DIR_MODE });
+  await chown(jobDir, -1, process.getgid());
   await chmod(jobDir, SHARED_DIR_MODE);
   let completedSuccessfully = false;
 
@@ -225,10 +234,12 @@ export async function executeInvestigation(command, {
     delete safeManifest.expires_in_seconds;
     const manifestPath = path.join(jobDir, 'manifest.json');
     await writeFile(manifestPath, JSON.stringify(safeManifest, null, 2), { mode: SHARED_FILE_MODE });
+    await chown(manifestPath, -1, process.getgid());
     await chmod(manifestPath, SHARED_FILE_MODE);
     await copySupport(repoRoot, jobDir);
     const taskPath = path.join(jobDir, 'task.md');
     await writeFile(taskPath, buildTask(safeManifest, localDocuments), { mode: SHARED_FILE_MODE });
+    await chown(taskPath, -1, process.getgid());
     await chmod(taskPath, SHARED_FILE_MODE);
     await checkpoint('analyzing_documents', 15, { document_count: localDocuments.length });
 

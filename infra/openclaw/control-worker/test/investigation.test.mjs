@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { access, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,6 +37,11 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
   const previousUmask = process.umask(0o077);
   const bytes = Buffer.from('alpha evidence');
   const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const retainedDocumentsDir = path.join(spoolRoot, JOB_ID, 'documents');
+  await mkdir(retainedDocumentsDir, { recursive: true, mode: 0o700 });
+  const retainedDocument = path.join(retainedDocumentsDir, `${DOC_ID}.pdf`);
+  await writeFile(retainedDocument, bytes, { mode: 0o600 });
+  await chmod(retainedDocument, 0o600);
   const checkpoints = [];
   const outputs = [];
   const commits = [];
@@ -61,7 +66,7 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     }
     for (const relative of ['.', 'documents', 'skills', 'skills/integritas-dd', 'tools', 'tools/dd', 'docs']) {
       const info = await stat(path.join(jobDir, relative));
-      assert.equal(info.mode & 0o2770, 0o2770, `${relative} must retain setgid group sharing`);
+      assert.equal(info.mode & 0o777, 0o770, `${relative} must remain group-accessible without setgid bits`);
       assert.equal(info.gid, expectedGroup, `${relative} must use the shared workspace group`);
     }
     const report = '# Synthetic DD report\n\nDraft evidence summary.';

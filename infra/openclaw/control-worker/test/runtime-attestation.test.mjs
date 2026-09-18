@@ -17,4 +17,9 @@ test('worker release attests investigation capabilities from the packaged releas
   }
   assert.match(source, /arbitrary_shell: false/);
   assert.match(source, /docker_socket: false/);
+
+  const service = await readFile(new URL('../../integritas-control-worker.service', import.meta.url), 'utf8');
+  assert.match(service, /^Group=integritas-openclaw$/m);
+  assert.match(service, /^RestrictSUIDSGID=true$/m);
+  assert.doesNotMatch(service, /^Group=integritas-control$/m);
 });
