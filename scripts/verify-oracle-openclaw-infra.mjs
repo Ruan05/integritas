@@ -50,7 +50,7 @@ if (!errors.length) {
     [unit, 'EnvironmentFile=-/etc/integritas/provider-secrets.env', 'provider secret environment'],
     [unit, 'OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-gateway.json', 'provider-aware Gateway config path'],
     [gatewayOverlay, '$include: "./openclaw.json"', 'Gateway base-config include'],
-    [gatewayOverlay, 'primary: "integritas-groq/openai/gpt-oss-20b"', 'Gateway Groq primary'],
+    [gatewayOverlay, 'primary: "nvidia/nemotron-3-ultra-550b-a55b"', 'Gateway NVIDIA primary'],
     [gatewayOverlay, '"nvidia/nemotron-3-ultra-550b-a55b"', 'Gateway NVIDIA fallback'],
     [gatewayOverlay, '"integritas-openrouter/openrouter/free"', 'Gateway dynamic free fallback'],
     [installer, 'OPENCLAW_VERSION="2026.9.4"', 'pinned OpenClaw stable version'],
