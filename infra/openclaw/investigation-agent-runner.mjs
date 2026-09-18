@@ -8,9 +8,8 @@ const execFileAsync = promisify(execFile);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL_ROUTES = Object.freeze({
   fast: {
-    model: 'integritas-groq/openai/gpt-oss-20b',
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
     fallbacks: [
-      'nvidia/nemotron-3-ultra-550b-a55b',
       'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
       'integritas-openrouter/openrouter/free',
       'opencode-go/glm-5.3-flash',
@@ -19,9 +18,8 @@ const MODEL_ROUTES = Object.freeze({
     timeoutSeconds: 600,
   },
   standard: {
-    model: 'integritas-groq/openai/gpt-oss-120b',
+    model: 'nvidia/nemotron-3-ultra-550b-a55b',
     fallbacks: [
-      'nvidia/nemotron-3-ultra-550b-a55b',
       'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
       'integritas-openrouter/openrouter/free',
       'opencode-go/glm-5.3-flash',
@@ -32,7 +30,6 @@ const MODEL_ROUTES = Object.freeze({
   deep: {
     model: 'nvidia/nemotron-3-ultra-550b-a55b',
     fallbacks: [
-      'integritas-groq/openai/gpt-oss-120b',
       'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
       'integritas-openrouter/openrouter/free',
       'opencode-go/glm-5.2',
@@ -43,7 +40,6 @@ const MODEL_ROUTES = Object.freeze({
   maximum: {
     model: 'nvidia/nemotron-3-ultra-550b-a55b',
     fallbacks: [
-      'integritas-groq/openai/gpt-oss-120b',
       'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
       'integritas-openrouter/openrouter/free',
       'opencode-go/glm-5.2',
