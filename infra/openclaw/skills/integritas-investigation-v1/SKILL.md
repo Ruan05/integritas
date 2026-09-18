@@ -19,7 +19,7 @@ Do not use legacy fields or formats such as `report_id`, `claims`, `actions`, `e
 
 Preserve independent entity identities. Use exact legal names, identifiers, jurisdictions, dates, addresses, account/vessel identifiers, and source provenance where available. Similar names are not identity proof.
 
-For submitted documents, source records use `evidence_origin: "submitted_document"` and the matching manifest `document_id`. External research uses `evidence_origin: "external_research"`. Never return signed storage URLs, credentials, private tokens, shell commands, environment secrets, or host configuration.
+For every submitted-document source, set `evidence_origin: "submitted_document"`, set `source_type: "document"`, and **MUST set `document_id` to the exact matching document `id` from `manifest.json`**. Never invent or omit this ID. External research uses `evidence_origin: "external_research"`, MUST include the exact public HTTPS URL actually opened or fetched during this run, and MUST NOT reuse a submitted-document `document_id`. Never return signed storage URLs, credentials, private tokens, shell commands, environment secrets, or host configuration.
 
 Distinguish verified, alleged, conflicting, and uncertain evidence. Record failed or unavailable checks honestly. Material unresolved checks require a concrete next manual action. Do not invent successful registry, browser, forensic, sanctions, media, banking, corporate, vessel, or identity checks.
 

@@ -88,3 +88,62 @@ test('rejects oversized excerpts and non-draft reports', () => {
   finalized.report.status = 'finalized';
   assert.throws(() => validateInvestigationBundle(finalized, manifest, REPORT), /report status must be draft/);
 });
+test('requires submitted document sources to carry the manifest document id', () => {
+  const missing = validBundle();
+  delete missing.sources[0].document_id;
+  assert.throws(
+    () => validateInvestigationBundle(missing, manifest, REPORT),
+    /submitted document evidence requires a document_id/,
+  );
+
+  const wrong = validBundle();
+  wrong.sources[0].document_id = '55555555-5555-4555-8555-555555555555';
+  assert.throws(
+    () => validateInvestigationBundle(wrong, manifest, REPORT),
+    /source document is not in the manifest/,
+  );
+
+  const wrongType = validBundle();
+  wrongType.sources[0].source_type = 'primary';
+  assert.throws(
+    () => validateInvestigationBundle(wrongType, manifest, REPORT),
+    /submitted document evidence requires document source type/,
+  );
+});
+
+test('requires external research sources to have public URL provenance and no submitted document id', () => {
+  const missingUrl = validBundle();
+  missingUrl.sources[0] = {
+    ...missingUrl.sources[0],
+    source_type: 'official',
+    evidence_origin: 'external_research',
+    document_id: null,
+    url: null,
+  };
+  assert.throws(
+    () => validateInvestigationBundle(missingUrl, manifest, REPORT),
+    /external research evidence requires an https url/,
+  );
+
+  const mixedOrigin = validBundle();
+  mixedOrigin.sources[0] = {
+    ...mixedOrigin.sources[0],
+    source_type: 'official',
+    evidence_origin: 'external_research',
+    url: 'https://example.com/official',
+  };
+  assert.throws(
+    () => validateInvestigationBundle(mixedOrigin, manifest, REPORT),
+    /external research evidence cannot reference a submitted document/,
+  );
+
+  const validExternal = validBundle();
+  validExternal.sources[0] = {
+    ...validExternal.sources[0],
+    source_type: 'official',
+    evidence_origin: 'external_research',
+    document_id: null,
+    url: 'https://example.com/official',
+  };
+  assert.doesNotThrow(() => validateInvestigationBundle(validExternal, manifest, REPORT));
+});

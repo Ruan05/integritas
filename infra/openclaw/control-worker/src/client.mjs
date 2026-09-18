@@ -43,6 +43,18 @@ export class ControlClient {
   publishOutput(commandId, caseJobId, caseRevision, outputType, contentType, content, sha256) {
     return this.call('worker_publish_output', { command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision, output_type: outputType, content_type: contentType, content, sha256 });
   }
+  registerResearchSource(commandId, caseJobId, caseRevision, source, toolSummary) {
+    return this.call('worker_register_research_source', {
+      command_id: commandId,
+      case_job_id: caseJobId,
+      case_revision: caseRevision,
+      source_key: source.source_key,
+      url: source.url,
+      title: source.title,
+      retrieved_at: source.retrieved_at,
+      tool_summary: toolSummary,
+    });
+  }
   commitBundle(commandId, caseJobId, caseRevision, bundleSha256, reportSha256, bundle) {
     return this.call('worker_commit_bundle', {
       command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision,

@@ -129,6 +129,14 @@ export function validateInvestigationBundle(bundle, manifest, reportMarkdown) {
     assertString(source.title, 'source.title', 500);
     if (source.url != null && (typeof source.url !== 'string' || source.url.length > 2048 || !source.url.startsWith('https://'))) throw new Error('source.url is invalid');
     if (source.document_id != null && (!UUID.test(source.document_id) || !manifestDocumentIds.has(source.document_id))) throw new Error('source document is not in the manifest');
+    if (source.evidence_origin === 'submitted_document') {
+      if (source.source_type !== 'document') throw new Error('submitted document evidence requires document source type');
+      if (source.document_id == null) throw new Error('submitted document evidence requires a document_id');
+    }
+    if (source.evidence_origin === 'external_research') {
+      if (source.url == null) throw new Error('external research evidence requires an https url');
+      if (source.document_id != null) throw new Error('external research evidence cannot reference a submitted document');
+    }
     if (source.page_reference != null) assertString(source.page_reference, 'source.page_reference', 500, { allowEmpty: true });
     if (typeof source.excerpt !== 'string') throw new Error('source.excerpt is invalid');
     if (source.excerpt.length > 8000) throw new Error('source excerpt too large');

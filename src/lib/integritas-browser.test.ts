@@ -63,12 +63,12 @@ describe('Integritas browser adapter', () => {
       signed_manifests: true, durable_checkpoints: true, deterministic_qa: true,
       atomic_bundle_commit: true, arbitrary_shell: false,
     };
-    const runtime = { worker_id: 'oracle-primary', worker_version: '0.3.4', openclaw_status: 'active', last_seen_at: '2026-09-16T21:59:30Z', capability_flags: flags };
+    const runtime = { worker_id: 'oracle-primary', worker_version: '0.3.6', openclaw_status: 'active', last_seen_at: '2026-09-16T21:59:30Z', capability_flags: flags };
     expect(isInvestigationRuntimeReady(runtime, now)).toBe(true);
     expect(isInvestigationRuntimeReady({ ...runtime, worker_version: '0.2.0' }, now)).toBe(false);
     expect(isInvestigationRuntimeReady({ ...runtime, worker_version: '0.3.1' }, now)).toBe(false);
     expect(isInvestigationRuntimeReady({ ...runtime, worker_version: '0.3.2' }, now)).toBe(false);
-    expect(isInvestigationRuntimeReady({ ...runtime, worker_version: '0.3.3' }, now)).toBe(false);
+    expect(isInvestigationRuntimeReady({ ...runtime, worker_version: '0.3.5' }, now)).toBe(false);
     expect(isInvestigationRuntimeReady({ ...runtime, capability_flags: { ...flags, deterministic_qa: false } }, now)).toBe(false);
     expect(isInvestigationRuntimeReady({ ...runtime, capability_flags: { ...flags, atomic_bundle_commit: false } }, now)).toBe(false);
     expect(isInvestigationRuntimeReady({ ...runtime, last_seen_at: '2026-09-16T21:57:00Z' }, now)).toBe(false);

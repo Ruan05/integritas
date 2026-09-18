@@ -286,6 +286,65 @@ Deno.serve(async (req) => {
         return json({ checkpoint }, 200, origin);
       }
 
+      if (action === 'worker_register_research_source') {
+        const caseJobId = body.case_job_id;
+        const caseRevision = body.case_revision;
+        const sourceKey = typeof body.source_key === 'string' ? body.source_key : '';
+        const url = typeof body.url === 'string' ? body.url : '';
+        const title = typeof body.title === 'string' ? body.title.trim().slice(0, 500) : '';
+        const retrievedAt = typeof body.retrieved_at === 'string' ? body.retrieved_at : '';
+        const toolSummary = isObject(body.tool_summary) ? body.tool_summary : {};
+        const tools = Array.isArray(toolSummary.tools)
+          ? toolSummary.tools.filter((tool): tool is string => typeof tool === 'string' && ['web_search', 'web_fetch', 'browser'].includes(tool)).slice(0, 8)
+          : [];
+        const calls = Number(toolSummary.calls);
+        const failures = Number(toolSummary.failures);
+        let parsedUrl: URL | null = null;
+        try { parsedUrl = new URL(url); } catch {}
+        const retrievedMs = Date.parse(retrievedAt);
+        if (!validUuid(caseJobId)
+          || !Number.isInteger(caseRevision) || Number(caseRevision) < 0
+          || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(sourceKey)
+          || !parsedUrl || parsedUrl.protocol !== 'https:' || url.length > 2048
+          || !title || !Number.isFinite(retrievedMs)
+          || !Number.isInteger(calls) || calls < 1 || calls > 500
+          || !Number.isInteger(failures) || failures < 0 || failures > calls
+          || tools.length < 1) {
+          return json({ error: 'invalid_research_source_provenance' }, 400, origin);
+        }
+        const context = await rpc('integritas_investigation_manifest_context', {
+          p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
+        });
+        if (!isObject(context) || !validUuid(context.case_id) || context.case_revision !== caseRevision) {
+          throw new Error('invalid research source job context');
+        }
+        const safeMetadata = { source_key: sourceKey, url, tools: [...new Set(tools)], calls, failures };
+        const existing = await service.from('integritas_tool_invocations')
+          .select('id')
+          .eq('case_id', context.case_id)
+          .eq('case_job_id', caseJobId)
+          .eq('tool_name', 'openclaw_external_research')
+          .eq('status', 'completed')
+          .contains('safe_metadata', { source_key: sourceKey, url })
+          .order('completed_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (existing.error) throw existing.error;
+        if (existing.data?.id) return json({ tool_invocation_id: existing.data.id }, 200, origin);
+        const { data: inserted, error: insertError } = await service.from('integritas_tool_invocations').insert({
+          case_id: context.case_id,
+          case_job_id: caseJobId,
+          tool_name: 'openclaw_external_research',
+          query_summary: title,
+          status: 'completed',
+          safe_metadata: safeMetadata,
+          invoked_at: retrievedAt,
+          completed_at: new Date().toISOString(),
+        }).select('id').single();
+        if (insertError || !inserted?.id) throw insertError ?? new Error('research provenance insert failed');
+        return json({ tool_invocation_id: inserted.id }, 201, origin);
+      }
+
       if (action === 'worker_publish_output') {
         const caseJobId = body.case_job_id;
         const caseRevision = body.case_revision;

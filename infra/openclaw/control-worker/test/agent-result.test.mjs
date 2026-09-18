@@ -72,3 +72,73 @@ test('drops only provider-added top-level metadata before strict validation', ()
     /unknown bundle field: unexpected/,
   );
 });
+test('fills an unambiguous submitted document_id from the signed manifest', () => {
+  const oneDocumentManifest = {
+    ...manifest,
+    documents: [{ id: '44444444-4444-4444-8444-444444444444', name: 'alpha.pdf' }],
+  };
+  const value = bundle();
+  value.sources = [{
+    source_key: 'source-alpha',
+    source_type: 'document',
+    title: 'alpha.pdf',
+    excerpt: 'Submitted evidence.',
+    reliability_note: 'Submitted document.',
+    evidence_origin: 'submitted_document',
+    retrieved_at: '2026-09-18T08:00:00Z',
+  }];
+  const parsed = parseAgentBundle(
+    JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }),
+    oneDocumentManifest,
+  );
+  assert.equal(parsed.bundle.sources[0].document_id, oneDocumentManifest.documents[0].id);
+});
+
+test('matches a missing submitted document_id by exact title when multiple documents exist', () => {
+  const multiManifest = {
+    ...manifest,
+    documents: [
+      { id: '44444444-4444-4444-8444-444444444444', name: 'alpha.pdf' },
+      { id: '55555555-5555-4555-8555-555555555555', name: 'beta.pdf' },
+    ],
+  };
+  const value = bundle();
+  value.sources = [{
+    source_key: 'source-beta',
+    source_type: 'document',
+    title: 'beta.pdf',
+    excerpt: 'Submitted evidence.',
+    reliability_note: 'Submitted document.',
+    evidence_origin: 'submitted_document',
+    retrieved_at: '2026-09-18T08:00:00Z',
+  }];
+  const parsed = parseAgentBundle(
+    JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }),
+    multiManifest,
+  );
+  assert.equal(parsed.bundle.sources[0].document_id, multiManifest.documents[1].id);
+});
+
+test('rejects ambiguous submitted evidence when document_id cannot be inferred safely', () => {
+  const multiManifest = {
+    ...manifest,
+    documents: [
+      { id: '44444444-4444-4444-8444-444444444444',  name: 'alpha.pdf' },
+      { id: '55555555-5555-4555-8555-555555555555', name: 'beta.pdf' },
+    ],
+  };
+  const value = bundle();
+  value.sources = [{
+    source_key: 'source-ambiguous',
+    source_type: 'document',
+    title: 'Evidence',
+    excerpt: 'Submitted evidence.',
+    reliability_note: 'Submitted document.',
+    evidence_origin: 'submitted_document',
+    retrieved_at: '2026-09-18T08:00:00Z',
+  }];
+  assert.throws(
+    () => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }), multiManifest),
+    /submitted document evidence requires a document_id/,
+  );
+});
