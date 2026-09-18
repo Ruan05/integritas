@@ -28,7 +28,7 @@ if [[ ! -d "${NEW}" ]]; then
   chown -R root:root "${NEW}"
 fi
 
-for required in   infra/openclaw/install-control-worker.sh   infra/openclaw/investigation-agent-runner.mjs   infra/openclaw/integritas-investigation.json5   infra/openclaw/integritas-control-worker.service   infra/openclaw/openclaw-gateway.service   infra/openclaw/integritas-openclaw-investigation@.service; do
+for required in   infra/openclaw/install-control-worker.sh   infra/openclaw/investigation-agent-runner.mjs   infra/openclaw/integritas-gateway.json5   infra/openclaw/integritas-investigation.json5   infra/openclaw/integritas-control-worker.service   infra/openclaw/openclaw-gateway.service   infra/openclaw/integritas-openclaw-investigation@.service; do
   [[ -f "${NEW}/${required}" ]] || { echo "Release is missing ${required}." >&2; exit 6; }
 done
 
