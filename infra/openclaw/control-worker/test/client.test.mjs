@@ -35,8 +35,14 @@ test('investigation methods use bounded worker actions without embedding credent
   await client.manifest('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222');
   await client.checkpoint('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 4, 'researching', 55, { branch_count: 2 });
   await client.publishOutput('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 4, 'bundle', 'application/json', 'abc', 'a'.repeat(64));
+  await client.commitBundle('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 4, 'a'.repeat(64), 'b'.repeat(64), { schema_version: 1 });
+  await client.jobState('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222');
+  await client.acknowledgeCancel('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222');
 
-  assert.deepEqual(bodies.map((body) => body.action), ['worker_manifest', 'worker_checkpoint', 'worker_publish_output']);
+  assert.deepEqual(bodies.map((body) => body.action), [
+    'worker_manifest', 'worker_checkpoint', 'worker_publish_output', 'worker_commit_bundle',
+    'worker_job_state', 'worker_cancel_ack',
+  ]);
   assert.ok(bodies.every((body) => body.worker_id === 'oracle-primary'));
   assert.ok(bodies.every((body) => !JSON.stringify(body).includes('top-secret')));
 });

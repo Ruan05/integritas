@@ -38,4 +38,16 @@ export class ControlClient {
   publishOutput(commandId, caseJobId, caseRevision, outputType, contentType, content, sha256) {
     return this.call('worker_publish_output', { command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision, output_type: outputType, content_type: contentType, content, sha256 });
   }
+  commitBundle(commandId, caseJobId, caseRevision, bundleSha256, reportSha256, bundle) {
+    return this.call('worker_commit_bundle', {
+      command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision,
+      bundle_sha256: bundleSha256, report_sha256: reportSha256, bundle,
+    });
+  }
+  jobState(commandId, caseJobId) {
+    return this.call('worker_job_state', { command_id: commandId, case_job_id: caseJobId });
+  }
+  acknowledgeCancel(commandId, caseJobId) {
+    return this.call('worker_cancel_ack', { command_id: commandId, case_job_id: caseJobId });
+  }
 }

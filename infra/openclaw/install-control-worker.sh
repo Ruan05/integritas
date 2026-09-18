@@ -19,6 +19,23 @@ TOKEN_FILE="$ENV_DIR/control-worker.token"
 STATE_DIR=/var/lib/integritas-control
 RUNNER_ROOT=/var/lib/integritas-runner
 SHARED_GROUP=integritas-openclaw
+OPENCLAW_CONFIG_DIR=/etc/openclaw
+OPENCLAW_CONFIG_PATH="$OPENCLAW_CONFIG_DIR/openclaw.json"
+RUNNER_CONFIG_DEST="$OPENCLAW_CONFIG_DIR/integritas-investigation.json"
+
+repair_openclaw_config_permissions() {
+  install -d -o root -g openclaw -m 0750 "$OPENCLAW_CONFIG_DIR"
+  chown root:openclaw "$OPENCLAW_CONFIG_DIR"
+  chmod 0750 "$OPENCLAW_CONFIG_DIR"
+  if [[ -f "$OPENCLAW_CONFIG_PATH" ]]; then
+    chown root:openclaw "$OPENCLAW_CONFIG_PATH"
+    chmod 0640 "$OPENCLAW_CONFIG_PATH"
+  fi
+  if [[ -f "$RUNNER_CONFIG_DEST" ]]; then
+    chown root:openclaw "$RUNNER_CONFIG_DEST"
+    chmod 0640 "$RUNNER_CONFIG_DEST"
+  fi
+}
 
 for required in /usr/bin/node /usr/bin/systemctl /usr/bin/systemd-analyze /usr/bin/getent /usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/sbin/runuser; do
   [[ -x "$required" ]] || { echo "Missing required executable: $required" >&2; exit 1; }
@@ -50,7 +67,9 @@ if [[ "$RUNNER_SCRIPT_SRC" == "$RUNNER_SCRIPT_DEST" ]]; then
 else
   install -o root -g root -m 0755 "$RUNNER_SCRIPT_SRC" "$RUNNER_SCRIPT_DEST"
 fi
-install -o root -g openclaw -m 0640 "$RUNNER_CONFIG_SRC" /etc/openclaw/integritas-investigation.json
+repair_openclaw_config_permissions
+install -o root -g openclaw -m 0640 "$RUNNER_CONFIG_SRC" "$RUNNER_CONFIG_DEST"
+repair_openclaw_config_permissions
 install -o root -g root -m 0644 "$POLKIT_SRC" /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -71,7 +90,7 @@ fi
 
 /usr/sbin/runuser -u openclaw -- env \
   HOME=/var/lib/openclaw OPENCLAW_HOME=/var/lib/openclaw OPENCLAW_STATE_DIR=/var/lib/openclaw \
-  OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-investigation.json \
+  OPENCLAW_CONFIG_PATH="$RUNNER_CONFIG_DEST" \
   /opt/openclaw/bin/openclaw config validate
 /usr/bin/systemctl daemon-reload
 /usr/bin/systemd-analyze verify /etc/systemd/system/integritas-control-worker.service >/dev/null

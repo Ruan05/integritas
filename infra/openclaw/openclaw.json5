@@ -38,11 +38,23 @@
       },
     },
   },
+  skills: {
+    load: { watch: true },
+  },
+  browser: {
+    enabled: true,
+    defaultProfile: "openclaw",
+    headless: true,
+  },
   tools: {
     profile: "coding",
+    alsoAllow: ["browser"],
     elevated: { enabled: false },
     sessions: { visibility: "tree" },
     agentToAgent: { enabled: false },
     deny: ["gateway", "nodes"],
+    sandbox: {
+      tools: { alsoAllow: ["browser"] },
+    },
   },
 }

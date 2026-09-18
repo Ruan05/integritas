@@ -13,7 +13,13 @@ const workerToken = process.env.INTEGRITAS_CONTROL_WORKER_TOKEN || (
 );
 const workerId = process.env.INTEGRITAS_WORKER_ID || 'oracle-primary';
 const pollMs = Number(process.env.INTEGRITAS_CONTROL_POLL_MS || 5000);
-const workerVersion = process.env.INTEGRITAS_CONTROL_WORKER_VERSION || '0.2.0';
+function readPackagedWorkerVersion() {
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const version = String(pkg.version ?? '').trim();
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) throw new Error('invalid packaged worker version');
+  return version;
+}
+const workerVersion = readPackagedWorkerVersion();
 
 if (!baseUrl || !workerToken) {
   console.error('INTEGRITAS_CONTROL_URL and a worker-token credential are required');
@@ -47,7 +53,11 @@ async function sendHeartbeat() {
       openclaw_version: openclaw.version,
       openclaw_status: openclaw.service,
       worker_version: workerVersion,
-      capability_flags: { bounded_control: true, arbitrary_shell: false, docker_socket: false, case_investigation: true, signed_manifests: true, durable_checkpoints: true },
+      capability_flags: {
+        bounded_control: true, arbitrary_shell: false, docker_socket: false,
+        case_investigation: true, signed_manifests: true, durable_checkpoints: true,
+        deterministic_qa: true, atomic_bundle_commit: true,
+      },
     });
   } catch (error) {
     console.error(`heartbeat failed: ${error.message}`);
@@ -85,7 +95,7 @@ while (!stopping) {
           repoRoot: process.env.INTEGRITAS_REPO_ROOT || '/opt/integritas/current',
         })
         : await executeCommand(validated);
-      await client.complete(command.id, result);
+      if (!result?.cancelled) await client.complete(command.id, result);
     } catch (error) {
       await client.fail(command.id, 'execution_failed', String(error.message || error).slice(0, 1000));
     } finally {

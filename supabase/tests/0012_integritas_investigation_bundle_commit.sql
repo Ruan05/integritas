@@ -55,6 +55,7 @@ insert into public.integritas_documents(
   'cases/cccccccc-cccc-4ccc-8ccc-cccccccccccc/documents/identity.pdf','pending'
 );
 
+
 create temp table bundle_fixture(bundle jsonb);
 insert into bundle_fixture(bundle) values (jsonb_build_object(
   'schema_version',1,

@@ -50,6 +50,9 @@ git -C "${SOURCE_DIR}" describe --tags --exact-match | grep -Fx "v${TARGET_VERSI
 )
 
 install -m 0640 -o root -g openclaw "${SCRIPT_DIR}/openclaw.json5" "${CONFIG_PATH}"
+chown root:openclaw "${CONFIG_DIR}" "${CONFIG_PATH}"
+chmod 0750 "${CONFIG_DIR}"
+chmod 0640 "${CONFIG_PATH}"
 install -m 0644 -o root -g root "${SCRIPT_DIR}/openclaw-gateway.service" "${SERVICE_PATH}"
 chown -R openclaw:openclaw "${STATE_DIR}"
 

@@ -1,5 +1,9 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 import { normalizeLeaseCommand } from './lease.ts';
+import {
+  CASE_INVESTIGATION_DEPTHS, CASE_INVESTIGATION_STAGES, CHECKPOINT_METADATA_KEYS,
+  INVESTIGATION_CONTENT_TYPES, INVESTIGATION_OUTPUT_TYPES,
+} from '../_shared/investigation-runtime-contract.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -27,18 +31,6 @@ const CONNECTOR_COMMANDS = new Set([
   'verify_runtime',
 ]);
 const CASE_INVESTIGATION_COMMANDS = new Set(['run_case_investigation']);
-const CASE_INVESTIGATION_DEPTHS = new Set(['fast', 'standard', 'deep', 'maximum']);
-const CASE_INVESTIGATION_STAGES = new Set([
-  'queued','extracting','analyzing_documents','mapping_entities','planning_research',
-  'researching','verifying','cross_checking','independent_review','drafting_report',
-  'completed','incomplete','failed','cancelled','research_limit_reached',
-]);
-const CHECKPOINT_METADATA_KEYS = new Set([
-  'branch_count','unresolved_branches','evidence_count','source_count','check_count',
-  'output_refs','limitations_count','message',
-]);
-const INVESTIGATION_OUTPUT_TYPES = new Set(['bundle','report_html','evidence','execution_log']);
-const INVESTIGATION_CONTENT_TYPES = new Set(['application/json','text/html','application/octet-stream','text/plain']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const CASE_FILES_BUCKET = 'integritas-case-files';
@@ -301,6 +293,52 @@ Deno.serve(async (req) => {
         return json({ output }, 200, origin);
       }
 
+      if (action === 'worker_commit_bundle') {
+        const caseJobId = body.case_job_id;
+        const caseRevision = body.case_revision;
+        const bundleSha = body.bundle_sha256;
+        const reportSha = body.report_sha256;
+        const bundle = body.bundle;
+        if (!validUuid(caseJobId)
+          || !Number.isInteger(caseRevision) || Number(caseRevision) < 0
+          || typeof bundleSha !== 'string' || !SHA256_PATTERN.test(bundleSha)
+          || typeof reportSha !== 'string' || !SHA256_PATTERN.test(reportSha)
+          || !isObject(bundle)) {
+          return json({ error: 'invalid_bundle_commit' }, 400, origin);
+        }
+        const encodedBundle = JSON.stringify(bundle);
+        if (new TextEncoder().encode(encodedBundle).byteLength > MAX_INVESTIGATION_ARTIFACT_BYTES
+          || encodedBundle.includes('/storage/v1/object/sign/')) {
+          return json({ error: 'invalid_bundle_commit' }, 400, origin);
+        }
+        const commitSummary = await rpc('integritas_commit_investigation_bundle', {
+          p_command_id: commandId,
+          p_worker_id: workerId,
+          p_case_job_id: caseJobId,
+          p_case_revision: caseRevision,
+          p_bundle_sha256: bundleSha,
+          p_report_sha256: reportSha,
+          p_bundle: bundle,
+        });
+        return json({ commit_summary: commitSummary }, 200, origin);
+      }
+
+      if (action === 'worker_job_state') {
+        const caseJobId = body.case_job_id;
+        if (!validUuid(caseJobId)) return json({ error: 'invalid_case_job_id' }, 400, origin);
+        const state = await rpc('integritas_investigation_job_state', {
+          p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
+        });
+        return json({ state }, 200, origin);
+      }
+      if (action === 'worker_cancel_ack') {
+        const caseJobId = body.case_job_id;
+        if (!validUuid(caseJobId)) return json({ error: 'invalid_case_job_id' }, 400, origin);
+        const ok = await rpc('integritas_acknowledge_case_investigation_cancel', {
+          p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
+        });
+        return json({ ok: !!ok }, ok ? 200 : 409, origin);
+      }
       if (action === 'worker_touch') {
         const ok = await rpc('integritas_control_touch', { p_command_id: commandId, p_worker_id: workerId, p_lease_seconds: 90 });
         return json({ ok: !!ok }, ok ? 200 : 409, origin);
@@ -385,6 +423,20 @@ Deno.serve(async (req) => {
       const investigation = Array.isArray(data) ? data[0] ?? null : data;
       if (!investigation) throw new Error('investigation start returned no result');
       return json({ investigation }, 202, origin);
+    }
+
+    if (action === 'retry_case_investigation' || action === 'cancel_case_investigation') {
+      if (principal.kind !== 'admin') return json({ error: 'action_not_allowed' }, 403, origin);
+      const caseJobId = body.case_job_id;
+      if (!validUuid(caseJobId)) return json({ error: 'invalid_case_job_id' }, 400, origin);
+      const rpcName = action === 'retry_case_investigation'
+        ? 'integritas_retry_case_investigation'
+        : 'integritas_cancel_case_investigation';
+      const result = await rpc(rpcName, {
+        p_case_job_id: caseJobId,
+        p_requested_by: principal.userId,
+      });
+      return json({ investigation: result }, 200, origin);
     }
 
     if (action === 'enqueue') {

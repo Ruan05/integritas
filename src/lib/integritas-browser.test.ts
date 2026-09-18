@@ -56,12 +56,18 @@ describe('Integritas browser adapter', () => {
     expect(String(init.body)).not.toMatch(/opencode/i);
   });
 
-  it('requires a fresh attested 0.2.0+ Oracle investigation runtime before enabling start', () => {
+  it('requires a fresh attested 0.3.0+ Oracle runtime with deterministic QA and atomic commit before enabling start', () => {
     const now = new Date('2026-09-16T22:00:00Z').getTime();
-    const flags = { bounded_control: true, docker_socket: false, case_investigation: true, signed_manifests: true, durable_checkpoints: true, arbitrary_shell: false };
-    const runtime = { worker_id: 'oracle-primary', worker_version: '0.2.0', openclaw_status: 'active', last_seen_at: '2026-09-16T21:59:30Z', capability_flags: flags };
+    const flags = {
+      bounded_control: true, docker_socket: false, case_investigation: true,
+      signed_manifests: true, durable_checkpoints: true, deterministic_qa: true,
+      atomic_bundle_commit: true, arbitrary_shell: false,
+    };
+    const runtime = { worker_id: 'oracle-primary', worker_version: '0.3.0', openclaw_status: 'active', last_seen_at: '2026-09-16T21:59:30Z', capability_flags: flags };
     expect(isInvestigationRuntimeReady(runtime, now)).toBe(true);
-    expect(isInvestigationRuntimeReady({ ...runtime, worker_version: '0.1.0' }, now)).toBe(false);
+    expect(isInvestigationRuntimeReady({ ...runtime, worker_version: '0.2.0' }, now)).toBe(false);
+    expect(isInvestigationRuntimeReady({ ...runtime, capability_flags: { ...flags, deterministic_qa: false } }, now)).toBe(false);
+    expect(isInvestigationRuntimeReady({ ...runtime, capability_flags: { ...flags, atomic_bundle_commit: false } }, now)).toBe(false);
     expect(isInvestigationRuntimeReady({ ...runtime, last_seen_at: '2026-09-16T21:57:00Z' }, now)).toBe(false);
   });
 

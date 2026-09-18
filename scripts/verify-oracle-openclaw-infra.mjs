@@ -38,6 +38,8 @@ if (!errors.length) {
     [config, 'capDrop: ["ALL"]', 'sandbox capability drop'],
     [config, 'visibility: "tree"', 'tree session visibility'],
     [config, 'agentToAgent: { enabled: false }', 'agent-to-agent disabled'],
+    [config, 'alsoAllow: ["browser"]', 'browser tool explicitly added above coding profile'],
+    [config, 'watch: true', 'skill watcher enabled for session refresh'],
     [unit, 'User=openclaw', 'non-root Gateway user'],
     [unit, 'NoNewPrivileges=true', 'systemd no-new-privileges'],
     [unit, 'ProtectSystem=strict', 'systemd filesystem protection'],

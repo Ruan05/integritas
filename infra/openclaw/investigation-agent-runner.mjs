@@ -38,7 +38,7 @@ const result = await execFileAsync('/opt/openclaw/bin/openclaw', args, {
   maxBuffer: 5 * 1024 * 1024,
 });
 await writeFile(path.join(jobDir, 'agent-exec.json'), result.stdout, { mode: 0o640 });
-for (const name of ['bundle.json', 'report.html']) {
+for (const name of ['bundle.json', 'report.md']) {
   const file = path.join(jobDir, name);
   await access(file);
   const info = await stat(file);

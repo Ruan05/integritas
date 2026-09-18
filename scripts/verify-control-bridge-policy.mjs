@@ -15,6 +15,7 @@ const investigationUnit = read('infra/openclaw/integritas-openclaw-investigation
 const investigationRunner = read('infra/openclaw/investigation-agent-runner.mjs');
 const investigationConfig = read('infra/openclaw/integritas-investigation.json5');
 const installer = read('infra/openclaw/install-control-worker.sh');
+const nativeInstaller = read('infra/openclaw/install-native.sh');
 
 assert.match(gateway, /bind:\s*["']loopback["']/, 'OpenClaw Gateway must remain loopback-only');
 assert.match(service, /^User=integritas-control$/m, 'control worker must use dedicated non-root account');
@@ -60,6 +61,11 @@ assert.match(installer, /2770/, 'shared spool must use setgid owner-group permis
 assert.match(installer, /integritas-openclaw-investigation@\.service/, 'installer must install the fixed runner template');
 assert.match(installer, /RUNNER_SCRIPT_DEST/, 'installer must use an explicit runner destination');
 assert.match(installer, /RUNNER_SCRIPT_SRC.*RUNNER_SCRIPT_DEST|RUNNER_SCRIPT_DEST.*RUNNER_SCRIPT_SRC/s, 'installer must handle source/destination identity safely');
+assert.match(installer, /chown root:openclaw \"\$OPENCLAW_CONFIG_DIR\"/, 'control-worker installer must restore OpenClaw config directory ownership');
+assert.match(installer, /chmod 0750 \"\$OPENCLAW_CONFIG_DIR\"/, 'control-worker installer must restore OpenClaw config directory traversal');
+assert.match(installer, /chmod 0640 \"\$OPENCLAW_CONFIG_PATH\"/, 'control-worker installer must preserve service-readable main config permissions');
+assert.match(nativeInstaller, /install -d -m 0750 -o root -g openclaw/, 'native installer must keep OpenClaw config directory private but service-readable');
+assert.match(nativeInstaller, /chmod 0750 \"\$\{CONFIG_DIR\}\"/, 'native installer must defensively restore config directory traversal before validation');
 assert.match(investigation, /document digest mismatch/, 'worker must verify downloaded evidence digests');
 assert.match(investigation, /url\.hostname !== controlHost/, 'worker must bind signed downloads to the control-plane origin');
 assert.match(investigation, /systemctlRunner\('\/usr\/bin\/systemctl', \['start', '--wait'/, 'worker must start only the fixed oneshot runner via systemd');

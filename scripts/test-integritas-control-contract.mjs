@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 const source = readFileSync('supabase/functions/integritas-control/index.ts', 'utf8');
 const leaseSource = readFileSync('supabase/functions/integritas-control/lease.ts', 'utf8');
+const runtimeContractSource = readFileSync('supabase/functions/_shared/investigation-runtime-contract.ts', 'utf8');
 
 assert.match(source, /x-integritas-worker-token/, 'worker token header must be implemented');
 assert.match(source, /x-integritas-worker-id/, 'worker id header must be required for scoped worker authentication');
@@ -34,6 +35,22 @@ assert.match(source, /action === 'worker_checkpoint'/, 'worker checkpoint action
 assert.match(source, /integritas_checkpoint_case_investigation/, 'checkpoint action must use a bounded database RPC');
 assert.match(source, /action === 'worker_publish_output'/, 'worker output publishing must be explicit');
 assert.match(source, /integritas_register_case_job_output/, 'published outputs must be registered through a bounded database RPC');
+assert.match(source, /action === 'worker_commit_bundle'/, 'worker bundle commit action must be explicit');
+assert.match(source, /integritas_commit_investigation_bundle/, 'worker bundle commit must use the atomic database RPC');
+assert.match(source, /action === 'worker_job_state'/, 'worker recovery-state action must be explicit');
+assert.match(source, /integritas_investigation_job_state/, 'worker recovery state must use a bounded database RPC');
+assert.match(source, /action === 'worker_cancel_ack'/, 'worker cancellation acknowledgement must be explicit');
+assert.match(source, /integritas_acknowledge_case_investigation_cancel/, 'worker cancellation must use a bounded database RPC');
+assert.match(source, /action === 'retry_case_investigation'/, 'admin retry action must be explicit');
+assert.match(source, /integritas_retry_case_investigation/, 'admin retry must use the bounded database RPC');
+assert.match(source, /action === 'cancel_case_investigation'/, 'admin cancel action must be explicit');
+assert.match(source, /integritas_cancel_case_investigation/, 'admin cancellation must use the bounded database RPC');
+assert.match(source, /new TextEncoder\(\)\.encode\(encodedBundle\)\.byteLength/, 'bundle commit limit must be enforced in UTF-8 bytes');
+assert.match(source, /\.\.\/_shared\/investigation-runtime-contract\.ts/, 'control API must import the shared investigation runtime contract');
+for (const key of ['document_count', 'bundle_sha256', 'report_sha256', 'qa_summary', 'commit_summary']) {
+  assert.match(runtimeContractSource, new RegExp(`'${key}'`), `shared checkpoint contract must allow ${key}`);
+}
+assert.match(runtimeContractSource, /'report_markdown'/, 'shared output contract must allow canonical Markdown reports');
 assert.match(source, /integritas-case-files/, 'investigation artifacts must remain in the private case-files bucket');
 
 for (const dangerous of [

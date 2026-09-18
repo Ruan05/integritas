@@ -108,6 +108,7 @@ jobs:
           psql -f supabase/migrations/0007_integritas_document_limit.sql
           psql -f supabase/migrations/0008_integritas_document_limit_privileges.sql
           psql -f supabase/migrations/0009_integritas_investigation_bundle_commit.sql
+          psql -f supabase/migrations/0010_integritas_investigation_recovery.sql
       - name: Verify control bridge contract
         run: |
           psql -f supabase/tests/0005_integritas_control_bridge.sql
@@ -117,6 +118,7 @@ jobs:
           psql -f supabase/tests/0010_integritas_document_limit.sql
           psql -f supabase/tests/0011_integritas_document_limit_privileges.sql
           psql -f supabase/tests/0012_integritas_investigation_bundle_commit.sql
+          psql -f supabase/tests/0013_integritas_investigation_recovery.sql
       - name: Verify investigation rollback preflight
         run: |
           if psql -v ON_ERROR_STOP=1 -f supabase/rollback/0005_integritas_openclaw_investigation_runtime.rollback.sql; then
@@ -127,6 +129,7 @@ jobs:
           psql -c "delete from public.integritas_control_commands where command_type = 'run_case_investigation';"
       - name: Roll back staged control bridge
         run: |
+          psql -f supabase/rollback/0010_integritas_investigation_recovery.rollback.sql
           psql -f supabase/rollback/0009_integritas_investigation_bundle_commit.rollback.sql
           psql -f supabase/rollback/0007_integritas_document_limit.rollback.sql
           psql -f supabase/rollback/0006_integritas_investigation_persistence.rollback.sql

@@ -1,5 +1,5 @@
-// Allow the dedicated Integritas control worker only two bounded systemd actions:
-// restart the OpenClaw Gateway, or start a UUID-scoped investigation oneshot.
+// Allow only bounded systemd actions for the dedicated Integritas control worker:
+// restart the Gateway, or start/stop a UUID-scoped investigation oneshot.
 polkit.addRule(function(action, subject) {
   if (action.id === "org.freedesktop.systemd1.manage-units" &&
       subject.user === "integritas-control") {
@@ -8,7 +8,7 @@ polkit.addRule(function(action, subject) {
     if (unit === "openclaw-gateway.service" && verb === "restart") {
       return polkit.Result.YES;
     }
-    if (verb === "start" &&
+    if ((verb === "start" || verb === "stop") &&
         /^integritas-openclaw-investigation@[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.service$/.test(unit)) {
       return polkit.Result.YES;
     }
