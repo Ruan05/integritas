@@ -50,7 +50,12 @@ if (!errors.length) {
     [installer, 'v${TARGET_VERSION}', 'pinned OpenClaw source tag'],
     [cloudInit, 'ocarun', 'OCI Run Command user'],
     [runCommand, 'oci instance-agent command create', 'OCI Run Command create call'],
-    [releaseDeploy, '^[0-9a-f]{40}
+    [releaseDeploy, '[0-9a-f]{40}', 'exact release SHA validation'],
+    [releaseDeploy, 'systemctl stop', 'worker quiesce before release switch'],
+    [releaseDeploy, 'integritas-openclaw-investigation@*.service', 'active investigation deployment guard'],
+    [releaseDeploy, 'rollback()', 'automatic release rollback handler'],
+    [releaseDeploy, 'mv -Tf', 'atomic current-release symlink switch'],
+    [rollback, 'previous-version', 'rollback version record'],
     [provision, 'VM.Standard.A1.Flex', 'Always Free A1 shape'],
   ];
 
