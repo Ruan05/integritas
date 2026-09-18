@@ -38,6 +38,7 @@ assert.match(source, /action === 'worker_storage_selftest'/, 'worker storage rea
 assert.match(source, /storage\.updateBucket\(CASE_FILES_BUCKET/, 'storage readiness must use the Storage API rather than direct storage-schema SQL');
 assert.match(source, /allowedMimeTypes: CASE_FILES_BUCKET_ALLOWED_MIME_TYPES/, 'storage readiness must enforce the bounded MIME allowlist');
 assert.match(source, /storage self-test cleanup failed/, 'storage self-test artifacts must be removed');
+assert.ok((source.match(/ensureCaseFilesStorageReady\(workerId, commandId\)/g) ?? []).length >= 2, 'storage readiness must guard both explicit preflight and publication fallback');
 assert.match(source, /investigation artifact cleanup failed/, 'failed output registration must clean up the uploaded object');
 assert.match(source, /contentType === 'text\/markdown'/, 'Markdown outputs must be treated as text for signed-URL leak checks');
 assert.match(source, /return 'md'/, 'Markdown outputs must use the .md extension');

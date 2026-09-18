@@ -309,6 +309,7 @@ Deno.serve(async (req) => {
         }
         const actualSha = await sha256Bytes(bytes);
         if (!secureEquals(actualSha, expectedSha)) return json({ error: 'output_digest_mismatch' }, 400, origin);
+        await ensureCaseFilesStorageReady(workerId, commandId);
         const context = await rpc('integritas_investigation_manifest_context', {
           p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
         });
