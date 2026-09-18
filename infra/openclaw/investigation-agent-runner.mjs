@@ -6,14 +6,41 @@ import { parseAgentBundle } from './agent-result.mjs';
 
 const execFileAsync = promisify(execFile);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MODEL_ROUTES = Object.freeze({
+  fast: {
+    model: 'opencode-go/glm-5.3-flash',
+    fallbacks: ['opencode-go/deepseek-v4.1-flash', 'opencode-go/mimo-v2.5'],
+    thinking: 'off',
+    timeoutSeconds: 600,
+  },
+  standard: {
+    model: 'opencode-go/glm-5.3-flash',
+    fallbacks: ['opencode-go/deepseek-v4.1-flash', 'opencode-go/mimo-v2.5'],
+    thinking: 'off',
+    timeoutSeconds: 900,
+  },
+  deep: {
+    model: 'opencode-go/glm-5.2',
+    fallbacks: ['opencode-go/deepseek-v4-flash'],
+    thinking: 'max',
+    timeoutSeconds: 1200,
+  },
+  maximum: {
+    model: 'opencode-go/glm-5.2',
+    fallbacks: ['opencode-go/deepseek-v4-flash'],
+    thinking: 'max',
+    timeoutSeconds: 1500,
+  },
+});
+
 const jobId = process.argv[2] ?? '';
 if (!UUID.test(jobId)) throw new Error('invalid investigation job id');
 
 const jobDir = `/var/lib/integritas-runner/jobs/${jobId}`;
 const manifest = JSON.parse(await readFile(path.join(jobDir, 'manifest.json'), 'utf8'));
 if (manifest.case_job_id !== jobId) throw new Error('job manifest mismatch');
-const thinking = { fast: 'off', standard: 'off', deep: 'max', maximum: 'max' }[manifest.depth];
-if (!thinking) throw new Error('invalid investigation depth');
+const route = MODEL_ROUTES[manifest.depth];
+if (!route) throw new Error('invalid investigation depth');
 
 const args = [
   'agent', 'exec',
@@ -22,9 +49,13 @@ const args = [
   '--message-file', path.join(jobDir, 'task.md'),
   '--json',
   '--code-mode', 'direct',
-  '--timeout', '1500',
-  '--thinking', thinking,
+  '--model', route.model,
 ];
+for (const fallback of route.fallbacks) args.push('--fallback', fallback);
+args.push(
+  '--timeout', String(route.timeoutSeconds),
+  '--thinking', route.thinking,
+);
 const env = {
   HOME: '/var/lib/openclaw',
   OPENCLAW_HOME: '/var/lib/openclaw',
@@ -35,7 +66,7 @@ const env = {
 const result = await execFileAsync('/opt/openclaw/bin/openclaw', args, {
   cwd: jobDir,
   env,
-  timeout: 26 * 60 * 1000,
+  timeout: (route.timeoutSeconds + 60) * 1000,
   maxBuffer: 5 * 1024 * 1024,
 });
 const parsed = parseAgentBundle(result.stdout, manifest);
