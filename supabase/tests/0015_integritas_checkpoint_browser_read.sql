@@ -46,12 +46,12 @@ insert into public.integritas_case_jobs(
   (
     '30000000-0000-0000-0000-000000000001',
     '10000000-0000-0000-0000-000000000001',
-    null, 'investigation', 0, '', 'fast', 'queued', 'openclaw-oracle'
+    '32000000-0000-0000-0000-000000000001', 'research', 0, '', 'fast', 'queued', 'opencode-go'
   ),
   (
     '30000000-0000-0000-0000-000000000002',
     '10000000-0000-0000-0000-000000000002',
-    null, 'investigation', 0, '', 'fast', 'queued', 'openclaw-oracle'
+    '32000000-0000-0000-0000-000000000002', 'research', 0, '', 'fast', 'queued', 'opencode-go'
   );
 
 insert into public.integritas_case_job_checkpoints(
