@@ -11,6 +11,8 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 256 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 5 * 1024 * 1024;
+const SHARED_DIR_MODE = 0o2770;
+const SHARED_FILE_MODE = 0o640;
 const SAFE_EXEC_ENV = { PATH: '/usr/bin:/bin', LANG: 'C' };
 const STAGE_ORDER = [
   'queued', 'extracting', 'analyzing_documents', 'mapping_entities', 'planning_research',
@@ -66,6 +68,17 @@ async function stageDocument(document, target, fetchImpl) {
   await chmod(target, 0o640);
 }
 
+async function ensureSharedDirectory(rootDir, targetDir) {
+  await mkdir(targetDir, { recursive: true, mode: SHARED_DIR_MODE });
+  await chmod(rootDir, SHARED_DIR_MODE);
+  const relative = path.relative(rootDir, targetDir);
+  let current = rootDir;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    await chmod(current, SHARED_DIR_MODE);
+  }
+}
+
 async function copySupport(repoRoot, jobDir) {
   const copies = [
     ['infra/openclaw/skills/integritas-dd/SKILL.md', 'skills/integritas-dd/SKILL.md'],
@@ -77,10 +90,9 @@ async function copySupport(repoRoot, jobDir) {
   ];
   for (const [sourceRel, targetRel] of copies) {
     const target = path.join(jobDir, targetRel);
-    await mkdir(path.dirname(target), { recursive: true, mode: 0o770 });
-    await chmod(path.dirname(target), 0o770);
+    await ensureSharedDirectory(jobDir, path.dirname(target));
     await copyFile(path.join(repoRoot, sourceRel), target);
-    await chmod(target, 0o640);
+    await chmod(target, SHARED_FILE_MODE);
   }
 }
 
@@ -175,8 +187,8 @@ export async function executeInvestigation(command, {
   const { case_job_id: jobId, case_revision: revision } = command.payload;
   if (!UUID.test(jobId)) throw new Error('invalid investigation job id');
   const jobDir = path.join(spoolRoot, jobId);
-  await mkdir(jobDir, { recursive: true, mode: 0o770 });
-  await chmod(jobDir, 0o770);
+  await mkdir(jobDir, { recursive: true, mode: SHARED_DIR_MODE });
+  await chmod(jobDir, SHARED_DIR_MODE);
   let completedSuccessfully = false;
 
   try {
@@ -200,8 +212,7 @@ export async function executeInvestigation(command, {
     };
     await checkpoint('extracting', 5, { document_count: manifest.documents.length });
     const documentsDir = path.join(jobDir, 'documents');
-    await mkdir(documentsDir, { recursive: true, mode: 0o770 });
-    await chmod(documentsDir, 0o770);
+    await ensureSharedDirectory(jobDir, documentsDir);
     const localDocuments = [];
     for (const document of manifest.documents) {
       const filename = `${document.id}${extensionFor(document.name)}`;
@@ -212,9 +223,13 @@ export async function executeInvestigation(command, {
 
     const safeManifest = { ...manifest, documents: localDocuments.map(({ download_url, ...doc }) => doc) };
     delete safeManifest.expires_in_seconds;
-    await writeFile(path.join(jobDir, 'manifest.json'), JSON.stringify(safeManifest, null, 2), { mode: 0o640 });
+    const manifestPath = path.join(jobDir, 'manifest.json');
+    await writeFile(manifestPath, JSON.stringify(safeManifest, null, 2), { mode: SHARED_FILE_MODE });
+    await chmod(manifestPath, SHARED_FILE_MODE);
     await copySupport(repoRoot, jobDir);
-    await writeFile(path.join(jobDir, 'task.md'), buildTask(safeManifest, localDocuments), { mode: 0o640 });
+    const taskPath = path.join(jobDir, 'task.md');
+    await writeFile(taskPath, buildTask(safeManifest, localDocuments), { mode: SHARED_FILE_MODE });
+    await chmod(taskPath, SHARED_FILE_MODE);
     await checkpoint('analyzing_documents', 15, { document_count: localDocuments.length });
 
     const bundlePath = path.join(jobDir, 'bundle.json');

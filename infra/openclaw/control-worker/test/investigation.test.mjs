@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +34,7 @@ function manifestFor(bytes, sha256, state = {}) {
 
 test('stages verified evidence and publishes bounded OpenClaw artifacts', async () => {
   const spoolRoot = await mkdtemp(path.join(os.tmpdir(), 'integritas-investigation-'));
+  const previousUmask = process.umask(0o077);
   const bytes = Buffer.from('alpha evidence');
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   const checkpoints = [];
@@ -52,6 +53,17 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
   const systemctlRunner = async (file, args) => {
     systemCalls.push([file, args]);
     const jobDir = path.join(spoolRoot, JOB_ID);
+    const expectedGroup = (await stat(spoolRoot)).gid;
+    for (const relative of ['manifest.json', 'task.md', `documents/${DOC_ID}.pdf`, 'skills/integritas-dd/SKILL.md', 'tools/dd/quality_v1.py']) {
+      const info = await stat(path.join(jobDir, relative));
+      assert.equal(info.mode & 0o777, 0o640, `${relative} must remain group-readable under umask 077`);
+      assert.equal(info.gid, expectedGroup, `${relative} must use the shared workspace group`);
+    }
+    for (const relative of ['.', 'documents', 'skills', 'skills/integritas-dd', 'tools', 'tools/dd', 'docs']) {
+      const info = await stat(path.join(jobDir, relative));
+      assert.equal(info.mode & 0o2770, 0o2770, `${relative} must retain setgid group sharing`);
+      assert.equal(info.gid, expectedGroup, `${relative} must use the shared workspace group`);
+    }
     const report = '# Synthetic DD report\n\nDraft evidence summary.';
     const bundle = {
       schema_version: 1, case_id: CASE_ID, case_job_id: JOB_ID, case_revision: 7, depth: 'deep',
@@ -101,6 +113,7 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     assert.deepEqual(terminalCheckpoint[5].commit_summary, { findings: 0, sources: 0 });
     assert.ok(!checkpoints.some((entry) => entry[3] === 'completed'));
   } finally {
+    process.umask(previousUmask);
     await rm(spoolRoot, { recursive: true, force: true });
   }
 });
