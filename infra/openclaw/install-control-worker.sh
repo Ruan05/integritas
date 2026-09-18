@@ -112,7 +112,7 @@ install -d -o integritas-control -g "$SHARED_GROUP" -m 2770 "$RUNNER_ROOT" "$RUN
 install -o root -g root -m 0644 "$SERVICE_SRC" /etc/systemd/system/integritas-control-worker.service
 install -o root -g root -m 0644 "$GATEWAY_SERVICE_SRC" /etc/systemd/system/openclaw-gateway.service
 install -o root -g root -m 0644 "$RUNNER_SERVICE_SRC" /etc/systemd/system/integritas-openclaw-investigation@.service
-if [[ "$RUNNER_SCRIPT_SRC" == "$RUNNER_SCRIPT_DEST" ]]; then
+if [[ -e "$RUNNER_SCRIPT_DEST" && "$RUNNER_SCRIPT_SRC" -ef "$RUNNER_SCRIPT_DEST" ]]; then
   chown root:root "$RUNNER_SCRIPT_DEST"
   chmod 0755 "$RUNNER_SCRIPT_DEST"
 else

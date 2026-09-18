@@ -89,7 +89,7 @@ assert.match(installer, /integritas-openclaw/, 'installer must provision the sha
 assert.match(installer, /2770/, 'shared spool must use setgid owner-group permissions');
 assert.match(installer, /integritas-openclaw-investigation@\.service/, 'installer must install the fixed runner template');
 assert.match(installer, /RUNNER_SCRIPT_DEST/, 'installer must use an explicit runner destination');
-assert.match(installer, /RUNNER_SCRIPT_SRC.*RUNNER_SCRIPT_DEST|RUNNER_SCRIPT_DEST.*RUNNER_SCRIPT_SRC/s, 'installer must handle source/destination identity safely');
+assert.match(installer, /RUNNER_SCRIPT_SRC.*-ef.*RUNNER_SCRIPT_DEST|RUNNER_SCRIPT_DEST.*-ef.*RUNNER_SCRIPT_SRC/s, 'installer must compare runner source/destination by filesystem identity');
 assert.match(installer, /chown root:openclaw \"\$OPENCLAW_CONFIG_DIR\"/, 'control-worker installer must restore OpenClaw config directory ownership');
 assert.match(installer, /chmod 0750 \"\$OPENCLAW_CONFIG_DIR\"/, 'control-worker installer must restore OpenClaw config directory traversal');
 assert.match(installer, /chmod 0640 \"\$OPENCLAW_CONFIG_PATH\"/, 'control-worker installer must preserve service-readable main config permissions');

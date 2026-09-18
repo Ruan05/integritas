@@ -39,8 +39,9 @@ FILES=(
 
 BEFORE="$(/usr/bin/mktemp)"
 AFTER="$(/usr/bin/mktemp)"
+DEPLOY_LOG="$(/usr/bin/mktemp)"
 cleanup() {
-  rm -f "${BEFORE}" "${AFTER}"
+  rm -f "${BEFORE}" "${AFTER}" "${DEPLOY_LOG}"
 }
 trap cleanup EXIT
 
@@ -61,13 +62,18 @@ fingerprint > "${BEFORE}"
 set +e
 INTEGRITAS_ROLLBACK_TEST=1 \
 INTEGRITAS_FAULT_INJECT_PHASE=after-install \
-  "${DEPLOY}" "${SHA}"
+  "${DEPLOY}" "${SHA}" >"${DEPLOY_LOG}" 2>&1
 rc=$?
 set -e
+cat "${DEPLOY_LOG}"
 
 if [[ ${rc} -eq 0 ]]; then
   echo "Rollback test failed: injected deployment unexpectedly succeeded." >&2
   exit 8
+fi
+if ! /usr/bin/grep -Fq "Injecting controlled rollback-test failure after candidate installation." "${DEPLOY_LOG}"; then
+  echo "Rollback test failed before reaching the intentional after-install fault point." >&2
+  exit 13
 fi
 
 CURRENT_AFTER="$(readlink -f "${CURRENT}")"

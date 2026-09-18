@@ -77,6 +77,7 @@ if (!errors.length) {
     [releaseDeploy, 'INTEGRITAS_ROLLBACK_TEST', 'explicit rollback-test gate'],
     [releaseDeploy, 'after-install', 'post-install rollback fault injection point'],
     [rollbackTest, 'INTEGRITAS_FAULT_INJECT_PHASE=after-install', 'privileged rollback acceptance injection'],
+    [rollbackTest, 'Injecting controlled rollback-test failure after candidate installation.', 'rollback test must prove injected fault was reached'],
     [rollbackTest, 'diff -u', 'rollback before/after state comparison'],
     [releaseDeploy, 'mv -Tf', 'atomic current-release symlink switch'],
     [releaseDeploy, 'systemctl restart "${GATEWAY}"', 'provider-aware Gateway restart'],
