@@ -12,6 +12,7 @@ GATEWAY_SERVICE_SRC="$REPO_ROOT/infra/openclaw/openclaw-gateway.service"
 RUNNER_SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-openclaw-investigation@.service"
 RUNNER_SCRIPT_SRC="$REPO_ROOT/infra/openclaw/investigation-agent-runner.mjs"
 RUNNER_SCRIPT_DEST=/opt/integritas/current/infra/openclaw/investigation-agent-runner.mjs
+GATEWAY_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-gateway.json5"
 RUNNER_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-investigation.json5"
 POLKIT_SRC="$REPO_ROOT/infra/openclaw/49-integritas-openclaw-control.rules"
 ENV_DIR=/etc/integritas
@@ -24,6 +25,7 @@ RUNNER_ROOT=/var/lib/integritas-runner
 SHARED_GROUP=integritas-openclaw
 OPENCLAW_CONFIG_DIR=/etc/openclaw
 OPENCLAW_CONFIG_PATH="$OPENCLAW_CONFIG_DIR/openclaw.json"
+GATEWAY_CONFIG_DEST="$OPENCLAW_CONFIG_DIR/integritas-gateway.json"
 RUNNER_CONFIG_DEST="$OPENCLAW_CONFIG_DIR/integritas-investigation.json"
 
 repair_openclaw_config_permissions() {
@@ -33,6 +35,10 @@ repair_openclaw_config_permissions() {
   if [[ -f "$OPENCLAW_CONFIG_PATH" ]]; then
     chown root:openclaw "$OPENCLAW_CONFIG_PATH"
     chmod 0640 "$OPENCLAW_CONFIG_PATH"
+  fi
+  if [[ -f "$GATEWAY_CONFIG_DEST" ]]; then
+    chown root:openclaw "$GATEWAY_CONFIG_DEST"
+    chmod 0640 "$GATEWAY_CONFIG_DEST"
   fi
   if [[ -f "$RUNNER_CONFIG_DEST" ]]; then
     chown root:openclaw "$RUNNER_CONFIG_DEST"
@@ -68,14 +74,15 @@ validate_provider_env_file() {
 }
 
 validate_openclaw_with_provider_env() {
-  /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/bin PROVIDER_ENV_FILE="$PROVIDER_ENV_FILE" /usr/bin/bash -c '
+  local config_path="$1"
+  /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/bin PROVIDER_ENV_FILE="$PROVIDER_ENV_FILE" OPENCLAW_VALIDATE_CONFIG="$config_path" /usr/bin/bash -c '
     set -a
     . "$PROVIDER_ENV_FILE"
     set +a
     export HOME=/var/lib/openclaw
     export OPENCLAW_HOME=/var/lib/openclaw
     export OPENCLAW_STATE_DIR=/var/lib/openclaw
-    export OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-investigation.json
+    export OPENCLAW_CONFIG_PATH="$OPENCLAW_VALIDATE_CONFIG"
     exec /usr/sbin/runuser --preserve-environment -u openclaw -- /opt/openclaw/bin/openclaw config validate
   '
 }
@@ -83,7 +90,7 @@ validate_openclaw_with_provider_env() {
 for required in /usr/bin/node /usr/bin/systemctl /usr/bin/systemd-analyze /usr/bin/getent /usr/bin/env /usr/bin/bash /usr/bin/grep /usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/sbin/runuser; do
   [[ -x "$required" ]] || { echo "Missing required executable: $required" >&2; exit 1; }
 done
-for required in "$SERVICE_SRC" "$GATEWAY_SERVICE_SRC" "$RUNNER_SERVICE_SRC" "$RUNNER_SCRIPT_SRC" "$RUNNER_CONFIG_SRC" "$POLKIT_SRC"; do
+for required in "$SERVICE_SRC" "$GATEWAY_SERVICE_SRC" "$RUNNER_SERVICE_SRC" "$RUNNER_SCRIPT_SRC" "$GATEWAY_CONFIG_SRC" "$RUNNER_CONFIG_SRC" "$POLKIT_SRC"; do
   [[ -f "$required" ]] || { echo "Missing required file: $required" >&2; exit 1; }
 done
 [[ -d /etc/polkit-1/rules.d ]] || { echo "Polkit rules directory is unavailable" >&2; exit 1; }
@@ -112,6 +119,7 @@ else
   install -o root -g root -m 0755 "$RUNNER_SCRIPT_SRC" "$RUNNER_SCRIPT_DEST"
 fi
 repair_openclaw_config_permissions
+install -o root -g openclaw -m 0640 "$GATEWAY_CONFIG_SRC" "$GATEWAY_CONFIG_DEST"
 install -o root -g openclaw -m 0640 "$RUNNER_CONFIG_SRC" "$RUNNER_CONFIG_DEST"
 repair_openclaw_config_permissions
 install -o root -g root -m 0644 "$POLKIT_SRC" /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
@@ -138,7 +146,8 @@ if [[ ! -f "$TOKEN_FILE" ]]; then
   echo "Created empty $TOKEN_FILE. Provision the scoped worker token through an authenticated operator path before starting the service." >&2
 fi
 
-validate_openclaw_with_provider_env
+validate_openclaw_with_provider_env "$GATEWAY_CONFIG_DEST"
+validate_openclaw_with_provider_env "$RUNNER_CONFIG_DEST"
 /usr/bin/systemctl daemon-reload
 /usr/bin/systemd-analyze verify /etc/systemd/system/integritas-control-worker.service >/dev/null
 /usr/bin/systemd-analyze verify /etc/systemd/system/openclaw-gateway.service >/dev/null
