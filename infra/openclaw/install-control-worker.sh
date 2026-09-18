@@ -8,6 +8,7 @@ fi
 
 REPO_ROOT=${INTEGRITAS_REPO_ROOT:-/opt/integritas/current}
 SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-control-worker.service"
+GATEWAY_SERVICE_SRC="$REPO_ROOT/infra/openclaw/openclaw-gateway.service"
 RUNNER_SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-openclaw-investigation@.service"
 RUNNER_SCRIPT_SRC="$REPO_ROOT/infra/openclaw/investigation-agent-runner.mjs"
 RUNNER_SCRIPT_DEST=/opt/integritas/current/infra/openclaw/investigation-agent-runner.mjs
@@ -82,7 +83,7 @@ validate_openclaw_with_provider_env() {
 for required in /usr/bin/node /usr/bin/systemctl /usr/bin/systemd-analyze /usr/bin/getent /usr/bin/env /usr/bin/bash /usr/bin/grep /usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/sbin/runuser; do
   [[ -x "$required" ]] || { echo "Missing required executable: $required" >&2; exit 1; }
 done
-for required in "$SERVICE_SRC" "$RUNNER_SERVICE_SRC" "$RUNNER_SCRIPT_SRC" "$RUNNER_CONFIG_SRC" "$POLKIT_SRC"; do
+for required in "$SERVICE_SRC" "$GATEWAY_SERVICE_SRC" "$RUNNER_SERVICE_SRC" "$RUNNER_SCRIPT_SRC" "$RUNNER_CONFIG_SRC" "$POLKIT_SRC"; do
   [[ -f "$required" ]] || { echo "Missing required file: $required" >&2; exit 1; }
 done
 [[ -d /etc/polkit-1/rules.d ]] || { echo "Polkit rules directory is unavailable" >&2; exit 1; }
@@ -102,6 +103,7 @@ install -d -o root -g root -m 0755 "$ENV_DIR"
 install -d -o integritas-control -g integritas-control -m 0700 "$STATE_DIR"
 install -d -o integritas-control -g "$SHARED_GROUP" -m 2770 "$RUNNER_ROOT" "$RUNNER_ROOT/jobs"
 install -o root -g root -m 0644 "$SERVICE_SRC" /etc/systemd/system/integritas-control-worker.service
+install -o root -g root -m 0644 "$GATEWAY_SERVICE_SRC" /etc/systemd/system/openclaw-gateway.service
 install -o root -g root -m 0644 "$RUNNER_SERVICE_SRC" /etc/systemd/system/integritas-openclaw-investigation@.service
 if [[ "$RUNNER_SCRIPT_SRC" == "$RUNNER_SCRIPT_DEST" ]]; then
   chown root:root "$RUNNER_SCRIPT_DEST"
@@ -139,6 +141,7 @@ fi
 validate_openclaw_with_provider_env
 /usr/bin/systemctl daemon-reload
 /usr/bin/systemd-analyze verify /etc/systemd/system/integritas-control-worker.service >/dev/null
+/usr/bin/systemd-analyze verify /etc/systemd/system/openclaw-gateway.service >/dev/null
 /usr/bin/systemd-analyze verify /etc/systemd/system/integritas-openclaw-investigation@.service >/dev/null
 
 echo "Integritas control worker and bounded multi-provider OpenClaw investigation runner installed."
