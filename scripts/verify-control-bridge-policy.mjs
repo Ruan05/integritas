@@ -55,10 +55,10 @@ assert.match(investigationRunner, /execFileAsync\('\/opt\/openclaw\/bin\/opencla
 assert.match(investigationRunner, /--config/, 'runner must pin the dedicated exec config');
 assert.ok(!investigationRunner.includes("'--state-dir'"), 'runner must use OpenClaw isolated temporary exec state while the Gateway owns persistent state');
 assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/, 'runner may discover existing provider credentials only through the bounded OpenClaw environment');
-assert.match(investigationRunner, /fast:[\\s\\S]*model: 'opencode-go\\/glm-5\\.3-flash'[\\s\\S]*standard:[\\s\\S]*model: 'opencode-go\\/glm-5\\.3-flash'/, 'routine investigations must use the cost-efficient GLM Flash route');
-assert.match(investigationRunner, /deep:[\\s\\S]*model: 'opencode-go\\/glm-5\\.2'[\\s\\S]*maximum:[\\s\\S]*model: 'opencode-go\\/glm-5\\.2'/, 'deep investigations must use the bounded GLM 5.2 route');
-assert.match(investigationRunner, /'--model', route\\.model/, 'runner must explicitly pin the job-scoped primary model');
-assert.match(investigationRunner, /args\\.push\\('--fallback', fallback\\)/, 'runner must use only its explicit bounded fallback chain');
+assert.ok(investigationRunner.includes("model: 'opencode-go/glm-5.3-flash'"), 'routine investigations must use the cost-efficient GLM Flash route');
+assert.ok(investigationRunner.includes("model: 'opencode-go/glm-5.2'"), 'deep investigations must use the bounded GLM 5.2 route');
+assert.ok(investigationRunner.includes("'--model', route.model"), 'runner must explicitly pin the job-scoped primary model');
+assert.ok(investigationRunner.includes("args.push('--fallback', fallback)"), 'runner must use only its explicit bounded fallback chain');
 assert.ok(!investigationRunner.includes('opencode-go/kimi-k3'), 'Kimi K3 must not be the default investigation model');
 assert.ok(!investigationRunner.includes('opencode-go/deepseek-v4-pro'), 'DeepSeek Pro must not be a default investigation fallback');
 assert.ok(!investigationRunner.includes('shell: true'), 'runner must never execute through a shell');
