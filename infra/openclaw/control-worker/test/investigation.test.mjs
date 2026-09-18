@@ -57,6 +57,7 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
   const systemCalls = [];
   const client = {
     baseUrl: 'https://project.supabase.co/functions/v1/integritas-control',
+    storageSelfTest: async () => ({ storage: { ok: true } }),
     manifest: async () => manifestFor(bytes, sha256, { job_stage: 'verifying', job_progress: 80 }),
     checkpoint: async (...args) => { checkpoints.push(args); return { ok: true }; },
     publishOutput: async (...args) => { outputs.push(args); return { ok: true }; },
@@ -159,6 +160,7 @@ test('rejects a document digest mismatch before starting OpenClaw', async () => 
   let started = false;
   const client = {
     baseUrl: 'https://project.supabase.co/functions/v1/integritas-control',
+    storageSelfTest: async () => ({ storage: { ok: true } }),
     manifest: async () => manifestFor(bytes, 'a'.repeat(64)),
     checkpoint: async () => ({ ok: true }),
     publishOutput: async () => ({ ok: true }),
@@ -193,6 +195,7 @@ test('acknowledges a requested cancellation before launching OpenClaw', async ()
   let started = false;
   const client = {
     baseUrl: 'https://project.supabase.co/functions/v1/integritas-control',
+    storageSelfTest: async () => ({ storage: { ok: true } }),
     manifest: async () => manifestFor(bytes, sha256, { cancel_requested: true }),
     checkpoint: async (...args) => { checkpoints.push(args); return { ok: true }; },
     acknowledgeCancel: async (...args) => { acknowledgements.push(args); return { ok: true }; },
@@ -226,6 +229,7 @@ test('stops the scoped OpenClaw unit when cancellation arrives during execution'
   let unitState = 'inactive';
   const client = {
     baseUrl: 'https://project.supabase.co/functions/v1/integritas-control',
+    storageSelfTest: async () => ({ storage: { ok: true } }),
     manifest: async () => manifestFor(bytes, sha256),
     checkpoint: async () => ({ ok: true }),
     jobState: async () => ({ state: {
@@ -298,6 +302,7 @@ test('rejoins an already-running scoped unit after worker restart without starti
   };
   const client = {
     baseUrl: 'https://project.supabase.co/functions/v1/integritas-control',
+    storageSelfTest: async () => ({ storage: { ok: true } }),
     manifest: async () => manifestFor(bytes, sha256, { job_stage: 'analyzing_documents', job_progress: 15 }),
     checkpoint: async () => ({ ok: true }),
     jobState: async () => ({ state: { cancel_requested: false, stale_revision: false, job_progress: 15, job_stage: 'analyzing_documents' } }),

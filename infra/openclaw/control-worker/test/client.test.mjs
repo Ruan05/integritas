@@ -32,6 +32,7 @@ test('investigation methods use bounded worker actions without embedding credent
     workerId: 'oracle-primary', fetchImpl,
   });
 
+  await client.storageSelfTest('11111111-1111-4111-8111-111111111111');
   await client.manifest('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222');
   await client.checkpoint('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 4, 'researching', 55, { branch_count: 2 });
   await client.publishOutput('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 4, 'bundle', 'application/json', 'abc', 'a'.repeat(64));
@@ -40,9 +41,31 @@ test('investigation methods use bounded worker actions without embedding credent
   await client.acknowledgeCancel('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222');
 
   assert.deepEqual(bodies.map((body) => body.action), [
-    'worker_manifest', 'worker_checkpoint', 'worker_publish_output', 'worker_commit_bundle',
+    'worker_storage_selftest', 'worker_manifest', 'worker_checkpoint', 'worker_publish_output', 'worker_commit_bundle',
     'worker_job_state', 'worker_cancel_ack',
   ]);
   assert.ok(bodies.every((body) => body.worker_id === 'oracle-primary'));
   assert.ok(bodies.every((body) => !JSON.stringify(body).includes('top-secret')));
+});
+
+
+test('preserves bounded control error detail for diagnosis', async () => {
+  const client = new ControlClient({
+    baseUrl: 'https://example.invalid/control',
+    workerToken: 'token',
+    workerId: 'oracle-primary',
+    fetchImpl: async () => ({
+      ok: false,
+      status: 500,
+      text: async () => JSON.stringify({
+        error: 'control_request_failed',
+        detail: 'storage self-test upload failed: mime type application/json is not allowed',
+      }),
+    }),
+  });
+
+  await assert.rejects(
+    client.storageSelfTest('11111111-1111-4111-8111-111111111111'),
+    /mime type application\/json is not allowed/,
+  );
 });

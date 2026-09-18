@@ -34,6 +34,13 @@ assert.match(source, /createSignedUrls/, 'manifest action must create short-live
 assert.match(source, /action === 'worker_checkpoint'/, 'worker checkpoint action must be explicit');
 assert.match(source, /integritas_checkpoint_case_investigation/, 'checkpoint action must use a bounded database RPC');
 assert.match(source, /action === 'worker_publish_output'/, 'worker output publishing must be explicit');
+assert.match(source, /action === 'worker_storage_selftest'/, 'worker storage readiness self-test must be explicit');
+assert.match(source, /storage\.updateBucket\(CASE_FILES_BUCKET/, 'storage readiness must use the Storage API rather than direct storage-schema SQL');
+assert.match(source, /allowedMimeTypes: CASE_FILES_BUCKET_ALLOWED_MIME_TYPES/, 'storage readiness must enforce the bounded MIME allowlist');
+assert.match(source, /storage self-test cleanup failed/, 'storage self-test artifacts must be removed');
+assert.match(source, /investigation artifact cleanup failed/, 'failed output registration must clean up the uploaded object');
+assert.match(source, /contentType === 'text\/markdown'/, 'Markdown outputs must be treated as text for signed-URL leak checks');
+assert.match(source, /return 'md'/, 'Markdown outputs must use the .md extension');
 assert.match(source, /integritas_register_case_job_output/, 'published outputs must be registered through a bounded database RPC');
 assert.match(source, /action === 'worker_commit_bundle'/, 'worker bundle commit action must be explicit');
 assert.match(source, /integritas_commit_investigation_bundle/, 'worker bundle commit must use the atomic database RPC');
@@ -51,6 +58,7 @@ for (const key of ['document_count', 'bundle_sha256', 'report_sha256', 'qa_summa
   assert.match(runtimeContractSource, new RegExp(`'${key}'`), `shared checkpoint contract must allow ${key}`);
 }
 assert.match(runtimeContractSource, /'report_markdown'/, 'shared output contract must allow canonical Markdown reports');
+assert.match(runtimeContractSource, /'text\/markdown'/, 'shared content-type contract must allow Markdown output');
 assert.match(source, /integritas-case-files/, 'investigation artifacts must remain in the private case-files bucket');
 
 for (const dangerous of [

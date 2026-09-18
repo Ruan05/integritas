@@ -35,6 +35,9 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const CASE_FILES_BUCKET = 'integritas-case-files';
 const MAX_INVESTIGATION_ARTIFACT_BYTES = 5 * 1024 * 1024;
+const CASE_FILES_BUCKET_ALLOWED_MIME_TYPES = [
+  'application/pdf', 'text/plain', 'text/markdown', 'text/csv', 'application/json',
+];
 
 function secureEquals(a: string, b: string): boolean {
   if (!a || !b || a.length !== b.length) return false;
@@ -106,13 +109,39 @@ function decodeArtifactContent(content: unknown, encoding: unknown): Uint8Array 
 function outputExtension(contentType: string): string {
   if (contentType === 'application/json') return 'json';
   if (contentType === 'text/html') return 'html';
+  if (contentType === 'text/markdown') return 'md';
   if (contentType === 'text/plain') return 'txt';
+  if (contentType === 'text/csv') return 'csv';
   return 'bin';
 }
 
 function safeError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error
+    ? error.message
+    : (isObject(error) && typeof error.message === 'string' ? error.message : String(error));
   return message.replace(/(bearer|token|password|secret|key)\s*[:=]\s*\S+/gi, '$1=[redacted]').slice(0, 800);
+}
+
+async function ensureCaseFilesStorageReady(workerId: string, commandId: string) {
+  const { error: updateError } = await service.storage.updateBucket(CASE_FILES_BUCKET, {
+    public: false,
+    fileSizeLimit: MAX_INVESTIGATION_ARTIFACT_BYTES,
+    allowedMimeTypes: CASE_FILES_BUCKET_ALLOWED_MIME_TYPES,
+  });
+  if (updateError) throw new Error('storage bucket configuration failed: ' + safeError(updateError));
+
+  const safeWorkerId = workerId.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80);
+  const probePath = 'system/output-self-tests/' + safeWorkerId + '/' + commandId + '.json';
+  const probe = new TextEncoder().encode('{"integritas_output_self_test":true}');
+  const { error: uploadError } = await service.storage.from(CASE_FILES_BUCKET).upload(probePath, probe, {
+    contentType: 'application/json',
+    upsert: true,
+  });
+  if (uploadError) throw new Error('storage self-test upload failed: ' + safeError(uploadError));
+
+  const { error: removeError } = await service.storage.from(CASE_FILES_BUCKET).remove([probePath]);
+  if (removeError) throw new Error('storage self-test cleanup failed: ' + safeError(removeError));
+  return { ok: true, bucket: CASE_FILES_BUCKET };
 }
 
 async function authenticateAdmin(req: Request) {
@@ -205,6 +234,11 @@ Deno.serve(async (req) => {
       const commandId = typeof body.command_id === 'string' ? body.command_id : '';
       if (!/^[0-9a-f-]{36}$/i.test(commandId)) return json({ error: 'invalid_command_id' }, 400, origin);
 
+      if (action === 'worker_storage_selftest') {
+        const storage = await ensureCaseFilesStorageReady(workerId, commandId);
+        return json({ storage }, 200, origin);
+      }
+
       if (action === 'worker_manifest') {
         const caseJobId = body.case_job_id;
         if (!validUuid(caseJobId)) return json({ error: 'invalid_case_job_id' }, 400, origin);
@@ -269,7 +303,7 @@ Deno.serve(async (req) => {
         if (!bytes || bytes.byteLength > MAX_INVESTIGATION_ARTIFACT_BYTES) {
           return json({ error: 'invalid_output_content' }, 400, origin);
         }
-        if ((contentType === 'application/json' || contentType === 'text/html' || contentType === 'text/plain')
+        if ((contentType === 'application/json' || contentType === 'text/html' || contentType === 'text/plain' || contentType === 'text/markdown')
           && new TextDecoder().decode(bytes).includes('/storage/v1/object/sign/')) {
           return json({ error: 'signed_url_persistence_forbidden' }, 400, origin);
         }
@@ -284,12 +318,19 @@ Deno.serve(async (req) => {
           contentType, upsert: true,
         });
         if (uploadError) throw uploadError;
-        const output = await rpc('integritas_register_case_job_output', {
-          p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
-          p_case_revision: caseRevision, p_output_type: outputType, p_content_type: contentType,
-          p_storage_path: storagePath, p_sha256: actualSha, p_size_bytes: bytes.byteLength,
-          p_safe_metadata: {},
-        });
+        let output;
+        try {
+          output = await rpc('integritas_register_case_job_output', {
+            p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
+            p_case_revision: caseRevision, p_output_type: outputType, p_content_type: contentType,
+            p_storage_path: storagePath, p_sha256: actualSha, p_size_bytes: bytes.byteLength,
+            p_safe_metadata: {},
+          });
+        } catch (error) {
+          const { error: cleanupError } = await service.storage.from(CASE_FILES_BUCKET).remove([storagePath]);
+          if (cleanupError) console.error('investigation artifact cleanup failed', safeError(cleanupError));
+          throw error;
+        }
         return json({ output }, 200, origin);
       }
 

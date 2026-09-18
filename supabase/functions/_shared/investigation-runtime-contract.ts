@@ -14,7 +14,7 @@ export const CHECKPOINT_METADATA_KEYS = new Set([
 
 export const INVESTIGATION_OUTPUT_TYPES = new Set(['bundle', 'report_markdown', 'report_html', 'evidence', 'execution_log']);
 export const INVESTIGATION_CONTENT_TYPES = new Set([
-  'application/json', 'text/html', 'application/octet-stream', 'text/plain',
+  'application/json', 'text/html', 'application/octet-stream', 'text/plain', 'text/markdown',
 ]);
 
 export const REQUIRED_INVESTIGATION_CAPABILITIES = Object.freeze([

@@ -22,7 +22,11 @@ export class ControlClient {
     const text = await response.text();
     let data;
     try { data = text ? JSON.parse(text) : {}; } catch { data = { error: 'invalid_json_response' }; }
-    if (!response.ok) throw new Error(`control API ${action} failed: ${response.status} ${data.error ?? ''}`.trim());
+    if (!response.ok) {
+      const detail = typeof data.detail === 'string' ? data.detail.slice(0, 800) : '';
+      const message = ['control API ' + action + ' failed: ' + response.status, data.error, detail].filter(Boolean).join(' ');
+      throw new Error(message);
+    }
     return data;
   }
 
@@ -31,6 +35,7 @@ export class ControlClient {
   touch(commandId) { return this.call('worker_touch', { command_id: commandId }); }
   complete(commandId, result) { return this.call('worker_complete', { command_id: commandId, result_summary: result }); }
   fail(commandId, code, summary) { return this.call('worker_fail', { command_id: commandId, error_code: code, error_summary: summary }); }
+  storageSelfTest(commandId) { return this.call('worker_storage_selftest', { command_id: commandId }); }
   manifest(commandId, caseJobId) { return this.call('worker_manifest', { command_id: commandId, case_job_id: caseJobId }); }
   checkpoint(commandId, caseJobId, caseRevision, stage, progress, safeMetadata = {}) {
     return this.call('worker_checkpoint', { command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision, stage, progress, safe_metadata: safeMetadata });

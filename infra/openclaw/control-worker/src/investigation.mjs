@@ -225,6 +225,7 @@ export async function executeInvestigation(command, {
   let completedSuccessfully = false;
 
   try {
+    await client.storageSelfTest(command.id);
     const manifest = ensureManifest(command, await client.manifest(command.id, jobId), client);
     if (manifest.cancel_requested) {
       await client.acknowledgeCancel(command.id, jobId);
@@ -331,7 +332,7 @@ export async function executeInvestigation(command, {
     const bundleSha = createHash('sha256').update(bundle).digest('hex');
     const reportSha = createHash('sha256').update(report).digest('hex');
     await client.publishOutput(command.id, jobId, revision, 'bundle', 'application/json', bundle.toString('utf8'), bundleSha);
-    await client.publishOutput(command.id, jobId, revision, 'report_markdown', 'text/plain', report.toString('utf8'), reportSha);
+    await client.publishOutput(command.id, jobId, revision, 'report_markdown', 'text/markdown', report.toString('utf8'), reportSha);
     const committed = await client.commitBundle(command.id, jobId, revision, bundleSha, reportSha, bundleJson);
     const commitSummary = committed?.commit_summary ?? {};
     const terminalOutcome = bundleJson.execution.terminal_outcome;
