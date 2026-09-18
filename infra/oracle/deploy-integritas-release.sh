@@ -28,7 +28,7 @@ if [[ ! -d "${NEW}" ]]; then
   chown -R root:root "${NEW}"
 fi
 
-for required in   infra/openclaw/install-control-worker.sh   infra/openclaw/investigation-agent-runner.mjs   infra/openclaw/integritas-investigation.json5   infra/openclaw/integritas-control-worker.service   infra/openclaw/integritas-openclaw-investigation@.service; do
+for required in   infra/openclaw/install-control-worker.sh   infra/openclaw/investigation-agent-runner.mjs   infra/openclaw/integritas-investigation.json5   infra/openclaw/integritas-control-worker.service   infra/openclaw/openclaw-gateway.service   infra/openclaw/integritas-openclaw-investigation@.service; do
   [[ -f "${NEW}/${required}" ]] || { echo "Release is missing ${required}." >&2; exit 6; }
 done
 
@@ -52,6 +52,7 @@ rollback() {
     ln -s "${OLD}" "${tmp}"
     mv -Tf "${tmp}" "${CURRENT}"
     INTEGRITAS_REPO_ROOT="${OLD}" /usr/bin/bash "${OLD}/infra/openclaw/install-control-worker.sh" || true
+    /usr/bin/systemctl restart "${GATEWAY}" || true
   fi
   if [[ ${worker_stopped} -eq 1 ]]; then
     /usr/bin/systemctl restart "${WORKER}" || true
@@ -77,6 +78,8 @@ mv -Tf "${tmp}" "${CURRENT}"
 switched=1
 
 INTEGRITAS_REPO_ROOT="${NEW}" /usr/bin/bash "${NEW}/infra/openclaw/install-control-worker.sh"
+/usr/bin/systemctl restart "${GATEWAY}"
+/usr/bin/systemctl is-active --quiet "${GATEWAY}"
 /usr/bin/systemctl restart "${WORKER}"
 worker_stopped=0
 /usr/bin/systemctl is-active --quiet "${WORKER}"
