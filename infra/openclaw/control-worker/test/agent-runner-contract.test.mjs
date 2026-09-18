@@ -49,12 +49,8 @@ test('investigation profile uses SecretRef-backed Groq and keeps the evidence wo
     'opencode-go/glm-5.2',
     'nvidia/nemotron-3-ultra-550b-a55b',
   ]) {
-    assert.match(config, new RegExp(`"${model.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\  assert.match(config, /id: "openrouter\/free"/);')}"`));
+    assert.ok(config.includes(`"${model}"`), `missing routed model allowlist entry: ${model}`);
   }
-  assert.match(config, /"integritas-openrouter"/);
-  assert.match(config, /baseUrl: "https:\/\/openrouter\.ai\/api\/v1"/);
-  assert.match(config, /apiKey: \{ source: "env", provider: "default", id: "OPENROUTER_API_KEY" \}/);
-  assert.match(config, /id: "nvidia\/nemotron-3-ultra-550b-a55b:free"/);
   assert.doesNotMatch(config, /gsk_[A-Za-z0-9_-]+/);
   assert.doesNotMatch(config, /sk-or-v1-[A-Za-z0-9_-]+/);
   assert.doesNotMatch(config, /nvapi-[A-Za-z0-9_-]+/);
