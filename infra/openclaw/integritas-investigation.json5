@@ -3,11 +3,12 @@
   agents: {
     defaults: {
       sandbox: {
-        workspaceAccess: "rw",
+        workspaceAccess: "ro",
       },
     },
   },
   tools: {
     alsoAllow: ["browser"],
+    deny: ["write", "edit", "exec", "apply_patch"],
   },
 }

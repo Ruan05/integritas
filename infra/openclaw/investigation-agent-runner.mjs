@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
-import { access, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { parseAgentBundle } from './agent-result.mjs';
 
 const execFileAsync = promisify(execFile);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -20,6 +21,7 @@ const args = [
   '--cwd', jobDir,
   '--message-file', path.join(jobDir, 'task.md'),
   '--json',
+  '--code-mode', 'direct',
   '--timeout', '1500',
   '--thinking', thinking,
 ];
@@ -36,10 +38,16 @@ const result = await execFileAsync('/opt/openclaw/bin/openclaw', args, {
   timeout: 26 * 60 * 1000,
   maxBuffer: 5 * 1024 * 1024,
 });
-await writeFile(path.join(jobDir, 'agent-exec.json'), result.stdout, { mode: 0o640 });
-for (const name of ['bundle.json', 'report.md']) {
-  const file = path.join(jobDir, name);
-  await access(file);
-  const info = await stat(file);
-  if (!info.isFile() || info.size < 1 || info.size > 5 * 1024 * 1024) throw new Error(`invalid ${name}`);
+const parsed = parseAgentBundle(result.stdout, manifest);
+
+async function writeSharedAtomic(name, content) {
+  const target = path.join(jobDir, name);
+  const temporary = `${target}.tmp-${process.pid}`;
+  await writeFile(temporary, content, { mode: 0o640 });
+  await chmod(temporary, 0o640);
+  await rename(temporary, target);
 }
+
+await writeSharedAtomic('agent-exec.json', result.stdout);
+await writeSharedAtomic('bundle.json', `${JSON.stringify(parsed.bundle, null, 2)}\n`);
+await writeSharedAtomic('report.md', parsed.reportMarkdown);

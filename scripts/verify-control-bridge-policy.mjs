@@ -58,7 +58,12 @@ assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/
 assert.match(investigationRunner, /fast:\s*'off'.*standard:\s*'off'.*deep:\s*'max'.*maximum:\s*'max'/s, 'runner depth mapping must stay within Kimi K3 supported thinking levels');
 assert.ok(!investigationRunner.includes('shell: true'), 'runner must never execute through a shell');
 assert.match(investigationConfig, /\$include:\s*["']\.\/openclaw\.json["']/, 'investigation config must inherit the pinned OpenClaw config');
-assert.match(investigationConfig, /workspaceAccess:\s*["']rw["']/, 'only the dedicated investigation exec config may expose its job workspace rw');
+assert.match(investigationConfig, /workspaceAccess:\s*["']ro["']/, 'investigation agent workspace must remain read-only');
+assert.match(investigationConfig, /deny:\s*\[[^\]]*["']write["'][^\]]*["']edit["'][^\]]*["']exec["'][^\]]*["']apply_patch["']/s, 'investigation agent must not mutate files or invoke execution tools');
+assert.match(investigationRunner, /'--code-mode', 'direct'/, 'investigation agent must use direct tool mode');
+assert.match(investigationRunner, /parseAgentBundle\(result\.stdout, manifest\)/, 'trusted runner must parse and validate the structured final response');
+assert.match(investigationRunner, /writeSharedAtomic\('bundle\.json'/, 'trusted runner must atomically materialize the canonical bundle');
+assert.match(investigationRunner, /writeSharedAtomic\('report\.md'/, 'trusted runner must derive the canonical report from the validated bundle');
 assert.match(investigationConfig, /alsoAllow:\s*\[[^\]]*["']browser["']/, 'investigation runner must explicitly permit browser research');
 assert.match(installer, /integritas-openclaw/, 'installer must provision the shared investigation group');
 assert.match(installer, /2770/, 'shared spool must use setgid owner-group permissions');

@@ -120,6 +120,7 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     await assert.rejects(access(path.join(spoolRoot, JOB_ID, 'docs', 'DD_EVIDENCE_CONTRACT.md')));
     await assert.rejects(access(path.join(spoolRoot, JOB_ID, 'report.html')));
     assert.deepEqual(outputs.map((entry) => entry[3]), ['bundle', 'report_markdown']);
+    assert.equal(await readFile(path.join(spoolRoot, JOB_ID, 'report.md'), 'utf8'), '# Synthetic DD report\n\nDraft evidence summary.');
     assert.equal(qaCalls.length, 1);
     assert.equal(commits.length, 1);
     assert.equal(commits[0][0], COMMAND_ID);
@@ -129,11 +130,12 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     const task = await readFile(path.join(spoolRoot, JOB_ID, 'task.md'), 'utf8');
     assert.match(task, /integritas-investigation-v1/);
     assert.match(task, /bundle-template\.json/);
-    assert.match(task, /quality_v1\.py/);
-    assert.match(task, /report\.md/);
+    assert.match(task, /final response must be exactly one raw JSON object/i);
+    assert.match(task, /workspace is read-only/i);
+    assert.match(task, /trusted runner will validate/i);
     assert.doesNotMatch(task, /integritas-dd/);
-    assert.doesNotMatch(task, /quality\.py(?:\s|$)/);
-    assert.match(task, /Do not create report\.html/);
+    assert.doesNotMatch(task, /python3/i);
+    assert.doesNotMatch(task, /report\.html/);
     const template = JSON.parse(await readFile(path.join(spoolRoot, JOB_ID, 'bundle-template.json'), 'utf8'));
     assert.equal(template.schema_version, 1);
     assert.equal(template.case_job_id, JOB_ID);
@@ -331,6 +333,7 @@ test('rejoins an already-running scoped unit after worker restart without starti
     assert.equal(showCount, 2);
     assert.ok(systemCalls.every((entry) => entry[1][0] === 'show'));
     assert.equal(outputs.length, 2);
+    assert.equal(await readFile(path.join(jobDir, 'report.md'), 'utf8'), report);
     assert.equal(commits.length, 1);
     assert.equal(await readFile(path.join(jobDir, 'task.md'), 'utf8'), 'active runner task');
     assert.equal(await readFile(path.join(jobDir, 'evidence', 'in-progress.txt'), 'utf8'), 'do not delete');
