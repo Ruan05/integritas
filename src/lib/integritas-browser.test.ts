@@ -7,6 +7,8 @@ import {
   getIntegritasFunctionUrls,
   getAuthRedirectUrl,
   isInvestigationRuntimeReady,
+  isInvestigationResultStale,
+  loadPersistedInvestigationResults,
   validateCaseDocumentSelection,
 } from './integritas-browser';
 
@@ -94,5 +96,65 @@ describe('Integritas browser adapter', () => {
     expect(await client.runtimeStatus('token')).toHaveLength(1);
     expect((await client.commandStatus('token', '11111111-1111-4111-8111-111111111111')).status).toBe('running');
     expect(fetchImpl.mock.calls.map(([, init]) => JSON.parse(String(init.body)).action)).toEqual(['runtime_status', 'command_status']);
+  });
+});
+
+function fakeRlsClient(fixtures: Record<string, unknown[]>) {
+  const calls: Array<{ table: string; columns: string; filters: Record<string, unknown> }> = [];
+  return {
+    calls,
+    from(table: string) {
+      const call = { table, columns: '', filters: {} as Record<string, unknown> };
+      calls.push(call);
+      const query: any = {
+        select(columns: string) { call.columns = columns; return query; },
+        eq(key: string, value: unknown) { call.filters[key] = value; return query; },
+        order() { return query; },
+        limit() { return query; },
+        then(resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) {
+          return Promise.resolve({ data: fixtures[table] ?? [], error: null }).then(resolve, reject);
+        },
+      };
+      return query;
+    },
+  };
+}
+
+describe('persisted investigation result reads', () => {
+  it('detects stale jobs or reports against the current case revision', () => {
+    expect(isInvestigationResultStale(5, 4, 5)).toBe(true);
+    expect(isInvestigationResultStale(5, 5, 4)).toBe(true);
+    expect(isInvestigationResultStale(5, 5, 5)).toBe(false);
+    expect(isInvestigationResultStale(5, 5, null)).toBe(false);
+  });
+
+  it('loads case/job-scoped structured rows through browser RLS reads', async () => {
+    const client = fakeRlsClient({
+      integritas_case_job_checkpoints: [{ id: 'cp-1', stage: 'verifying' }],
+      integritas_entities: [{ id: 'e-1', entity_key: 'person-a', display_name: 'Same Name' }],
+      integritas_relationships: [],
+      integritas_findings: [{ id: 'f-1', finding_key: 'finding-a', claim: 'Claim' }],
+      integritas_sources: [{ id: 's-1', source_key: 'src-1', title: 'Registry' }],
+      integritas_finding_source_links: [{ finding_id: 'f-1', source_id: 's-1' }],
+      integritas_checks: [{ id: 'c-1', check_key: 'unresolved:1', check_type: 'unresolved' }],
+      integritas_reports: [{ id: 'r-1', status: 'draft', based_on_revision: 3 }],
+      integritas_audit_events: [{ id: 1, event_type: 'bundle_committed' }],
+    });
+
+    const result = await loadPersistedInvestigationResults(client as any, 'case-1', 'job-1');
+    expect(result.entities).toHaveLength(1);
+    expect(result.findings[0]?.source_ids).toEqual(['s-1']);
+    expect(result.report?.status).toBe('draft');
+
+    const jobScoped = new Set([
+      'integritas_case_job_checkpoints', 'integritas_entities', 'integritas_relationships',
+      'integritas_findings', 'integritas_sources', 'integritas_finding_source_links',
+      'integritas_checks', 'integritas_reports',
+    ]);
+    for (const call of client.calls) {
+      expect(call.filters.case_id).toBe('case-1');
+      if (jobScoped.has(call.table)) expect(call.filters.case_job_id).toBe('job-1');
+    }
+    expect(client.calls.find((call) => call.table === 'integritas_audit_events')?.filters.case_job_id).toBeUndefined();
   });
 });
