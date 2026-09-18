@@ -81,7 +81,14 @@ reset role;
 set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 select pg_temp.assert_true(
-  (select count(*) from public.integritas_case_job_checkpoints) = 2,
+  (
+    select count(*)
+    from public.integritas_case_job_checkpoints
+    where id in (
+      '31000000-0000-0000-0000-000000000001'::uuid,
+      '31000000-0000-0000-0000-000000000002'::uuid
+    )
+  ) = 2,
   'admin sees checkpoints across cases'
 );
 reset role;
