@@ -22,4 +22,9 @@ test('worker release attests investigation capabilities from the packaged releas
   assert.match(service, /^Group=integritas-openclaw$/m);
   assert.match(service, /^RestrictSUIDSGID=true$/m);
   assert.doesNotMatch(service, /^Group=integritas-control$/m);
+
+  const runnerService = await readFile(new URL('../../integritas-openclaw-investigation@.service', import.meta.url), 'utf8');
+  assert.match(runnerService, /^Group=integritas-openclaw$/m);
+  assert.match(runnerService, /^SupplementaryGroups=openclaw docker$/m);
+  assert.match(runnerService, /^RestrictSUIDSGID=true$/m);
 });

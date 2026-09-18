@@ -7,8 +7,8 @@ ConditionPathIsDirectory=/var/lib/integritas-runner/jobs/%i
 [Service]
 Type=oneshot
 User=openclaw
-Group=openclaw
-SupplementaryGroups=integritas-openclaw docker
+Group=integritas-openclaw
+SupplementaryGroups=openclaw docker
 Environment=HOME=/var/lib/openclaw
 Environment=OPENCLAW_HOME=/var/lib/openclaw
 Environment=OPENCLAW_STATE_DIR=/var/lib/openclaw

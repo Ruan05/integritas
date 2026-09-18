@@ -11,12 +11,13 @@ if (!UUID.test(jobId)) throw new Error('invalid investigation job id');
 const jobDir = `/var/lib/integritas-runner/jobs/${jobId}`;
 const manifest = JSON.parse(await readFile(path.join(jobDir, 'manifest.json'), 'utf8'));
 if (manifest.case_job_id !== jobId) throw new Error('job manifest mismatch');
-const thinking = { fast: 'off', standard: 'off', deep: 'max', maximum: 'max' }[manifest.depth];
+const thinking = { fast: 'low', standard: 'medium', deep: 'high', maximum: 'ultra' }[manifest.depth];
 if (!thinking) throw new Error('invalid investigation depth');
 
 const args = [
   'agent', 'exec',
   '--config', '/etc/openclaw/integritas-investigation.json',
+  '--state-dir', '/var/lib/openclaw',
   '--cwd', jobDir,
   '--message-file', path.join(jobDir, 'task.md'),
   '--json',
