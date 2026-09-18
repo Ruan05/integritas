@@ -93,4 +93,15 @@ select pg_temp.assert_true(
 );
 reset role;
 
+delete from public.integritas_case_job_checkpoints
+where id in (
+  '31000000-0000-0000-0000-000000000001'::uuid,
+  '31000000-0000-0000-0000-000000000002'::uuid
+);
+delete from public.integritas_case_jobs
+where id in (
+  '30000000-0000-0000-0000-000000000001'::uuid,
+  '30000000-0000-0000-0000-000000000002'::uuid
+);
+
 select 'Checkpoint browser-read assertions passed' as result;
