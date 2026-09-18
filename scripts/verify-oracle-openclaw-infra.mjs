@@ -9,6 +9,7 @@ const required = [
   'infra/oracle/provision-always-free-a1.sh',
   'infra/oracle/run-command.sh',
   'infra/oracle/deploy-integritas-release.sh',
+  'infra/oracle/test-release-rollback.sh',
   'infra/openclaw/install-native.sh',
   'infra/openclaw/openclaw-gateway.service',
   'infra/openclaw/openclaw.json5',
@@ -30,6 +31,7 @@ if (!errors.length) {
   const cloudInit = read('infra/oracle/cloud-init-oracle-linux.yaml.tpl');
   const runCommand = read('infra/oracle/run-command.sh');
   const releaseDeploy = read('infra/oracle/deploy-integritas-release.sh');
+  const rollbackTest = read('infra/oracle/test-release-rollback.sh');
   const rollback = read('infra/openclaw/ROLLBACK.md');
   const provision = read('infra/oracle/provision-always-free-a1.sh');
 
@@ -62,6 +64,12 @@ if (!errors.length) {
     [releaseDeploy, 'systemctl stop', 'worker quiesce before release switch'],
     [releaseDeploy, 'integritas-openclaw-investigation@*.service', 'active investigation deployment guard'],
     [releaseDeploy, 'rollback()', 'automatic release rollback handler'],
+    [releaseDeploy, 'snapshot_managed_files', 'pre-deploy managed-file snapshot'],
+    [releaseDeploy, 'restore_managed_files', 'exact managed-file rollback restore'],
+    [releaseDeploy, 'INTEGRITAS_ROLLBACK_TEST', 'explicit rollback-test gate'],
+    [releaseDeploy, 'after-install', 'post-install rollback fault injection point'],
+    [rollbackTest, 'INTEGRITAS_FAULT_INJECT_PHASE=after-install', 'privileged rollback acceptance injection'],
+    [rollbackTest, 'diff -u', 'rollback before/after state comparison'],
     [releaseDeploy, 'mv -Tf', 'atomic current-release symlink switch'],
     [releaseDeploy, 'systemctl restart "${GATEWAY}"', 'provider-aware Gateway restart'],
     [rollback, 'previous-version', 'rollback version record'],

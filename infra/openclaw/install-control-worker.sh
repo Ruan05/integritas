@@ -58,14 +58,14 @@ validate_provider_env_file() {
     }
     name="${BASH_REMATCH[1]}"
     case "$name" in
-      GROQ_API_KEY|OPENROUTER_API_KEY|NVIDIA_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|CEREBRAS_API_KEY|EXA_API_KEY|HF_TOKEN|HUGGINGFACE_HUB_TOKEN) ;;
+      OPENROUTER_API_KEY|NVIDIA_API_KEY) ;;
       *)
         echo "Provider secret file contains an unapproved variable name: $name" >&2
         return 1
         ;;
     esac
   done < "$file"
-  for name in GROQ_API_KEY OPENROUTER_API_KEY NVIDIA_API_KEY; do
+  for name in OPENROUTER_API_KEY NVIDIA_API_KEY; do
     grep -Eq "^${name}=.+" "$file" || {
       echo "Provider secret file is missing required variable $name." >&2
       return 1

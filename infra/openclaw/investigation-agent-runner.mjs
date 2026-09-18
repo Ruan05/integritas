@@ -79,7 +79,7 @@ const env = {
   PATH: '/opt/openclaw/bin:/usr/bin:/bin',
   LANG: 'C',
   ...Object.fromEntries(
-    ['GROQ_API_KEY', 'OPENROUTER_API_KEY', 'NVIDIA_API_KEY', 'GEMINI_API_KEY', 'CEREBRAS_API_KEY', 'EXA_API_KEY', 'HF_TOKEN']
+    ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY']
       .filter((name) => process.env[name])
       .map((name) => [name, process.env[name]]),
   ),

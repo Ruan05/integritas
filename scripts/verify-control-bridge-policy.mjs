@@ -73,8 +73,9 @@ assert.ok(!investigationRunner.includes('shell: true'), 'runner must never execu
 assert.match(investigationConfig, /\$include:\s*["']\.\/openclaw\.json["']/, 'investigation config must inherit the pinned OpenClaw config');
 assert.match(investigationConfig, /workspaceAccess:\s*["']ro["']/, 'investigation evidence workspace must remain read-only');
 assert.match(investigationConfig, /profile:\s*["']minimal["']/, 'investigation agent must start from the minimal tool profile');
-assert.match(investigationConfig, /"integritas-groq"/, 'investigation config must define the narrow Groq custom provider');
-assert.match(investigationConfig, /apiKey:\s*\{\s*source:\s*["']env["'],\s*provider:\s*["']default["'],\s*id:\s*["']GROQ_API_KEY["']\s*\}/, 'Groq key must be an environment SecretRef');
+assert.ok(!investigationConfig.includes('integritas-groq'), 'Groq must not be configured in the production investigation profile');
+assert.ok(!investigationConfig.includes('GROQ_API_KEY'), 'Groq secret must not be referenced by the production investigation profile');
+assert.ok(!installer.match(/for name in[^;]*GROQ_API_KEY/), 'Groq must not be a required production provider secret');
 assert.match(investigationConfig, /"integritas-openrouter"/, 'investigation config must define a fixed OpenRouter provider');
 assert.match(investigationConfig, /apiKey:\s*\{\s*source:\s*["']env["'],\s*provider:\s*["']default["'],\s*id:\s*["']OPENROUTER_API_KEY["']\s*\}/, 'OpenRouter key must be an environment SecretRef');
 assert.match(investigationConfig, /id:\s*["']openrouter\/free["']/, 'investigation config may register the dynamic free router only for emergency fallback');
@@ -94,7 +95,7 @@ assert.match(installer, /chmod 0750 \"\$OPENCLAW_CONFIG_DIR\"/, 'control-worker 
 assert.match(installer, /chmod 0640 \"\$OPENCLAW_CONFIG_PATH\"/, 'control-worker installer must preserve service-readable main config permissions');
 assert.match(installer, /PROVIDER_ENV_FILE=.*provider-secrets\.env/, 'installer must manage a dedicated provider secret environment');
 assert.match(installer, /install -o root -g root -m 0600 \"\$PROVIDER_STAGING_FILE\" \"\$PROVIDER_ENV_FILE\"/, 'provider secrets must be installed root-only');
-for (const requiredProviderKey of ['GROQ_API_KEY', 'OPENROUTER_API_KEY', 'NVIDIA_API_KEY']) {
+for (const requiredProviderKey of ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY']) {
   assert.match(installer, new RegExp(requiredProviderKey), `installer must require ${requiredProviderKey}`);
 }
 assert.match(nativeInstaller, /install -d -m 0750 -o root -g openclaw/, 'native installer must keep OpenClaw config directory private but service-readable');

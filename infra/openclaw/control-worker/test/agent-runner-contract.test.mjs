@@ -32,21 +32,17 @@ test('OpenClaw runner uses independent bounded provider routes by investigation 
   assert.doesNotMatch(source, /opencode-go\/deepseek-v4-pro/);
 });
 
-test('investigation profile uses SecretRef-backed Groq and keeps the evidence workspace read-only', async () => {
+test('investigation profile uses only required provider SecretRefs and keeps the evidence workspace read-only', async () => {
   const config = await readFile(new URL('../../integritas-investigation.json5', import.meta.url), 'utf8');
   assert.match(config, /workspaceAccess: "ro"/);
   assert.match(config, /profile: "minimal"/);
-  assert.match(config, /"integritas-groq"/);
-  assert.match(config, /baseUrl: "https:\/\/api\.groq\.com\/openai\/v1"/);
-  assert.match(config, /apiKey: \{ source: "env", provider: "default", id: "GROQ_API_KEY" \}/);
-  assert.match(config, /id: "openai\/gpt-oss-20b"/);
-  assert.match(config, /id: "openai\/gpt-oss-120b"/);
+  assert.doesNotMatch(config, /integritas-groq/);
+  assert.doesNotMatch(config, /GROQ_API_KEY/);
   assert.match(config, /"integritas-openrouter"/);
+  assert.match(config, /apiKey: \{ source: "env", provider: "default", id: "OPENROUTER_API_KEY" \}/);
   assert.match(config, /id: "nvidia\/nemotron-3-ultra-550b-a55b:free"/);
   assert.match(config, /id: "openrouter\/free"/);
   for (const model of [
-    'integritas-groq/openai/gpt-oss-20b',
-    'integritas-groq/openai/gpt-oss-120b',
     'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
     'integritas-openrouter/openrouter/free',
     'opencode-go/glm-5.3-flash',
@@ -66,10 +62,13 @@ test('investigation profile uses SecretRef-backed Groq and keeps the evidence wo
   }
 });
 
-test('runner passes only approved provider environment names into OpenClaw', async () => {
+test('runner passes only required provider environment names into OpenClaw', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
-  for (const name of ['GROQ_API_KEY', 'OPENROUTER_API_KEY', 'NVIDIA_API_KEY']) {
+  for (const name of ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY']) {
     assert.match(source, new RegExp(`'${name}'`));
+  }
+  for (const name of ['GROQ_API_KEY', 'GEMINI_API_KEY', 'CEREBRAS_API_KEY', 'EXA_API_KEY', 'HF_TOKEN']) {
+    assert.doesNotMatch(source, new RegExp(`'${name}'`));
   }
   assert.match(source, /filter\(\(name\) => process\.env\[name\]\)/);
   assert.doesNotMatch(source, /process\.env\s*[,}]/);
