@@ -63,8 +63,11 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     commitBundle: async (...args) => { commits.push(args); return { commit_summary: { findings: 0, sources: 0 } }; },
   };
   const fetchImpl = async () => new Response(bytes, { status: 200, headers: { 'content-length': String(bytes.length) } });
+  let unitState = 'inactive';
   const systemctlRunner = async (file, args) => {
     systemCalls.push([file, args]);
+    if (args[0] === 'show') return { stdout: `${unitState}\n`, stderr: '' };
+    if (args[0] !== 'start' || args[1] !== '--no-block') throw new Error('unexpected systemctl action');
     const jobDir = path.join(spoolRoot, JOB_ID);
     const expectedGroup = (await stat(spoolRoot)).gid;
     for (const relative of ['manifest.json', 'task.md', 'bundle-template.json', `documents/${DOC_ID}.pdf`, 'skills/integritas-investigation-v1/SKILL.md', 'tools/dd/quality_v1.py', 'contracts/investigation-bundle-v1.schema.json']) {
@@ -89,19 +92,22 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     };
     await writeFile(path.join(jobDir, 'bundle.json'), JSON.stringify(bundle));
     await writeFile(path.join(jobDir, 'report.md'), report);
+    unitState = 'inactive';
     return { stdout: '', stderr: '' };
   };
 
   try {
     const result = await executeInvestigation(command, {
       client, fetchImpl, systemctlRunner, spoolRoot, repoRoot: REPO_ROOT, retainWorkspace: true,
+      statePollMs: 1,
       qaRunner: async (details) => { qaCalls.push(details); return { valid: true, errors: [], summary: { checks: 1 } }; },
     });
     assert.equal(result.ok, true);
     assert.equal(result.terminal_outcome, 'incomplete');
-    assert.deepEqual(systemCalls, [[
-      '/usr/bin/systemctl', ['start', '--wait', `integritas-openclaw-investigation@${JOB_ID}.service`],
-    ]]);
+    assert.deepEqual(systemCalls.map((entry) => entry[1][0]), ['show', 'start', 'show']);
+    assert.deepEqual(systemCalls[1], [
+      '/usr/bin/systemctl', ['start', '--no-block', `integritas-openclaw-investigation@${JOB_ID}.service`],
+    ]);
     const safeManifest = await readFile(path.join(spoolRoot, JOB_ID, 'manifest.json'), 'utf8');
     assert.ok(!safeManifest.includes('download_url'));
     assert.ok(!safeManifest.includes('/storage/v1/object/sign/'));
@@ -211,8 +217,7 @@ test('stops the scoped OpenClaw unit when cancellation arrives during execution'
   const systemCalls = [];
   const acknowledgements = [];
   const outputs = [];
-  let resolveStart;
-  const startPromise = new Promise((resolve) => { resolveStart = resolve; });
+  let unitState = 'inactive';
   const client = {
     baseUrl: 'https://project.supabase.co/functions/v1/integritas-control',
     manifest: async () => manifestFor(bytes, sha256),
@@ -225,9 +230,13 @@ test('stops the scoped OpenClaw unit when cancellation arrives during execution'
   };
   const systemctlRunner = async (file, args) => {
     systemCalls.push([file, args]);
-    if (args[0] === 'start') return startPromise;
+    if (args[0] === 'show') return { stdout: `${unitState}\n`, stderr: '' };
+    if (args[0] === 'start' && args[1] === '--no-block') {
+      unitState = 'activating';
+      return { stdout: '', stderr: '' };
+    }
     if (args[0] === 'stop') {
-      resolveStart({ stdout: '', stderr: '' });
+      unitState = 'inactive';
       return { stdout: '', stderr: '' };
     }
     throw new Error('unexpected systemctl action');
@@ -243,10 +252,66 @@ test('stops the scoped OpenClaw unit when cancellation arrives during execution'
       statePollMs: 1,
     });
     assert.equal(result.cancelled, true);
-    assert.deepEqual(systemCalls.map((entry) => entry[1][0]), ['start', 'stop']);
-    assert.match(systemCalls[1][1][1], new RegExp(`^integritas-openclaw-investigation@${JOB_ID}\\.service$`));
+    assert.deepEqual(systemCalls.map((entry) => entry[1][0]), ['show', 'start', 'stop']);
+    assert.match(systemCalls[2][1][1], new RegExp(`^integritas-openclaw-investigation@${JOB_ID}\\.service$`));
     assert.equal(acknowledgements.length, 1);
     assert.equal(outputs.length, 0);
+  } finally {
+    await rm(spoolRoot, { recursive: true, force: true });
+  }
+});
+
+
+test('rejoins an already-running scoped unit after worker restart without starting it twice', async () => {
+  const spoolRoot = await mkdtemp(path.join(os.tmpdir(), 'integritas-investigation-'));
+  const bytes = Buffer.from('alpha evidence');
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const systemCalls = [];
+  const outputs = [];
+  const commits = [];
+  let showCount = 0;
+  const report = '# Resumed DD report\n\nRecovered after worker restart.';
+  const bundle = {
+    schema_version: 1, case_id: CASE_ID, case_job_id: JOB_ID, case_revision: 7, depth: 'deep',
+    generated_at: '2026-09-18T07:55:00Z', entities: [], relationships: [], sources: [], findings: [], checks: [],
+    contradictions: [], unresolved_checks: [], limitations: [],
+    report: { summary: 'Recovered', markdown: report, status: 'draft' },
+    execution: { started_at: '2026-09-18T07:50:00Z', completed_at: '2026-09-18T07:55:00Z', stages: [], tool_results: [], warnings: [], terminal_outcome: 'incomplete' },
+  };
+  const client = {
+    baseUrl: 'https://project.supabase.co/functions/v1/integritas-control',
+    manifest: async () => manifestFor(bytes, sha256, { job_stage: 'analyzing_documents', job_progress: 15 }),
+    checkpoint: async () => ({ ok: true }),
+    jobState: async () => ({ state: { cancel_requested: false, stale_revision: false, job_progress: 15, job_stage: 'analyzing_documents' } }),
+    publishOutput: async (...args) => { outputs.push(args); return { ok: true }; },
+    commitBundle: async (...args) => { commits.push(args); return { commit_summary: {} }; },
+  };
+  const systemctlRunner = async (file, args) => {
+    systemCalls.push([file, args]);
+    if (args[0] !== 'show') throw new Error('replacement worker must not restart an already-running unit');
+    showCount += 1;
+    if (showCount === 1) return { stdout: 'activating\n', stderr: '' };
+    const jobDir = path.join(spoolRoot, JOB_ID);
+    await writeFile(path.join(jobDir, 'bundle.json'), JSON.stringify(bundle));
+    await writeFile(path.join(jobDir, 'report.md'), report);
+    return { stdout: 'inactive\n', stderr: '' };
+  };
+  try {
+    const result = await executeInvestigation(command, {
+      client,
+      fetchImpl: async () => new Response(bytes, { status: 200 }),
+      systemctlRunner,
+      spoolRoot,
+      repoRoot: REPO_ROOT,
+      retainWorkspace: true,
+      statePollMs: 1,
+      qaRunner: async () => ({ valid: true, errors: [], summary: {} }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(showCount, 2);
+    assert.ok(systemCalls.every((entry) => entry[1][0] === 'show'));
+    assert.equal(outputs.length, 2);
+    assert.equal(commits.length, 1);
   } finally {
     await rm(spoolRoot, { recursive: true, force: true });
   }

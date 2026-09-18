@@ -145,34 +145,37 @@ async function readRecoveryState(client, commandId, jobId) {
   return state;
 }
 
+async function readUnitState(systemctlRunner, unit) {
+  const result = await systemctlRunner('/usr/bin/systemctl', ['show', '--property=ActiveState', '--value', unit]);
+  const state = String(result?.stdout ?? '').trim();
+  if (!['inactive', 'active', 'activating', 'deactivating', 'reloading', 'failed'].includes(state)) {
+    throw new Error(`unexpected OpenClaw unit state: ${state || 'empty'}`);
+  }
+  return state;
+}
+
 async function runAgentWithRecovery({ client, commandId, jobId, systemctlRunner, statePollMs }) {
   const unit = `integritas-openclaw-investigation@${jobId}.service`;
-  const execution = systemctlRunner('/usr/bin/systemctl', ['start', '--wait', unit])
-    .then((value) => ({ done: true, value }))
-    .catch((error) => ({ done: true, error }));
+  let unitState = await readUnitState(systemctlRunner, unit);
+  if (unitState === 'inactive' || unitState === 'failed') {
+    await systemctlRunner('/usr/bin/systemctl', ['start', '--no-block', unit]);
+  }
 
   while (true) {
-    const outcome = await Promise.race([
-      execution,
-      delay(statePollMs).then(() => ({ done: false })),
-    ]);
-    if (outcome.done) {
-      if (outcome.error) throw outcome.error;
-      return { cancelled: false };
-    }
+    await delay(statePollMs);
     const state = await readRecoveryState(client, commandId, jobId);
-    if (!state) continue;
-    if (state.stale_revision) {
+    if (state?.stale_revision) {
       await systemctlRunner('/usr/bin/systemctl', ['stop', unit]);
-      await execution;
       throw new Error('case revision became stale during investigation');
     }
-    if (state.cancel_requested) {
+    if (state?.cancel_requested) {
       await systemctlRunner('/usr/bin/systemctl', ['stop', unit]);
-      await execution;
       await client.acknowledgeCancel(commandId, jobId);
       return { cancelled: true };
     }
+    unitState = await readUnitState(systemctlRunner, unit);
+    if (unitState === 'inactive') return { cancelled: false };
+    if (unitState === 'failed') throw new Error(`OpenClaw investigation unit failed: ${unit}`);
   }
 }
 

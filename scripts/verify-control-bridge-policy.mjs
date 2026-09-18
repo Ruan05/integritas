@@ -72,7 +72,8 @@ assert.match(nativeInstaller, /install -d -m 0750 -o root -g openclaw/, 'native 
 assert.match(nativeInstaller, /chmod 0750 \"\$\{CONFIG_DIR\}\"/, 'native installer must defensively restore config directory traversal before validation');
 assert.match(investigation, /document digest mismatch/, 'worker must verify downloaded evidence digests');
 assert.match(investigation, /url\.hostname !== controlHost/, 'worker must bind signed downloads to the control-plane origin');
-assert.match(investigation, /systemctlRunner\('\/usr\/bin\/systemctl', \['start', '--wait'/, 'worker must start only the fixed oneshot runner via systemd');
+assert.match(investigation, /systemctlRunner\('\/usr\/bin\/systemctl', \['start', '--no-block'/, 'worker must start only the fixed oneshot runner without blocking durable lease renewal');
+assert.match(investigation, /\['show', '--property=ActiveState', '--value', unit\]/, 'worker must poll and rejoin the scoped unit across worker restarts');
 
 assert.match(worker, /INTEGRITAS_CONTROL_WORKER_TOKEN_FILE/, 'worker should support credential-file token loading');
 assert.ok(!worker.includes('console.log(workerToken)'), 'worker token must never be logged');
