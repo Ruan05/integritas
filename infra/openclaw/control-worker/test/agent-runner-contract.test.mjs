@@ -15,10 +15,14 @@ test('OpenClaw runner materializes only validated structured final output', asyn
 
 test('OpenClaw runner uses independent bounded provider routes by investigation depth', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
-  assert.match(source, /fast:[\s\S]*model: 'nvidia\\/nemotron-3-ultra-550b-a55b'[\s\S]*timeoutSeconds: 600/);
-  assert.match(source, /standard:[\s\S]*model: 'nvidia\\/nemotron-3-ultra-550b-a55b'[\s\S]*timeoutSeconds: 900/);
-  assert.match(source, /deep:[\s\S]*model: 'nvidia\\/nemotron-3-ultra-550b-a55b'[\s\S]*timeoutSeconds: 1200/);
-  assert.match(source, /maximum:[\s\S]*model: 'nvidia\\/nemotron-3-ultra-550b-a55b'[\s\S]*timeoutSeconds: 1500/);
+  assert.ok(source.includes("fast: {\n    model: 'nvidia/nemotron-3-ultra-550b-a55b'"));
+  assert.ok(source.includes("standard: {\n    model: 'nvidia/nemotron-3-ultra-550b-a55b'"));
+  assert.ok(source.includes("deep: {\n    model: 'nvidia/nemotron-3-ultra-550b-a55b'"));
+  assert.ok(source.includes("maximum: {\n    model: 'nvidia/nemotron-3-ultra-550b-a55b'"));
+  assert.ok(source.includes("timeoutSeconds: 600"));
+  assert.ok(source.includes("timeoutSeconds: 900"));
+  assert.ok(source.includes("timeoutSeconds: 1200"));
+  assert.ok(source.includes("timeoutSeconds: 1500"));
   assert.match(source, /integritas-openrouter\/nvidia\/nemotron-3-ultra-550b-a55b:free/);
   assert.match(source, /opencode-go\/glm-5\.3-flash/);
   assert.match(source, /opencode-go\/glm-5\.2/);
