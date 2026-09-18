@@ -8,27 +8,43 @@ const execFileAsync = promisify(execFile);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MODEL_ROUTES = Object.freeze({
   fast: {
-    model: 'opencode-go/glm-5.3-flash',
-    fallbacks: ['opencode-go/deepseek-v4.1-flash', 'opencode-go/mimo-v2.5'],
+    model: 'integritas-groq/openai/gpt-oss-20b',
+    fallbacks: [
+      'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
+      'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+      'opencode-go/glm-5.3-flash',
+    ],
     thinking: 'off',
     timeoutSeconds: 600,
   },
   standard: {
-    model: 'opencode-go/glm-5.3-flash',
-    fallbacks: ['opencode-go/deepseek-v4.1-flash', 'opencode-go/mimo-v2.5'],
+    model: 'integritas-groq/openai/gpt-oss-120b',
+    fallbacks: [
+      'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
+      'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+      'opencode-go/glm-5.3-flash',
+    ],
     thinking: 'off',
     timeoutSeconds: 900,
   },
   deep: {
-    model: 'opencode-go/glm-5.2',
-    fallbacks: ['opencode-go/deepseek-v4-flash'],
-    thinking: 'max',
+    model: 'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
+    fallbacks: [
+      'integritas-groq/openai/gpt-oss-120b',
+      'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+      'opencode-go/glm-5.2',
+    ],
+    thinking: 'off',
     timeoutSeconds: 1200,
   },
   maximum: {
-    model: 'opencode-go/glm-5.2',
-    fallbacks: ['opencode-go/deepseek-v4-flash'],
-    thinking: 'max',
+    model: 'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
+    fallbacks: [
+      'integritas-groq/openai/gpt-oss-120b',
+      'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+      'opencode-go/glm-5.2',
+    ],
+    thinking: 'off',
     timeoutSeconds: 1500,
   },
 });
@@ -62,6 +78,11 @@ const env = {
   OPENCLAW_STATE_DIR: '/var/lib/openclaw',
   PATH: '/opt/openclaw/bin:/usr/bin:/bin',
   LANG: 'C',
+  ...Object.fromEntries(
+    ['GROQ_API_KEY', 'OPENROUTER_API_KEY', 'NVIDIA_API_KEY', 'GEMINI_API_KEY', 'CEREBRAS_API_KEY', 'EXA_API_KEY', 'HF_TOKEN']
+      .filter((name) => process.env[name])
+      .map((name) => [name, process.env[name]]),
+  ),
 };
 const result = await execFileAsync('/opt/openclaw/bin/openclaw', args, {
   cwd: jobDir,
