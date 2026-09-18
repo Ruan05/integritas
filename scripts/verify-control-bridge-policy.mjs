@@ -19,6 +19,7 @@ const nativeInstaller = read('infra/openclaw/install-native.sh');
 
 assert.match(gateway, /bind:\s*["']loopback["']/, 'OpenClaw Gateway must remain loopback-only');
 assert.match(service, /^User=integritas-control$/m, 'control worker must use dedicated non-root account');
+assert.match(service, /^Group=integritas-openclaw$/m, 'control worker must use the shared spool group as its primary group');
 assert.match(service, /^NoNewPrivileges=true$/m, 'control worker must retain NoNewPrivileges');
 assert.match(service, /^ProtectSystem=strict$/m, 'control worker must use a read-only system view');
 assert.match(service, /^CapabilityBoundingSet=$/m, 'control worker must receive no Linux capabilities');
@@ -43,7 +44,8 @@ for (const prohibited of ['exec_shell', 'read_environment', 'read_secret', 'plug
 }
 
 assert.match(investigationUnit, /^User=openclaw$/m, 'investigation runner must execute as openclaw');
-assert.match(investigationUnit, /^SupplementaryGroups=.*integritas-openclaw.*docker/m, 'runner gets only shared spool + sandbox group memberships');
+assert.match(investigationUnit, /^Group=integritas-openclaw$/m, 'investigation runner must use the shared spool group as its primary group');
+assert.match(investigationUnit, /^SupplementaryGroups=openclaw docker$/m, 'runner keeps only OpenClaw config and sandbox supplementary groups');
 assert.match(investigationUnit, /^WorkingDirectory=\/var\/lib\/integritas-runner\/jobs\/%i$/m, 'runner working directory must be the UUID-scoped spool');
 assert.match(investigationUnit, /^NoNewPrivileges=true$/m, 'investigation runner must retain NoNewPrivileges');
 assert.match(investigationUnit, /^ProtectSystem=strict$/m, 'investigation runner must retain a read-only system view');
