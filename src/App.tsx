@@ -9,12 +9,16 @@ import {
   getIntegritasFunctionUrls,
   getAuthRedirectUrl,
   isInvestigationRuntimeReady,
+  loadPersistedInvestigationResults,
   SUPPORTED_CASE_FILE_ACCEPT,
   validateCaseDocumentSelection,
   type InvestigationDepth,
+  type PersistedInvestigationResults,
   type RuntimeStatus,
 } from './lib/integritas-browser';
+import { InvestigationResultsView } from './InvestigationResultsView';
 import { isSupabaseConfigured, supabase, supabaseUrl } from './lib/supabase';
+export { InvestigationResultsView } from './InvestigationResultsView';
 
 type CaseRow = { id: string; title: string; revision: number; created_at: string };
 type DocumentRow = { id: string; case_id: string; name: string; created_at: string };
@@ -68,6 +72,7 @@ export function App() {
   const [depth, setDepth] = useState<InvestigationDepth>('deep');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [results, setResults] = useState<PersistedInvestigationResults | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const browserClient = useMemo(() => {
     if (!supabaseUrl) return null;
@@ -180,6 +185,29 @@ export function App() {
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [token, browserClient, job?.id, job?.control_command_id, selectedCaseId]);
 
+  useEffect(() => {
+    if (!token || !supabase || !selectedCaseId || !job?.id) {
+      setResults(null);
+      return;
+    }
+    const dataClient = supabase;
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const next = await loadPersistedInvestigationResults(dataClient, selectedCaseId, job.id);
+        if (!cancelled) setResults(next);
+      } catch (error) {
+        if (!cancelled) {
+          setResults(null);
+          setNotice(error instanceof Error ? error.message : String(error));
+        }
+      }
+    };
+    void refresh();
+    const interval = window.setInterval(refresh, 10_000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [token, selectedCaseId, job?.id]);
+
   const sendMagicLink = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!supabase || !isSupabaseConfigured) { setNotice('Supabase sign-in is not configured for this deployment.'); return; }
@@ -261,7 +289,8 @@ export function App() {
     finally { setBusy(false); }
   };
 
-  const stageIndex = Math.max(0, investigationStages.findIndex(([key]) => key === job?.stage));
+  const activeStageIndex = investigationStages.findIndex(([key]) => key === job?.stage);
+  const stageIndex = activeStageIndex < 0 && job ? investigationStages.length : Math.max(0, activeStageIndex);
 
   return (
     <main className="shell">
@@ -352,15 +381,22 @@ export function App() {
             {job && <p className="muted job-summary">Command status: {commandStatus || 'queued'} · provider: {job.runtime_provider}</p>}
           </article>
 
-          <article className="panel" id="entities">
-            <div className="panel-head"><h2>Evidence-led analysis</h2><span>Review required</span></div>
-            <p className="muted" id="findings">Entities, source-linked findings, evidence, contradictions, and unresolved checks remain separated until the analyst verifies each conclusion.</p>
-            <div className="tag-row"><span id="evidence">Evidence &amp; sources</span><span id="contradictions">Contradictions</span><span id="checks">Unresolved checks</span></div>
-          </article>
+          {results && selectedCase && job ? (
+            <InvestigationResultsView
+              results={results}
+              caseRevision={selectedCase.revision}
+              job={{ case_revision: job.case_revision, stage: job.stage }}
+            />
+          ) : (
+            <article className="panel" id="entities">
+              <div className="panel-head"><h2>Persisted investigation results</h2><span>Awaiting results</span></div>
+              <p className="muted">Structured entities, findings, evidence, checks, and the draft report will appear here from Supabase after the bounded investigation persists them.</p>
+            </article>
+          )}
 
           <article className="panel" id="jobs">
             <div className="panel-head"><h2>OpenClaw due-diligence runner</h2><span>{runtimeReady ? 'Ready' : 'Preflight required'}</span></div>
-            <p className="muted" id="reports">The panel dispatches only typed, case-scoped jobs. The OpenClaw gateway remains private and no browser-exposed shell is used.</p>
+            <p className="muted">The panel dispatches only typed, case-scoped jobs. The OpenClaw gateway remains private and no browser-exposed shell is used.</p>
             <div className="runtime-summary">
               <strong>{runtime?.worker_id ?? 'Oracle worker unavailable'}</strong>
               <small>Worker {runtime?.worker_version ?? '—'} · OpenClaw {runtime?.openclaw_status ?? 'unknown'}</small>
@@ -372,7 +408,7 @@ export function App() {
             <ul className="checks compact-checks">{openClawPreflight.map((check) => <li key={check}>{check}</li>)}</ul>
           </article>
 
-          <article className="panel wide" id="audit">
+          <article className="panel wide" id="audit-boundary">
             <div className="panel-head"><h2>Control and audit boundary</h2><span>Approval-gated</span></div>
             <ul className="checks">
               <li>All case access, investigation actions, and reports are authorised server-side.</li>
