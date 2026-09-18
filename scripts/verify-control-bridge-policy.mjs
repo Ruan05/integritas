@@ -59,7 +59,7 @@ assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/
 assert.ok(investigationRunner.includes("model: 'integritas-groq/openai/gpt-oss-20b'"), 'fast investigations must use the live-proven Groq 20B route');
 assert.ok(investigationRunner.includes("model: 'integritas-groq/openai/gpt-oss-120b'"), 'standard investigations must use the live-proven Groq 120B route');
 assert.ok(investigationRunner.includes("model: 'nvidia/nvidia/nemotron-3-ultra-550b-a55b'"), 'deep investigations must use direct long-context NVIDIA');
-assert.ok(investigationRunner.includes("'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'"), 'OpenRouter must use a fixed free model rather than random routing');
+assert.ok(investigationRunner.includes("'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'"), 'OpenRouter must use a fixed free model through the deterministic custom provider');
 assert.ok(investigationRunner.includes("'opencode-go/glm-5.3-flash'"), 'OpenCode Go may remain only as a last-resort routine fallback');
 assert.ok(investigationRunner.includes("'opencode-go/glm-5.2'"), 'OpenCode Go may remain only as a last-resort deep fallback');
 assert.ok(investigationRunner.includes("'--model', route.model"), 'runner must explicitly pin the job-scoped primary model');
@@ -73,6 +73,8 @@ assert.match(investigationConfig, /workspaceAccess:\s*["']ro["']/, 'investigatio
 assert.match(investigationConfig, /profile:\s*["']minimal["']/, 'investigation agent must start from the minimal tool profile');
 assert.match(investigationConfig, /"integritas-groq"/, 'investigation config must define the narrow Groq custom provider');
 assert.match(investigationConfig, /apiKey:\s*\{\s*source:\s*["']env["'],\s*provider:\s*["']default["'],\s*id:\s*["']GROQ_API_KEY["']\s*\}/, 'Groq key must be an environment SecretRef');
+assert.match(investigationConfig, /"integritas-openrouter"/, 'investigation config must define a fixed OpenRouter provider');
+assert.match(investigationConfig, /apiKey:\s*\{\s*source:\s*["']env["'],\s*provider:\s*["']default["'],\s*id:\s*["']OPENROUTER_API_KEY["']\s*\}/, 'OpenRouter key must be an environment SecretRef');
 assert.ok(!investigationConfig.includes('openrouter/free'), 'investigation config must not use random OpenRouter free routing');
 assert.match(investigationConfig, /deny:\s*\[[^\]]*["']write["'][^\]]*["']edit["'][^\]]*["']exec["'][^\]]*["']apply_patch["']/s, 'investigation agent must not mutate files or invoke execution tools');
 assert.match(investigationRunner, /'--code-mode', 'direct'/, 'investigation agent must use direct tool mode');
