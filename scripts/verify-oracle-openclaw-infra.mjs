@@ -45,6 +45,7 @@ if (!errors.length) {
     [unit, 'User=openclaw', 'non-root Gateway user'],
     [unit, 'NoNewPrivileges=true', 'systemd no-new-privileges'],
     [unit, 'ProtectSystem=strict', 'systemd filesystem protection'],
+    [unit, 'EnvironmentFile=-/etc/integritas/provider-secrets.env', 'provider secret environment'],
     [installer, 'OPENCLAW_VERSION="2026.9.4"', 'pinned OpenClaw stable version'],
     [installer, 'chmod 0755 "${PREFIX}/bin/openclaw"', 'readable executable OpenClaw CLI'],
     [installer, 'v${TARGET_VERSION}', 'pinned OpenClaw source tag'],
@@ -55,6 +56,7 @@ if (!errors.length) {
     [releaseDeploy, 'integritas-openclaw-investigation@*.service', 'active investigation deployment guard'],
     [releaseDeploy, 'rollback()', 'automatic release rollback handler'],
     [releaseDeploy, 'mv -Tf', 'atomic current-release symlink switch'],
+    [releaseDeploy, 'systemctl restart "${GATEWAY}"', 'provider-aware Gateway restart'],
     [rollback, 'previous-version', 'rollback version record'],
     [provision, 'VM.Standard.A1.Flex', 'Always Free A1 shape'],
   ];
