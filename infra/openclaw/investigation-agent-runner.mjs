@@ -11,7 +11,7 @@ const MODEL_ROUTES = Object.freeze({
     model: 'integritas-groq/openai/gpt-oss-20b',
     fallbacks: [
       'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
-      'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+      'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
       'opencode-go/glm-5.3-flash',
     ],
     thinking: 'off',
@@ -21,7 +21,7 @@ const MODEL_ROUTES = Object.freeze({
     model: 'integritas-groq/openai/gpt-oss-120b',
     fallbacks: [
       'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
-      'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+      'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
       'opencode-go/glm-5.3-flash',
     ],
     thinking: 'off',
@@ -31,7 +31,7 @@ const MODEL_ROUTES = Object.freeze({
     model: 'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
     fallbacks: [
       'integritas-groq/openai/gpt-oss-120b',
-      'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+      'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
       'opencode-go/glm-5.2',
     ],
     thinking: 'off',
@@ -41,7 +41,7 @@ const MODEL_ROUTES = Object.freeze({
     model: 'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
     fallbacks: [
       'integritas-groq/openai/gpt-oss-120b',
-      'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+      'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
       'opencode-go/glm-5.2',
     ],
     thinking: 'off',
