@@ -12,6 +12,7 @@ SupplementaryGroups=openclaw docker
 Environment=HOME=/var/lib/openclaw
 Environment=OPENCLAW_HOME=/var/lib/openclaw
 Environment=OPENCLAW_STATE_DIR=/var/lib/openclaw
+EnvironmentFile=-/etc/integritas/provider-secrets.env
 WorkingDirectory=/var/lib/integritas-runner/jobs/%i
 ExecStart=/usr/bin/node /opt/integritas/current/infra/openclaw/investigation-agent-runner.mjs %i
 TimeoutStartSec=1800
