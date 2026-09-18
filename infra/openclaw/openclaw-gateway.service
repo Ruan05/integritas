@@ -13,7 +13,7 @@ SupplementaryGroups=docker
 Environment=HOME=/var/lib/openclaw
 Environment=OPENCLAW_HOME=/var/lib/openclaw
 Environment=OPENCLAW_STATE_DIR=/var/lib/openclaw
-Environment=OPENCLAW_CONFIG_PATH=/etc/openclaw/openclaw.json
+Environment=OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-gateway.json
 Environment=OPENCLAW_SERVICE_REPAIR_POLICY=external
 EnvironmentFile=-/etc/integritas/provider-secrets.env
 ExecStart=/opt/openclaw/bin/openclaw gateway --port 18789
