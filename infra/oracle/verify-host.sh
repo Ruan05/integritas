@@ -35,6 +35,6 @@ echo "Docker service: active"
 echo "Docker socket/container enumeration intentionally skipped for the restricted integritas-control worker."
 
 echo "Listening TCP sockets (review before exposing anything):"
-ss -ltnp 2>/dev/null || ss -ltn
+/usr/sbin/ss -ltnp 2>/dev/null || /usr/sbin/ss -ltn
 
 echo "Host verification complete. This script made no changes."

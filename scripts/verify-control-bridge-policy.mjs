@@ -119,6 +119,7 @@ for (const prohibited of ['exec_shell', 'read_environment', 'read_secret', 'plug
 }
 
 assert.match(verifyHost, /systemctl is-active docker/, 'runtime verifier must check Docker health without Docker socket access');
+assert.match(verifyHost, /\/usr\/sbin\/ss -ltnp/, 'runtime verifier must use an absolute ss path under the restricted worker PATH');
 assert.ok(!verifyHost.includes('docker info'), 'runtime verifier must not require Docker daemon socket access');
 assert.ok(!verifyHost.match(/docker ps\b/), 'runtime verifier must not enumerate containers through the Docker socket');
 
