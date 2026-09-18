@@ -22,6 +22,14 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 for (const file of required) {
   if (!fs.existsSync(path.join(root, file))) errors.push(`missing ${file}`);
 }
+for (const file of [
+  'infra/oracle/deploy-integritas-release.sh',
+  'infra/oracle/test-release-rollback.sh',
+]) {
+  if (fs.existsSync(path.join(root, file)) && (fs.statSync(path.join(root, file)).mode & 0o111) === 0) {
+    errors.push(`release script must be executable in the Git tree: ${file}`);
+  }
+}
 
 if (!errors.length) {
   const config = read('infra/openclaw/openclaw.json5');
