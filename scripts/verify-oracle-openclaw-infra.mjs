@@ -79,30 +79,3 @@ if (errors.length) {
   process.exit(1);
 }
 console.log('Oracle/OpenClaw infrastructure policy verified.');
-, 'exact release SHA validation'],
-    [releaseDeploy, 'systemctl stop', 'worker quiesce before release switch'],
-    [releaseDeploy, 'integritas-openclaw-investigation@*.service', 'active investigation deployment guard'],
-    [releaseDeploy, 'rollback()', 'automatic release rollback handler'],
-    [releaseDeploy, 'mv -Tf', 'atomic current-release symlink switch'],
-    [rollback, 'previous-version', 'rollback version record'],
-    [provision, 'VM.Standard.A1.Flex', 'Always Free A1 shape'],
-  ];
-
-  for (const [text, needle, label] of mustContain) {
-    if (!text.includes(needle)) errors.push(`missing ${label}`);
-  }
-
-  if (config.includes('workspaceAccess: "rw"')) errors.push('rw workspace access is forbidden');
-  if (unit.includes('User=root')) errors.push('Gateway must not run as root');
-  if (cloudInit.includes('NOPASSWD: ALL')) errors.push('unbounded sudo is forbidden');
-  if (runCommand.includes('bash -c "$')) errors.push('arbitrary remote shell is forbidden');
-  if (runCommand.includes('commandString')) errors.push('OCI Run Command must use TEXT source only; commandString duplication is forbidden');
-  if (/\blatest\b/.test(installer)) errors.push('mutable latest release reference is forbidden');
-  if (config.includes('/var/run/docker.sock')) errors.push('model config must not expose the Docker socket');
-}
-
-if (errors.length) {
-  console.error(errors.map((e) => `- ${e}`).join('\n'));
-  process.exit(1);
-}
-console.log('Oracle/OpenClaw infrastructure policy verified.');
