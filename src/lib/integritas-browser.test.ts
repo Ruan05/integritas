@@ -165,5 +165,3 @@ describe('persisted investigation result reads', () => {
     expect(client.calls.find((call) => call.table === 'integritas_audit_events')?.filters.case_job_id).toBeUndefined();
   });
 });
-
-[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

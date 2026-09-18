@@ -41,5 +41,3 @@ If a material check cannot be resolved within the budget, record it as unresolve
 ## Report
 
 Put the complete human-readable Markdown draft report in `report.markdown`, and keep `report.status` equal to `draft`. Cover subjects, evidence reviewed, checks performed, material findings, contradictions, unresolved checks, limitations, and manual next actions. Separate facts from inference and do not automate transaction approval or clearance.
-
-[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
