@@ -37,7 +37,7 @@ test('parses raw v1 JSON from successful agent-exec envelope', () => {
   const value = bundle();
   const envelope = JSON.stringify({
     ok: true, status: 'ok', final: JSON.stringify(value),
-    model: 'kimi-k3', provider: 'opencode-go',
+    model: 'glm-5.3-flash', provider: 'opencode-go',
   });
   const parsed = parseAgentBundle(envelope, manifest);
   assert.deepEqual(parsed.bundle, value);
