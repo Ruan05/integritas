@@ -3,7 +3,7 @@
   agents: {
     defaults: {
       sandbox: {
-        workspaceAccess: "ro",
+        workspaceAccess: "rw",
       },
     },
   },

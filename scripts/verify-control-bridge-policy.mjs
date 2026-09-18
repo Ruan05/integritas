@@ -58,7 +58,7 @@ assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/
 assert.match(investigationRunner, /fast:\s*'off'.*standard:\s*'off'.*deep:\s*'max'.*maximum:\s*'max'/s, 'runner depth mapping must stay within Kimi K3 supported thinking levels');
 assert.ok(!investigationRunner.includes('shell: true'), 'runner must never execute through a shell');
 assert.match(investigationConfig, /\$include:\s*["']\.\/openclaw\.json["']/, 'investigation config must inherit the pinned OpenClaw config');
-assert.match(investigationConfig, /workspaceAccess:\s*["']ro["']/, 'investigation agent workspace must remain read-only');
+assert.match(investigationConfig, /workspaceAccess:\s*["']rw["']/, 'investigation job must mount directly at the sandbox workspace so read tools can access evidence');
 assert.match(investigationConfig, /deny:\s*\[[^\]]*["']write["'][^\]]*["']edit["'][^\]]*["']exec["'][^\]]*["']apply_patch["']/s, 'investigation agent must not mutate files or invoke execution tools');
 assert.match(investigationRunner, /'--code-mode', 'direct'/, 'investigation agent must use direct tool mode');
 assert.match(investigationRunner, /parseAgentBundle\(result\.stdout, manifest\)/, 'trusted runner must parse and validate the structured final response');
