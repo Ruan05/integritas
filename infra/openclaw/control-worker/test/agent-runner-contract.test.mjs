@@ -17,8 +17,8 @@ test('OpenClaw runner uses independent bounded provider routes by investigation 
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
   assert.match(source, /fast:[\s\S]*model: 'integritas-groq\/openai\/gpt-oss-20b'[\s\S]*timeoutSeconds: 600/);
   assert.match(source, /standard:[\s\S]*model: 'integritas-groq\/openai\/gpt-oss-120b'[\s\S]*timeoutSeconds: 900/);
-  assert.match(source, /deep:[\s\S]*model: 'nvidia\/nvidia\/nemotron-3-ultra-550b-a55b'[\s\S]*timeoutSeconds: 1200/);
-  assert.match(source, /maximum:[\s\S]*model: 'nvidia\/nvidia\/nemotron-3-ultra-550b-a55b'[\s\S]*timeoutSeconds: 1500/);
+  assert.match(source, /deep:[\s\S]*model: 'nvidia\/nemotron-3-ultra-550b-a55b'[\s\S]*timeoutSeconds: 1200/);
+  assert.match(source, /maximum:[\s\S]*model: 'nvidia\/nemotron-3-ultra-550b-a55b'[\s\S]*timeoutSeconds: 1500/);
   assert.match(source, /integritas-openrouter\/nvidia\/nemotron-3-ultra-550b-a55b:free/);
   assert.match(source, /opencode-go\/glm-5\.3-flash/);
   assert.match(source, /opencode-go\/glm-5\.2/);
