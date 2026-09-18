@@ -24,7 +24,6 @@ test('OpenClaw runner uses independent bounded provider routes by investigation 
   assert.match(source, /opencode-go\/glm-5\.2/);
   assert.match(source, /'--model', route\.model/);
   assert.match(source, /args\.push\('--fallback', fallback\)/);
-  assert.doesNotMatch(source, /openrouter\/free/);
   assert.doesNotMatch(source, /opencode-go\/kimi-k3/);
   assert.doesNotMatch(source, /opencode-go\/deepseek-v4-pro/);
 });
@@ -38,6 +37,9 @@ test('investigation profile uses SecretRef-backed Groq and keeps the evidence wo
   assert.match(config, /apiKey: \{ source: "env", provider: "default", id: "GROQ_API_KEY" \}/);
   assert.match(config, /id: "openai\/gpt-oss-20b"/);
   assert.match(config, /id: "openai\/gpt-oss-120b"/);
+  assert.match(config, /"integritas-openrouter"/);
+  assert.match(config, /id: "nvidia\/nemotron-3-ultra-550b-a55b:free"/);
+  assert.match(config, /id: "openrouter\/free"/);
   assert.match(config, /"integritas-openrouter"/);
   assert.match(config, /baseUrl: "https:\/\/openrouter\.ai\/api\/v1"/);
   assert.match(config, /apiKey: \{ source: "env", provider: "default", id: "OPENROUTER_API_KEY" \}/);
