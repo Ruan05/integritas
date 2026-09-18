@@ -3,12 +3,13 @@
   agents: {
     defaults: {
       sandbox: {
-        workspaceAccess: "rw",
+        workspaceAccess: "ro",
       },
     },
   },
   tools: {
-    alsoAllow: ["browser"],
-    deny: ["write", "edit", "exec", "apply_patch"],
+    profile: "minimal",
+    alsoAllow: ["ls", "read", "web_search", "web_fetch", "browser", "view_image", "pdf"],
+    deny: ["write", "edit", "exec", "apply_patch", "process", "code_execution", "terminal", "screen", "dashboard", "portal", "sessions", "sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents", "secrets"],
   },
 }
