@@ -161,3 +161,83 @@ export function createIntegritasBrowserClient(options: BrowserClientOptions) {
     },
   };
 }
+
+export type CheckpointRow = { id: string; stage: string; progress: number; safe_metadata: Record<string, unknown>; created_at: string };
+export type EntityResultRow = { id: string; entity_key: string; entity_type: string; display_name: string; match_status: string; match_confidence: number | null; identifiers: Record<string, unknown>; aliases: string[] };
+export type RelationshipResultRow = { id: string; relationship_key: string; from_entity_id: string; to_entity_id: string; relationship_type: string; claim: string; evidence_status: string; confidence: number | null };
+export type FindingResultRow = { id: string; finding_key: string; finding_type: string; claim: string; evidence_status: string; materiality: string; reliability: string; source_ids: string[] };
+export type SourceResultRow = { id: string; source_key: string; source_type: string; title: string; url?: string | null; page_reference?: string | null; excerpt: string; reliability_note: string };
+export type FindingSourceLinkRow = { finding_id: string; source_id: string };
+export type CheckResultRow = { id: string; check_key: string; check_type: string; description: string; status: string; outcome: string };
+export type ReportResultRow = { id: string; status: string; based_on_revision: number; summary: string; content_markdown: string; limitations: string };
+export type AuditEventRow = { id: number | string; event_type: string; created_at: string; safe_metadata: Record<string, unknown> };
+
+export type PersistedInvestigationResults = {
+  checkpoints: CheckpointRow[];
+  entities: EntityResultRow[];
+  relationships: RelationshipResultRow[];
+  findings: FindingResultRow[];
+  sources: SourceResultRow[];
+  sourceLinks: FindingSourceLinkRow[];
+  checks: CheckResultRow[];
+  report: ReportResultRow | null;
+  auditEvents: AuditEventRow[];
+};
+
+export function isInvestigationResultStale(caseRevision: number, jobRevision: number, reportRevision: number | null) {
+  return jobRevision !== caseRevision || (reportRevision !== null && reportRevision !== caseRevision);
+}
+
+type BrowserRlsClient = { from(table: string): any };
+
+async function readRlsRows(client: BrowserRlsClient, table: string, columns: string, caseId: string, jobId?: string) {
+  let query = client.from(table).select(columns).eq('case_id', caseId);
+  if (jobId) query = query.eq('case_job_id', jobId);
+  const result = await query;
+  if (result.error) throw result.error;
+  return Array.isArray(result.data) ? result.data : [];
+}
+
+export async function loadPersistedInvestigationResults(
+  client: BrowserRlsClient,
+  caseId: string,
+  jobId: string,
+): Promise<PersistedInvestigationResults> {
+  const [
+    checkpoints, entities, relationships, findings, sources,
+    sourceLinks, checks, reports, auditEvents,
+  ] = await Promise.all([
+    readRlsRows(client, 'integritas_case_job_checkpoints', 'id,stage,progress,safe_metadata,created_at', caseId, jobId),
+    readRlsRows(client, 'integritas_entities', 'id,entity_key,entity_type,display_name,match_status,match_confidence,identifiers,aliases', caseId, jobId),
+    readRlsRows(client, 'integritas_relationships', 'id,relationship_key,from_entity_id,to_entity_id,relationship_type,claim,evidence_status,confidence', caseId, jobId),
+
+    readRlsRows(client, 'integritas_findings', 'id,finding_key,finding_type,claim,evidence_status,materiality,reliability', caseId, jobId),
+    readRlsRows(client, 'integritas_sources', 'id,source_key,source_type,title,url,page_reference,excerpt,reliability_note', caseId, jobId),
+    readRlsRows(client, 'integritas_finding_source_links', 'finding_id,source_id', caseId, jobId),
+    readRlsRows(client, 'integritas_checks', 'id,check_key,check_type,description,status,outcome', caseId, jobId),
+    readRlsRows(client, 'integritas_reports', 'id,status,based_on_revision,summary,content_markdown,limitations,updated_at', caseId, jobId),
+    readRlsRows(client, 'integritas_audit_events', 'id,event_type,created_at,safe_metadata', caseId),
+  ]);
+  const sourceIdsByFinding = new Map<string, string[]>();
+  for (const link of sourceLinks as FindingSourceLinkRow[]) {
+    const ids = sourceIdsByFinding.get(link.finding_id) ?? [];
+    ids.push(link.source_id);
+    sourceIdsByFinding.set(link.finding_id, ids);
+  }
+  const normalizedFindings = (findings as Omit<FindingResultRow, 'source_ids'>[]).map((finding) => ({
+    ...finding,
+    source_ids: sourceIdsByFinding.get(finding.id) ?? [],
+  }));
+  return {
+    checkpoints: checkpoints as CheckpointRow[],
+    entities: entities as EntityResultRow[],
+    relationships: relationships as RelationshipResultRow[],
+    findings: normalizedFindings,
+    sources: sources as SourceResultRow[],
+
+    sourceLinks: sourceLinks as FindingSourceLinkRow[],
+    checks: checks as CheckResultRow[],
+    report: ((reports as ReportResultRow[])[0] ?? null),
+    auditEvents: auditEvents as AuditEventRow[],
+  };
+}
