@@ -8,6 +8,7 @@ const required = [
   'infra/oracle/cloud-init-oracle-linux.yaml.tpl',
   'infra/oracle/provision-always-free-a1.sh',
   'infra/oracle/run-command.sh',
+  'infra/oracle/deploy-integritas-release.sh',
   'infra/openclaw/install-native.sh',
   'infra/openclaw/openclaw-gateway.service',
   'infra/openclaw/openclaw.json5',
@@ -26,6 +27,7 @@ if (!errors.length) {
   const installer = read('infra/openclaw/install-native.sh');
   const cloudInit = read('infra/oracle/cloud-init-oracle-linux.yaml.tpl');
   const runCommand = read('infra/oracle/run-command.sh');
+  const releaseDeploy = read('infra/oracle/deploy-integritas-release.sh');
   const rollback = read('infra/openclaw/ROLLBACK.md');
   const provision = read('infra/oracle/provision-always-free-a1.sh');
 
@@ -48,6 +50,35 @@ if (!errors.length) {
     [installer, 'v${TARGET_VERSION}', 'pinned OpenClaw source tag'],
     [cloudInit, 'ocarun', 'OCI Run Command user'],
     [runCommand, 'oci instance-agent command create', 'OCI Run Command create call'],
+    [releaseDeploy, '^[0-9a-f]{40}
+    [provision, 'VM.Standard.A1.Flex', 'Always Free A1 shape'],
+  ];
+
+  for (const [text, needle, label] of mustContain) {
+    if (!text.includes(needle)) errors.push(`missing ${label}`);
+  }
+
+  if (config.includes('workspaceAccess: "rw"')) errors.push('rw workspace access is forbidden');
+  if (unit.includes('User=root')) errors.push('Gateway must not run as root');
+  if (cloudInit.includes('NOPASSWD: ALL')) errors.push('unbounded sudo is forbidden');
+  if (runCommand.includes('bash -c "$')) errors.push('arbitrary remote shell is forbidden');
+  if (runCommand.includes('commandString')) errors.push('OCI Run Command must use TEXT source only; commandString duplication is forbidden');
+  if (releaseDeploy.includes('curl ') || releaseDeploy.includes('wget ')) errors.push('release deploy must not fetch executable content from the network');
+  if (releaseDeploy.includes('eval ')) errors.push('release deploy must not use eval');
+  if (/\blatest\b/.test(installer)) errors.push('mutable latest release reference is forbidden');
+  if (config.includes('/var/run/docker.sock')) errors.push('model config must not expose the Docker socket');
+}
+
+if (errors.length) {
+  console.error(errors.map((e) => `- ${e}`).join('\n'));
+  process.exit(1);
+}
+console.log('Oracle/OpenClaw infrastructure policy verified.');
+, 'exact release SHA validation'],
+    [releaseDeploy, 'systemctl stop', 'worker quiesce before release switch'],
+    [releaseDeploy, 'integritas-openclaw-investigation@*.service', 'active investigation deployment guard'],
+    [releaseDeploy, 'rollback()', 'automatic release rollback handler'],
+    [releaseDeploy, 'mv -Tf', 'atomic current-release symlink switch'],
     [rollback, 'previous-version', 'rollback version record'],
     [provision, 'VM.Standard.A1.Flex', 'Always Free A1 shape'],
   ];
