@@ -58,7 +58,7 @@ assert.ok(!investigationRunner.includes("'--state-dir'"), 'runner must use OpenC
 assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/, 'runner may discover existing provider credentials only through the bounded OpenClaw environment');
 assert.ok(investigationRunner.includes("model: 'integritas-groq/openai/gpt-oss-20b'"), 'fast investigations must use the live-proven Groq 20B route');
 assert.ok(investigationRunner.includes("model: 'integritas-groq/openai/gpt-oss-120b'"), 'standard investigations must use the live-proven Groq 120B route');
-assert.ok(investigationRunner.includes("model: 'nvidia/nvidia/nemotron-3-ultra-550b-a55b'"), 'deep investigations must use direct long-context NVIDIA');
+assert.ok(investigationRunner.includes("model: 'nvidia/nemotron-3-ultra-550b-a55b'"), 'deep investigations must use direct long-context NVIDIA');
 assert.ok(investigationRunner.includes("'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'"), 'OpenRouter must use a fixed free model through the deterministic custom provider');
 assert.ok(investigationRunner.includes("'opencode-go/glm-5.3-flash'"), 'OpenCode Go may remain only as a last-resort routine fallback');
 assert.ok(investigationRunner.includes("'opencode-go/glm-5.2'"), 'OpenCode Go may remain only as a last-resort deep fallback');
