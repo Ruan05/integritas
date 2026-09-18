@@ -12,6 +12,7 @@ const required = [
   'infra/openclaw/install-native.sh',
   'infra/openclaw/openclaw-gateway.service',
   'infra/openclaw/openclaw.json5',
+  'infra/openclaw/integritas-gateway.json5',
   'infra/openclaw/ROLLBACK.md',
 ];
 
@@ -24,6 +25,7 @@ for (const file of required) {
 if (!errors.length) {
   const config = read('infra/openclaw/openclaw.json5');
   const unit = read('infra/openclaw/openclaw-gateway.service');
+  const gatewayOverlay = read('infra/openclaw/integritas-gateway.json5');
   const installer = read('infra/openclaw/install-native.sh');
   const cloudInit = read('infra/oracle/cloud-init-oracle-linux.yaml.tpl');
   const runCommand = read('infra/oracle/run-command.sh');
@@ -46,6 +48,11 @@ if (!errors.length) {
     [unit, 'NoNewPrivileges=true', 'systemd no-new-privileges'],
     [unit, 'ProtectSystem=strict', 'systemd filesystem protection'],
     [unit, 'EnvironmentFile=-/etc/integritas/provider-secrets.env', 'provider secret environment'],
+    [unit, 'OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-gateway.json', 'provider-aware Gateway config path'],
+    [gatewayOverlay, '$include: "./openclaw.json"', 'Gateway base-config include'],
+    [gatewayOverlay, 'primary: "integritas-groq/openai/gpt-oss-20b"', 'Gateway Groq primary'],
+    [gatewayOverlay, '"nvidia/nemotron-3-ultra-550b-a55b"', 'Gateway NVIDIA fallback'],
+    [gatewayOverlay, '"integritas-openrouter/openrouter/free"', 'Gateway dynamic free fallback'],
     [installer, 'OPENCLAW_VERSION="2026.9.4"', 'pinned OpenClaw stable version'],
     [installer, 'chmod 0755 "${PREFIX}/bin/openclaw"', 'readable executable OpenClaw CLI'],
     [installer, 'v${TARGET_VERSION}', 'pinned OpenClaw source tag'],
@@ -74,6 +81,7 @@ if (!errors.length) {
   if (releaseDeploy.includes('eval ')) errors.push('release deploy must not use eval');
   if (/\blatest\b/.test(installer)) errors.push('mutable latest release reference is forbidden');
   if (config.includes('/var/run/docker.sock')) errors.push('model config must not expose the Docker socket');
+  if (/gsk_[A-Za-z0-9_-]+|sk-or-v1-[A-Za-z0-9_-]+|nvapi-[A-Za-z0-9_-]+/.test(gatewayOverlay)) errors.push('Gateway overlay must not contain provider secret values');
 }
 
 if (errors.length) {
