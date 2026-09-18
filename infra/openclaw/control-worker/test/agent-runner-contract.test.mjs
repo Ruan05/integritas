@@ -40,6 +40,17 @@ test('investigation profile uses SecretRef-backed Groq and keeps the evidence wo
   assert.match(config, /"integritas-openrouter"/);
   assert.match(config, /id: "nvidia\/nemotron-3-ultra-550b-a55b:free"/);
   assert.match(config, /id: "openrouter\/free"/);
+  for (const model of [
+    'integritas-groq/openai/gpt-oss-20b',
+    'integritas-groq/openai/gpt-oss-120b',
+    'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+    'integritas-openrouter/openrouter/free',
+    'opencode-go/glm-5.3-flash',
+    'opencode-go/glm-5.2',
+    'nvidia/nemotron-3-ultra-550b-a55b',
+  ]) {
+    assert.match(config, new RegExp(`"${model.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\  assert.match(config, /id: "openrouter\/free"/);')}"`));
+  }
   assert.match(config, /"integritas-openrouter"/);
   assert.match(config, /baseUrl: "https:\/\/openrouter\.ai\/api\/v1"/);
   assert.match(config, /apiKey: \{ source: "env", provider: "default", id: "OPENROUTER_API_KEY" \}/);
