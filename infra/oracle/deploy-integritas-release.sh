@@ -52,6 +52,10 @@ rollback() {
     ln -s "${OLD}" "${tmp}"
     mv -Tf "${tmp}" "${CURRENT}"
     INTEGRITAS_REPO_ROOT="${OLD}" /usr/bin/bash "${OLD}/infra/openclaw/install-control-worker.sh" || true
+    if [[ -f "${OLD}/infra/openclaw/openclaw-gateway.service" ]]; then
+      install -o root -g root -m 0644 "${OLD}/infra/openclaw/openclaw-gateway.service" /etc/systemd/system/openclaw-gateway.service || true
+      /usr/bin/systemctl daemon-reload || true
+    fi
     /usr/bin/systemctl restart "${GATEWAY}" || true
   fi
   if [[ ${worker_stopped} -eq 1 ]]; then
