@@ -12,6 +12,7 @@ RELEASES=/opt/integritas/releases
 CURRENT=/opt/integritas/current
 WORKER=integritas-control-worker.service
 GATEWAY=openclaw-gateway.service
+PROVIDER_STAGING_FILE=${INTEGRITAS_PROVIDER_SECRET_STAGING:-/home/opc/.integritas-provider-secrets.env}
 
 [[ "${SHA}" =~ ^[0-9a-f]{40}$ ]] || { echo "Provide one exact 40-character Git commit SHA." >&2; exit 2; }
 [[ -d "${SOURCE_REPO}/.git" ]] || { echo "Source repository is unavailable: ${SOURCE_REPO}" >&2; exit 3; }
@@ -84,6 +85,9 @@ readlink -f "${CURRENT}" | /usr/bin/grep -Fxq "${NEW}"
 
 printf '%s\n' "${SHA}" > /opt/integritas/deployed-release
 chmod 0644 /opt/integritas/deployed-release
+if [[ -f "${PROVIDER_STAGING_FILE}" ]]; then
+  rm -f "${PROVIDER_STAGING_FILE}"
+fi
 trap - ERR
 
 echo "Integritas release ${SHA} deployed successfully."
