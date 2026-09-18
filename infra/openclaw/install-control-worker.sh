@@ -16,6 +16,8 @@ POLKIT_SRC="$REPO_ROOT/infra/openclaw/49-integritas-openclaw-control.rules"
 ENV_DIR=/etc/integritas
 ENV_FILE="$ENV_DIR/control-worker.env"
 TOKEN_FILE="$ENV_DIR/control-worker.token"
+PROVIDER_ENV_FILE="$ENV_DIR/provider-secrets.env"
+PROVIDER_STAGING_FILE=${INTEGRITAS_PROVIDER_SECRET_STAGING:-/home/opc/.integritas-provider-secrets.env}
 STATE_DIR=/var/lib/integritas-control
 RUNNER_ROOT=/var/lib/integritas-runner
 SHARED_GROUP=integritas-openclaw
@@ -37,7 +39,47 @@ repair_openclaw_config_permissions() {
   fi
 }
 
-for required in /usr/bin/node /usr/bin/systemctl /usr/bin/systemd-analyze /usr/bin/getent /usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/sbin/runuser; do
+validate_provider_env_file() {
+  local file="$1"
+  local line name
+  [[ -f "$file" ]] || { echo "Provider secret file is missing." >&2; return 1; }
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" =~ ^([A-Z][A-Z0-9_]*)=.+$ ]] || {
+      echo "Provider secret file contains a malformed line." >&2
+      return 1
+    }
+    name="${BASH_REMATCH[1]}"
+    case "$name" in
+      GROQ_API_KEY|OPENROUTER_API_KEY|NVIDIA_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|CEREBRAS_API_KEY|EXA_API_KEY|HF_TOKEN|HUGGINGFACE_HUB_TOKEN) ;;
+      *)
+        echo "Provider secret file contains an unapproved variable name: $name" >&2
+        return 1
+        ;;
+    esac
+  done < "$file"
+  for name in GROQ_API_KEY OPENROUTER_API_KEY NVIDIA_API_KEY; do
+    grep -Eq "^${name}=.+" "$file" || {
+      echo "Provider secret file is missing required variable $name." >&2
+      return 1
+    }
+  done
+}
+
+validate_openclaw_with_provider_env() {
+  /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/bin PROVIDER_ENV_FILE="$PROVIDER_ENV_FILE" /usr/bin/bash -c '
+    set -a
+    . "$PROVIDER_ENV_FILE"
+    set +a
+    export HOME=/var/lib/openclaw
+    export OPENCLAW_HOME=/var/lib/openclaw
+    export OPENCLAW_STATE_DIR=/var/lib/openclaw
+    export OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-investigation.json
+    exec /usr/sbin/runuser --preserve-environment -u openclaw -- /opt/openclaw/bin/openclaw config validate
+  '
+}
+
+for required in /usr/bin/node /usr/bin/systemctl /usr/bin/systemd-analyze /usr/bin/getent /usr/bin/env /usr/bin/bash /usr/bin/grep /usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/sbin/runuser; do
   [[ -x "$required" ]] || { echo "Missing required executable: $required" >&2; exit 1; }
 done
 for required in "$SERVICE_SRC" "$RUNNER_SERVICE_SRC" "$RUNNER_SCRIPT_SRC" "$RUNNER_CONFIG_SRC" "$POLKIT_SRC"; do
@@ -72,6 +114,12 @@ install -o root -g openclaw -m 0640 "$RUNNER_CONFIG_SRC" "$RUNNER_CONFIG_DEST"
 repair_openclaw_config_permissions
 install -o root -g root -m 0644 "$POLKIT_SRC" /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
 
+if [[ -f "$PROVIDER_STAGING_FILE" ]]; then
+  validate_provider_env_file "$PROVIDER_STAGING_FILE"
+  install -o root -g root -m 0600 "$PROVIDER_STAGING_FILE" "$PROVIDER_ENV_FILE"
+fi
+validate_provider_env_file "$PROVIDER_ENV_FILE"
+
 if [[ ! -f "$ENV_FILE" ]]; then
   cat >"$ENV_FILE" <<'EOF'
 # Non-secret Integritas outbound control-worker settings.
@@ -88,13 +136,10 @@ if [[ ! -f "$TOKEN_FILE" ]]; then
   echo "Created empty $TOKEN_FILE. Provision the scoped worker token through an authenticated operator path before starting the service." >&2
 fi
 
-/usr/sbin/runuser -u openclaw -- env \
-  HOME=/var/lib/openclaw OPENCLAW_HOME=/var/lib/openclaw OPENCLAW_STATE_DIR=/var/lib/openclaw \
-  OPENCLAW_CONFIG_PATH="$RUNNER_CONFIG_DEST" \
-  /opt/openclaw/bin/openclaw config validate
+validate_openclaw_with_provider_env
 /usr/bin/systemctl daemon-reload
 /usr/bin/systemd-analyze verify /etc/systemd/system/integritas-control-worker.service >/dev/null
 /usr/bin/systemd-analyze verify /etc/systemd/system/integritas-openclaw-investigation@.service >/dev/null
 
-echo "Integritas control worker and bounded OpenClaw investigation runner installed."
-echo "Provision/retain the scoped worker token and control URL, then restart integritas-control-worker.service."
+echo "Integritas control worker and bounded multi-provider OpenClaw investigation runner installed."
+echo "Provider secrets are stored root-only in $PROVIDER_ENV_FILE; values were not logged."
