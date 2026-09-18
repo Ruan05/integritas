@@ -90,3 +90,29 @@ select:disabled, input:disabled { opacity: 0.6; }
 .login-card input { width: 100%; border: 1px solid rgba(212, 175, 55, 0.28); border-radius: 8px; padding: 10px; color: #f8f3e7; background: #0b0907; }
 .session-actions { display: flex; justify-content: flex-end; margin: -8px 0 18px; }
 @media (max-width: 820px) { .login-card { grid-template-columns: 1fr; } }
+
+.result-banner { display: flex; gap: 10px; align-items: center; margin: 0 0 18px; padding: 12px 14px; border-radius: 8px; grid-column: 1 / -1; }
+.result-banner strong { flex: none; }
+.result-banner span { color: #d7cbb2; }
+.result-banner.warn { border: 1px solid rgba(212, 175, 55, 0.42); background: rgba(212, 175, 55, 0.12); }
+.result-banner.danger { border: 1px solid rgba(201, 122, 91, 0.45); background: rgba(201, 122, 91, 0.12); }
+.result-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.result-list li { display: grid; gap: 4px; padding: 10px; border: 1px solid rgba(212, 175, 55, 0.16); border-radius: 8px; min-width: 0; }
+.result-list strong, .result-list span { overflow-wrap: anywhere; }
+.result-list small, .finding-card small { color: #9f947d; }
+.result-key { color: #d4af37; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.finding-card { display: grid; gap: 6px; padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.finding-card:last-child { border-bottom: 0; }
+.source-links { margin: 2px 0 0; padding-left: 18px; color: #d4af37; }
+
+.report-markdown { margin: 14px 0 0; padding: 14px; border: 1px solid rgba(212, 175, 55, 0.18); border-radius: 8px; background: #0b0907; color: #e8dcc1; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.55; }
+.report-limitations { margin-top: 12px; color: #c9b98f; }
+.audit-stream { display: grid; gap: 8px; }
+.audit-stream > div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.07); }
+.audit-stream > div:last-child { border-bottom: 0; }
+.audit-stream small { color: #9f947d; text-align: right; overflow-wrap: anywhere; }
+@media (max-width: 820px) {
+  .result-banner { align-items: flex-start; flex-direction: column; }
+  .audit-stream > div { align-items: flex-start; flex-direction: column; }
+  .audit-stream small { text-align: left; }
+}
