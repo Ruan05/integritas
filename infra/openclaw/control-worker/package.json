@@ -2,7 +2,9 @@
   "name": "integritas-control-worker",
   "private": true,
   "type": "module",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "engines": { "node": ">=24" },
   "scripts": { "test": "node --test test/*.test.mjs" }
 }
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

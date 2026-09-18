@@ -48,7 +48,7 @@ function versionAtLeast(version: string | undefined, minimum: [number, number, n
 }
 
 export function isInvestigationRuntimeReady(runtime: RuntimeStatus | null | undefined, now = Date.now()) {
-  if (!runtime || runtime.openclaw_status !== 'active' || !versionAtLeast(runtime.worker_version, [0, 3, 0])) return false;
+  if (!runtime || runtime.openclaw_status !== 'active' || !versionAtLeast(runtime.worker_version, [0, 3, 2])) return false;
   const seen = Date.parse(runtime.last_seen_at ?? '');
   const age = now - seen;
   if (!Number.isFinite(seen) || age < 0 || age > 90_000) return false;
@@ -243,3 +243,5 @@ export async function loadPersistedInvestigationResults(
     auditEvents: auditEvents as AuditEventRow[],
   };
 }
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
