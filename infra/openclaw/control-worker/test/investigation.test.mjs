@@ -42,6 +42,14 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
   const retainedDocument = path.join(retainedDocumentsDir, `${DOC_ID}.pdf`);
   await writeFile(retainedDocument, bytes, { mode: 0o600 });
   await chmod(retainedDocument, 0o600);
+  await mkdir(path.join(spoolRoot, JOB_ID, 'skills', 'integritas-dd'), { recursive: true });
+  await writeFile(path.join(spoolRoot, JOB_ID, 'skills', 'integritas-dd', 'SKILL.md'), 'legacy');
+  await mkdir(path.join(spoolRoot, JOB_ID, 'docs'), { recursive: true });
+  await writeFile(path.join(spoolRoot, JOB_ID, 'docs', 'DD_EVIDENCE_CONTRACT.md'), 'legacy');
+  await mkdir(path.join(spoolRoot, JOB_ID, 'tools', 'dd'), { recursive: true });
+  await writeFile(path.join(spoolRoot, JOB_ID, 'tools', 'dd', 'quality.py'), 'legacy');
+  await writeFile(path.join(spoolRoot, JOB_ID, 'report.html'), '<p>legacy</p>');
+  await writeFile(path.join(spoolRoot, JOB_ID, 'bundle.json'), '{"report_id":"legacy"}');
   const checkpoints = [];
   const outputs = [];
   const commits = [];
@@ -59,16 +67,18 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     systemCalls.push([file, args]);
     const jobDir = path.join(spoolRoot, JOB_ID);
     const expectedGroup = (await stat(spoolRoot)).gid;
-    for (const relative of ['manifest.json', 'task.md', `documents/${DOC_ID}.pdf`, 'skills/integritas-dd/SKILL.md', 'tools/dd/quality_v1.py']) {
+    for (const relative of ['manifest.json', 'task.md', 'bundle-template.json', `documents/${DOC_ID}.pdf`, 'skills/integritas-investigation-v1/SKILL.md', 'tools/dd/quality_v1.py', 'contracts/investigation-bundle-v1.schema.json']) {
       const info = await stat(path.join(jobDir, relative));
       assert.equal(info.mode & 0o777, 0o640, `${relative} must remain group-readable under umask 077`);
       assert.equal(info.gid, expectedGroup, `${relative} must use the shared workspace group`);
     }
-    for (const relative of ['.', 'documents', 'skills', 'skills/integritas-dd', 'tools', 'tools/dd', 'docs']) {
+    for (const relative of ['.', 'documents', 'skills', 'skills/integritas-investigation-v1', 'tools', 'tools/dd', 'contracts']) {
       const info = await stat(path.join(jobDir, relative));
       assert.equal(info.mode & 0o777, 0o770, `${relative} must remain group-accessible without setgid bits`);
       assert.equal(info.gid, expectedGroup, `${relative} must use the shared workspace group`);
     }
+    await assert.rejects(access(path.join(jobDir, 'bundle.json')));
+    await assert.rejects(access(path.join(jobDir, 'report.html')));
     const report = '# Synthetic DD report\n\nDraft evidence summary.';
     const bundle = {
       schema_version: 1, case_id: CASE_ID, case_job_id: JOB_ID, case_revision: 7, depth: 'deep',
@@ -96,10 +106,13 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     assert.ok(!safeManifest.includes('download_url'));
     assert.ok(!safeManifest.includes('/storage/v1/object/sign/'));
     await access(path.join(spoolRoot, JOB_ID, 'documents', `${DOC_ID}.pdf`));
-    await access(path.join(spoolRoot, JOB_ID, 'skills', 'integritas-dd', 'SKILL.md'));
-    await access(path.join(spoolRoot, JOB_ID, 'tools', 'dd', 'quality.py'));
+    await access(path.join(spoolRoot, JOB_ID, 'skills', 'integritas-investigation-v1', 'SKILL.md'));
     await access(path.join(spoolRoot, JOB_ID, 'tools', 'dd', 'quality_v1.py'));
-    await access(path.join(spoolRoot, JOB_ID, 'docs', 'DD_EVIDENCE_CONTRACT.md'));
+    await access(path.join(spoolRoot, JOB_ID, 'contracts', 'investigation-bundle-v1.schema.json'));
+    await assert.rejects(access(path.join(spoolRoot, JOB_ID, 'skills', 'integritas-dd', 'SKILL.md')));
+    await assert.rejects(access(path.join(spoolRoot, JOB_ID, 'tools', 'dd', 'quality.py')));
+    await assert.rejects(access(path.join(spoolRoot, JOB_ID, 'docs', 'DD_EVIDENCE_CONTRACT.md')));
+    await assert.rejects(access(path.join(spoolRoot, JOB_ID, 'report.html')));
     assert.deepEqual(outputs.map((entry) => entry[3]), ['bundle', 'report_markdown']);
     assert.equal(qaCalls.length, 1);
     assert.equal(commits.length, 1);
@@ -108,8 +121,17 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     assert.equal(commits[0][2], 7);
     assert.equal(commits[0][5].schema_version, 1);
     const task = await readFile(path.join(spoolRoot, JOB_ID, 'task.md'), 'utf8');
+    assert.match(task, /integritas-investigation-v1/);
+    assert.match(task, /bundle-template\.json/);
+    assert.match(task, /quality_v1\.py/);
     assert.match(task, /report\.md/);
-    assert.doesNotMatch(task, /report\.html/);
+    assert.doesNotMatch(task, /integritas-dd/);
+    assert.doesNotMatch(task, /quality\.py(?:\s|$)/);
+    assert.match(task, /Do not create report\.html/);
+    const template = JSON.parse(await readFile(path.join(spoolRoot, JOB_ID, 'bundle-template.json'), 'utf8'));
+    assert.equal(template.schema_version, 1);
+    assert.equal(template.case_job_id, JOB_ID);
+    assert.deepEqual(Object.keys(template).sort(), ['case_id','case_job_id','case_revision','checks','contradictions','depth','entities','execution','findings','generated_at','limitations','relationships','report','schema_version','sources','unresolved_checks'].sort());
     assert.ok(checkpoints.every((entry) => entry[4] >= 80));
     assert.ok(!checkpoints.some((entry) => entry[3] === 'extracting'));
     const terminalCheckpoint = checkpoints.find((entry) => entry[3] === 'incomplete' && entry[4] === 100);
