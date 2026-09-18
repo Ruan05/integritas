@@ -29,7 +29,7 @@ test('worker release attests investigation capabilities from the packaged releas
   assert.match(runnerService, /^RestrictSUIDSGID=true$/m);
 
   const investigationConfig = await readFile(new URL('../../integritas-investigation.json5', import.meta.url), 'utf8');
-  assert.match(investigationConfig, /workspaceAccess:\s*["']rw["']/);
+  assert.match(investigationConfig, /workspaceAccess:\\s*["']ro["']/);
   for (const denied of ['write', 'edit', 'exec', 'apply_patch']) {
     assert.match(investigationConfig, new RegExp(`deny:[\\s\\S]*["']${denied}["']`));
   }
