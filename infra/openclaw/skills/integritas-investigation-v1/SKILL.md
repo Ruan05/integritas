@@ -1,3 +1,5 @@
+[Reading 43 lines from start (total: 43 lines, 0 remaining)]
+
 ---
 name: integritas-investigation-v1
 description: Read authorised Integritas case evidence and return one investigation-bundle-v1 JSON object.
@@ -11,7 +13,7 @@ This investigation workspace is read-only. Do not write, edit, patch, or create 
 
 The only valid final format is `/workspace/contracts/investigation-bundle-v1.schema.json`. Read `/workspace/bundle-template.json` and `/workspace/manifest.json`, and preserve their manifest-bound case ID, case job ID, case revision, depth, and top-level structure.
 
-Your final response must be exactly one raw JSON object conforming to investigation-bundle-v1. Do not wrap it in Markdown fences and do not add prose before or after it. The trusted runner will validate this JSON and atomically materialize `bundle.json` and `report.md`.
+Your final response must be exactly one raw JSON object conforming to investigation-bundle-v1. Do not wrap it in Markdown fences and do not add prose before or after it. The trusted runner will validate this JSON and atomically materialize `bundle.json` and `report.md`. Do not add a top-level `metadata` field or any other field not present in `bundle-template.json`.
 
 Do not use legacy fields or formats such as `report_id`, `claims`, `actions`, `executions`, `review`, `publication_status`, or `report.html`.
 
@@ -41,3 +43,5 @@ If a material check cannot be resolved within the budget, record it as unresolve
 ## Report
 
 Put the complete human-readable Markdown draft report in `report.markdown`, and keep `report.status` equal to `draft`. Cover subjects, evidence reviewed, checks performed, material findings, contradictions, unresolved checks, limitations, and manual next actions. Separate facts from inference and do not automate transaction approval or clearance.
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

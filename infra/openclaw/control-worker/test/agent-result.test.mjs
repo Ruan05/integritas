@@ -1,3 +1,5 @@
+[Reading 74 lines from start (total: 74 lines, 0 remaining)]
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseAgentBundle } from '../../agent-result.mjs';
@@ -53,3 +55,24 @@ test('rejects prose, code fences, failed envelopes, and manifest mismatches', ()
   value.case_revision = 8;
   assert.throws(() => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }), manifest), /bundle manifest mismatch/);
 });
+
+test('drops only provider-added top-level metadata before strict validation', () => {
+  const value = bundle();
+  value.metadata = { provider_note: 'non-canonical provider bookkeeping' };
+  const envelope = JSON.stringify({
+    ok: true, status: 'ok', final: JSON.stringify(value),
+    model: 'nvidia/nemotron-3-ultra-550b-a55b', provider: 'nvidia',
+  });
+  const parsed = parseAgentBundle(envelope, manifest);
+  assert.equal(Object.prototype.hasOwnProperty.call(parsed.bundle, 'metadata'), false);
+  assert.equal(parsed.bundle.schema_version, 1);
+
+  const bad = bundle();
+  bad.unexpected = {};
+  assert.throws(
+    () => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(bad) }), manifest),
+    /unknown bundle field: unexpected/,
+  );
+});
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
