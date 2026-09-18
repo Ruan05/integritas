@@ -53,7 +53,9 @@ assert.ok(!investigationUnit.includes('/var/run/docker.sock'), 'investigation un
 assert.match(investigationRunner, /const args = \[\s*'agent', 'exec'/, 'runner arguments must begin with OpenClaw agent exec');
 assert.match(investigationRunner, /execFileAsync\('\/opt\/openclaw\/bin\/openclaw', args/, 'runner must execute only the fixed OpenClaw binary');
 assert.match(investigationRunner, /--config/, 'runner must pin the dedicated exec config');
-assert.match(investigationRunner, /--state-dir/, 'runner must use existing OpenClaw state without copying secrets');
+assert.ok(!investigationRunner.includes("'--state-dir'"), 'runner must use OpenClaw isolated temporary exec state while the Gateway owns persistent state');
+assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/, 'runner may discover existing provider credentials only through the bounded OpenClaw environment');
+assert.match(investigationRunner, /fast:\s*'off'.*standard:\s*'off'.*deep:\s*'max'.*maximum:\s*'max'/s, 'runner depth mapping must stay within Kimi K3 supported thinking levels');
 assert.ok(!investigationRunner.includes('shell: true'), 'runner must never execute through a shell');
 assert.match(investigationConfig, /\$include:\s*["']\.\/openclaw\.json["']/, 'investigation config must inherit the pinned OpenClaw config');
 assert.match(investigationConfig, /workspaceAccess:\s*["']rw["']/, 'only the dedicated investigation exec config may expose its job workspace rw');
