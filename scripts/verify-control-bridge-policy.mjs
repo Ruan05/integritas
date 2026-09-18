@@ -64,7 +64,8 @@ assert.ok(investigationRunner.includes("'opencode-go/glm-5.3-flash'"), 'OpenCode
 assert.ok(investigationRunner.includes("'opencode-go/glm-5.2'"), 'OpenCode Go may remain only as a last-resort deep fallback');
 assert.ok(investigationRunner.includes("'--model', route.model"), 'runner must explicitly pin the job-scoped primary model');
 assert.ok(investigationRunner.includes("args.push('--fallback', fallback)"), 'runner must use only its explicit bounded fallback chain');
-assert.ok(!investigationRunner.includes('openrouter/free'), 'random OpenRouter free routing is forbidden for deterministic investigations');
+assert.ok(investigationRunner.includes("'integritas-openrouter/openrouter/free'"), 'dynamic OpenRouter free routing may be used only as an emergency fallback');
+assert.ok(!investigationRunner.includes("model: 'integritas-openrouter/openrouter/free'"), 'dynamic OpenRouter free routing must never be a primary investigation route');
 assert.ok(!investigationRunner.includes('opencode-go/kimi-k3'), 'Kimi K3 must not be a default investigation model');
 assert.ok(!investigationRunner.includes('opencode-go/deepseek-v4-pro'), 'DeepSeek Pro must not be a default investigation fallback');
 assert.ok(!investigationRunner.includes('shell: true'), 'runner must never execute through a shell');
@@ -75,7 +76,7 @@ assert.match(investigationConfig, /"integritas-groq"/, 'investigation config mus
 assert.match(investigationConfig, /apiKey:\s*\{\s*source:\s*["']env["'],\s*provider:\s*["']default["'],\s*id:\s*["']GROQ_API_KEY["']\s*\}/, 'Groq key must be an environment SecretRef');
 assert.match(investigationConfig, /"integritas-openrouter"/, 'investigation config must define a fixed OpenRouter provider');
 assert.match(investigationConfig, /apiKey:\s*\{\s*source:\s*["']env["'],\s*provider:\s*["']default["'],\s*id:\s*["']OPENROUTER_API_KEY["']\s*\}/, 'OpenRouter key must be an environment SecretRef');
-assert.ok(!investigationConfig.includes('openrouter/free'), 'investigation config must not use random OpenRouter free routing');
+assert.match(investigationConfig, /id:\s*["']openrouter\/free["']/, 'investigation config may register the dynamic free router only for emergency fallback');
 assert.match(investigationConfig, /deny:\s*\[[^\]]*["']write["'][^\]]*["']edit["'][^\]]*["']exec["'][^\]]*["']apply_patch["']/s, 'investigation agent must not mutate files or invoke execution tools');
 assert.match(investigationRunner, /'--code-mode', 'direct'/, 'investigation agent must use direct tool mode');
 assert.match(investigationRunner, /parseAgentBundle\(result\.stdout, manifest\)/, 'trusted runner must parse and validate the structured final response');
