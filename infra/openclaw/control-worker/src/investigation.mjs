@@ -1,5 +1,3 @@
-[Reading 351 lines from start (total: 351 lines, 0 remaining)]
-
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { chmod, chown, copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';

@@ -1,5 +1,3 @@
-[Reading 43 lines from start (total: 43 lines, 0 remaining)]
-
 ---
 name: integritas-investigation-v1
 description: Read authorised Integritas case evidence and return one investigation-bundle-v1 JSON object.

@@ -1,5 +1,3 @@
-[Reading 74 lines from start (total: 74 lines, 0 remaining)]
-
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseAgentBundle } from '../../agent-result.mjs';

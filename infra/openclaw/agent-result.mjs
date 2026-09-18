@@ -1,5 +1,3 @@
-[Reading 53 lines from start (total: 53 lines, 0 remaining)]
-
 import { validateInvestigationBundle } from './control-worker/src/bundle.mjs';
 
 const MAX_AGENT_ENVELOPE_BYTES = 5 * 1024 * 1024;
