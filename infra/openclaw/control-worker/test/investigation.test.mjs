@@ -165,7 +165,11 @@ test('rejects a document digest mismatch before starting OpenClaw', async () => 
     await assert.rejects(
       executeInvestigation(command, {
         client, fetchImpl: async () => new Response(bytes, { status: 200 }),
-        systemctlRunner: async () => { started = true; return { stdout: '', stderr: '' }; },
+        systemctlRunner: async (file, args) => {
+          if (args[0] === 'show') return { stdout: 'inactive\n', stderr: '' };
+          started = true;
+          return { stdout: '', stderr: '' };
+        },
         spoolRoot, repoRoot: REPO_ROOT,
       }),
       /digest mismatch/,
@@ -270,6 +274,18 @@ test('rejoins an already-running scoped unit after worker restart without starti
   const outputs = [];
   const commits = [];
   let showCount = 0;
+  const jobDir = path.join(spoolRoot, JOB_ID);
+  const documentsDir = path.join(jobDir, 'documents');
+  await mkdir(documentsDir, { recursive: true });
+  await mkdir(path.join(jobDir, 'evidence'), { recursive: true });
+  await writeFile(path.join(documentsDir, `${DOC_ID}.pdf`), bytes);
+  const retainedManifest = manifestFor(bytes, sha256).manifest;
+  retainedManifest.documents[0] = { ...retainedManifest.documents[0], download_url: undefined, local_path: `documents/${DOC_ID}.pdf` };
+  delete retainedManifest.expires_in_seconds;
+  await writeFile(path.join(jobDir, 'manifest.json'), JSON.stringify(retainedManifest));
+  await writeFile(path.join(jobDir, 'report.md'), '# Partial report still being written');
+  await writeFile(path.join(jobDir, 'task.md'), 'active runner task');
+  await writeFile(path.join(jobDir, 'evidence', 'in-progress.txt'), 'do not delete');
   const report = '# Resumed DD report\n\nRecovered after worker restart.';
   const bundle = {
     schema_version: 1, case_id: CASE_ID, case_job_id: JOB_ID, case_revision: 7, depth: 'deep',
@@ -290,8 +306,12 @@ test('rejoins an already-running scoped unit after worker restart without starti
     systemCalls.push([file, args]);
     if (args[0] !== 'show') throw new Error('replacement worker must not restart an already-running unit');
     showCount += 1;
-    if (showCount === 1) return { stdout: 'activating\n', stderr: '' };
-    const jobDir = path.join(spoolRoot, JOB_ID);
+    if (showCount === 1) {
+      assert.equal(await readFile(path.join(jobDir, 'report.md'), 'utf8'), '# Partial report still being written');
+      assert.equal(await readFile(path.join(jobDir, 'task.md'), 'utf8'), 'active runner task');
+      assert.equal(await readFile(path.join(jobDir, 'evidence', 'in-progress.txt'), 'utf8'), 'do not delete');
+      return { stdout: 'activating\n', stderr: '' };
+    }
     await writeFile(path.join(jobDir, 'bundle.json'), JSON.stringify(bundle));
     await writeFile(path.join(jobDir, 'report.md'), report);
     return { stdout: 'inactive\n', stderr: '' };
@@ -299,7 +319,7 @@ test('rejoins an already-running scoped unit after worker restart without starti
   try {
     const result = await executeInvestigation(command, {
       client,
-      fetchImpl: async () => new Response(bytes, { status: 200 }),
+      fetchImpl: async () => { throw new Error('replacement worker must not re-download evidence for an active unit'); },
       systemctlRunner,
       spoolRoot,
       repoRoot: REPO_ROOT,
@@ -312,6 +332,8 @@ test('rejoins an already-running scoped unit after worker restart without starti
     assert.ok(systemCalls.every((entry) => entry[1][0] === 'show'));
     assert.equal(outputs.length, 2);
     assert.equal(commits.length, 1);
+    assert.equal(await readFile(path.join(jobDir, 'task.md'), 'utf8'), 'active runner task');
+    assert.equal(await readFile(path.join(jobDir, 'evidence', 'in-progress.txt'), 'utf8'), 'do not delete');
   } finally {
     await rm(spoolRoot, { recursive: true, force: true });
   }

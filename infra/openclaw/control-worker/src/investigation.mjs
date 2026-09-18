@@ -154,9 +154,9 @@ async function readUnitState(systemctlRunner, unit) {
   return state;
 }
 
-async function runAgentWithRecovery({ client, commandId, jobId, systemctlRunner, statePollMs }) {
+async function runAgentWithRecovery({ client, commandId, jobId, systemctlRunner, statePollMs, initialUnitState = null }) {
   const unit = `integritas-openclaw-investigation@${jobId}.service`;
-  let unitState = await readUnitState(systemctlRunner, unit);
+  let unitState = initialUnitState ?? await readUnitState(systemctlRunner, unit);
   if (unitState === 'inactive' || unitState === 'failed') {
     await systemctlRunner('/usr/bin/systemctl', ['start', '--no-block', unit]);
   }
@@ -221,9 +221,7 @@ export async function executeInvestigation(command, {
   const { case_job_id: jobId, case_revision: revision } = command.payload;
   if (!UUID.test(jobId)) throw new Error('invalid investigation job id');
   const jobDir = path.join(spoolRoot, jobId);
-  await mkdir(jobDir, { recursive: true, mode: SHARED_DIR_MODE });
-  await chown(jobDir, -1, process.getgid());
-  await chmod(jobDir, SHARED_DIR_MODE);
+  const unit = `integritas-openclaw-investigation@${jobId}.service`;
   let completedSuccessfully = false;
 
   try {
@@ -233,6 +231,8 @@ export async function executeInvestigation(command, {
       return { ok: true, cancelled: true, case_job_id: jobId, case_revision: revision };
     }
     if (TERMINAL_STAGES.has(manifest.job_stage)) throw new Error(`investigation job is already terminal: ${manifest.job_stage}`);
+    const initialUnitState = await readUnitState(systemctlRunner, unit);
+    const rejoiningActiveUnit = !['inactive', 'failed'].includes(initialUnitState);
     let currentProgress = manifest.job_progress;
     let currentStage = manifest.job_stage;
     const checkpoint = async (stage, progress, safeMetadata = {}) => {
@@ -245,53 +245,61 @@ export async function executeInvestigation(command, {
       currentStage = stage;
       return result;
     };
-    await checkpoint('extracting', 5, { document_count: manifest.documents.length });
-    const documentsDir = path.join(jobDir, 'documents');
-    await ensureSharedDirectory(jobDir, documentsDir);
-    const localDocuments = [];
-    for (const document of manifest.documents) {
+    const localDocuments = manifest.documents.map((document) => {
       const filename = `${document.id}${extensionFor(document.name)}`;
-      const target = path.join(documentsDir, filename);
-      await stageDocument(document, target, fetchImpl);
-      localDocuments.push({ ...document, download_url: undefined, local_path: `documents/${filename}` });
-    }
-
+      return { ...document, download_url: undefined, local_path: `documents/${filename}` };
+    });
     const safeManifest = { ...manifest, documents: localDocuments.map(({ download_url, ...doc }) => doc) };
     delete safeManifest.expires_in_seconds;
-    await cleanLegacyWorkspace(jobDir);
     const manifestPath = path.join(jobDir, 'manifest.json');
-    await writeFile(manifestPath, JSON.stringify(safeManifest, null, 2), { mode: SHARED_FILE_MODE });
-    await chown(manifestPath, -1, process.getgid());
-    await chmod(manifestPath, SHARED_FILE_MODE);
-    await copySupport(repoRoot, jobDir);
-    const templatePath = path.join(jobDir, 'bundle-template.json');
-    await writeFile(templatePath, JSON.stringify(buildBundleTemplate(safeManifest), null, 2), { mode: SHARED_FILE_MODE });
-    await chown(templatePath, -1, process.getgid());
-    await chmod(templatePath, SHARED_FILE_MODE);
-    const taskPath = path.join(jobDir, 'task.md');
-    await writeFile(taskPath, buildTask(safeManifest, localDocuments), { mode: SHARED_FILE_MODE });
-    await chown(taskPath, -1, process.getgid());
-    await chmod(taskPath, SHARED_FILE_MODE);
-    await checkpoint('analyzing_documents', 15, { document_count: localDocuments.length });
+
+    if (!rejoiningActiveUnit) {
+      await mkdir(jobDir, { recursive: true, mode: SHARED_DIR_MODE });
+      await chown(jobDir, -1, process.getgid());
+      await chmod(jobDir, SHARED_DIR_MODE);
+      await checkpoint('extracting', 5, { document_count: manifest.documents.length });
+      const documentsDir = path.join(jobDir, 'documents');
+      await ensureSharedDirectory(jobDir, documentsDir);
+      for (const document of localDocuments) {
+        const sourceDocument = manifest.documents.find((candidate) => candidate.id === document.id);
+        await stageDocument(sourceDocument, path.join(jobDir, document.local_path), fetchImpl);
+      }
+      await cleanLegacyWorkspace(jobDir);
+      await writeFile(manifestPath, JSON.stringify(safeManifest, null, 2), { mode: SHARED_FILE_MODE });
+      await chown(manifestPath, -1, process.getgid());
+      await chmod(manifestPath, SHARED_FILE_MODE);
+      await copySupport(repoRoot, jobDir);
+      const templatePath = path.join(jobDir, 'bundle-template.json');
+      await writeFile(templatePath, JSON.stringify(buildBundleTemplate(safeManifest), null, 2), { mode: SHARED_FILE_MODE });
+      await chown(templatePath, -1, process.getgid());
+      await chmod(templatePath, SHARED_FILE_MODE);
+      const taskPath = path.join(jobDir, 'task.md');
+      await writeFile(taskPath, buildTask(safeManifest, localDocuments), { mode: SHARED_FILE_MODE });
+      await chown(taskPath, -1, process.getgid());
+      await chmod(taskPath, SHARED_FILE_MODE);
+      await checkpoint('analyzing_documents', 15, { document_count: localDocuments.length });
+    }
 
     const bundlePath = path.join(jobDir, 'bundle.json');
     const reportPath = path.join(jobDir, 'report.md');
     let reusable = false;
-    try {
-      const existingBundle = await readBounded(bundlePath);
-      const existingReport = await readBounded(reportPath);
-      const existingJson = JSON.parse(existingBundle.toString('utf8'));
-      validateInvestigationBundle(existingJson, safeManifest, existingReport.toString('utf8'));
-      if (existingBundle.includes('/storage/v1/object/sign/') || existingReport.includes('/storage/v1/object/sign/')) throw new Error('signed URL leaked into retained output');
-      reusable = true;
-    } catch {
-      await rm(bundlePath, { force: true }).catch(() => {});
-      await rm(reportPath, { force: true }).catch(() => {});
-      await rm(path.join(jobDir, 'agent-exec.json'), { force: true }).catch(() => {});
+    if (!rejoiningActiveUnit) {
+      try {
+        const existingBundle = await readBounded(bundlePath);
+        const existingReport = await readBounded(reportPath);
+        const existingJson = JSON.parse(existingBundle.toString('utf8'));
+        validateInvestigationBundle(existingJson, safeManifest, existingReport.toString('utf8'));
+        if (existingBundle.includes('/storage/v1/object/sign/') || existingReport.includes('/storage/v1/object/sign/')) throw new Error('signed URL leaked into retained output');
+        reusable = true;
+      } catch {
+        await rm(bundlePath, { force: true }).catch(() => {});
+        await rm(reportPath, { force: true }).catch(() => {});
+        await rm(path.join(jobDir, 'agent-exec.json'), { force: true }).catch(() => {});
+      }
     }
     if (!reusable) {
       const agentRun = await runAgentWithRecovery({
-        client, commandId: command.id, jobId, systemctlRunner, statePollMs,
+        client, commandId: command.id, jobId, systemctlRunner, statePollMs, initialUnitState,
       });
       if (agentRun.cancelled) {
         return { ok: true, cancelled: true, case_job_id: jobId, case_revision: revision };
