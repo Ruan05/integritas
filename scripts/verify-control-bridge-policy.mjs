@@ -56,9 +56,8 @@ assert.match(investigationRunner, /execFileAsync\('\/opt\/openclaw\/bin\/opencla
 assert.match(investigationRunner, /--config/, 'runner must pin the dedicated exec config');
 assert.ok(!investigationRunner.includes("'--state-dir'"), 'runner must use OpenClaw isolated temporary exec state while the Gateway owns persistent state');
 assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/, 'runner may discover existing provider credentials only through the bounded OpenClaw environment');
-assert.ok(investigationRunner.includes("model: 'integritas-groq/openai/gpt-oss-20b'"), 'fast investigations must use the live-proven Groq 20B route');
-assert.ok(investigationRunner.includes("model: 'integritas-groq/openai/gpt-oss-120b'"), 'standard investigations must use the live-proven Groq 120B route');
-assert.ok(investigationRunner.includes("model: 'nvidia/nemotron-3-ultra-550b-a55b'"), 'deep investigations must use direct long-context NVIDIA');
+assert.ok(investigationRunner.includes("model: 'nvidia/nemotron-3-ultra-550b-a55b'"), 'investigations must use direct long-context NVIDIA as the primary route');
+assert.ok(!investigationRunner.includes("model: 'integritas-groq/"), 'Groq must not be a primary OpenClaw investigation route because free-tier TPM is below the OpenClaw prompt baseline');
 assert.ok(investigationRunner.includes("'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'"), 'OpenRouter must use a fixed free model through the deterministic custom provider');
 assert.ok(investigationRunner.includes("'opencode-go/glm-5.3-flash'"), 'OpenCode Go may remain only as a last-resort routine fallback');
 assert.ok(investigationRunner.includes("'opencode-go/glm-5.2'"), 'OpenCode Go may remain only as a last-resort deep fallback');
@@ -68,6 +67,8 @@ assert.ok(investigationRunner.includes("'integritas-openrouter/openrouter/free'"
 assert.ok(!investigationRunner.includes("model: 'integritas-openrouter/openrouter/free'"), 'dynamic OpenRouter free routing must never be a primary investigation route');
 assert.ok(!investigationRunner.includes('opencode-go/kimi-k3'), 'Kimi K3 must not be a default investigation model');
 assert.ok(!investigationRunner.includes('opencode-go/deepseek-v4-pro'), 'DeepSeek Pro must not be a default investigation fallback');
+assert.ok(!investigationRunner.includes("'integritas-groq/openai/gpt-oss-20b'"), 'Groq 20B must not add a guaranteed 413 fallback hop to OpenClaw investigations');
+assert.ok(!investigationRunner.includes("'integritas-groq/openai/gpt-oss-120b'"), 'Groq 120B must not add a guaranteed 413 fallback hop to OpenClaw investigations');
 assert.ok(!investigationRunner.includes('shell: true'), 'runner must never execute through a shell');
 assert.match(investigationConfig, /\$include:\s*["']\.\/openclaw\.json["']/, 'investigation config must inherit the pinned OpenClaw config');
 assert.match(investigationConfig, /workspaceAccess:\s*["']ro["']/, 'investigation evidence workspace must remain read-only');
