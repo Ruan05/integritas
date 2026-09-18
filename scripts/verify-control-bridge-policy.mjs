@@ -46,6 +46,7 @@ for (const prohibited of ['exec_shell', 'read_environment', 'read_secret', 'plug
 assert.match(investigationUnit, /^User=openclaw$/m, 'investigation runner must execute as openclaw');
 assert.match(investigationUnit, /^Group=integritas-openclaw$/m, 'investigation runner must use the shared spool group as its primary group');
 assert.match(investigationUnit, /^SupplementaryGroups=openclaw docker$/m, 'runner keeps only OpenClaw config and sandbox supplementary groups');
+assert.match(investigationUnit, /^EnvironmentFile=-\/etc\/integritas\/provider-secrets\.env$/m, 'runner must receive provider credentials only from the root-managed environment file');
 assert.match(investigationUnit, /^WorkingDirectory=\/var\/lib\/integritas-runner\/jobs\/%i$/m, 'runner working directory must be the UUID-scoped spool');
 assert.match(investigationUnit, /^NoNewPrivileges=true$/m, 'investigation runner must retain NoNewPrivileges');
 assert.match(investigationUnit, /^ProtectSystem=strict$/m, 'investigation runner must retain a read-only system view');
@@ -55,16 +56,24 @@ assert.match(investigationRunner, /execFileAsync\('\/opt\/openclaw\/bin\/opencla
 assert.match(investigationRunner, /--config/, 'runner must pin the dedicated exec config');
 assert.ok(!investigationRunner.includes("'--state-dir'"), 'runner must use OpenClaw isolated temporary exec state while the Gateway owns persistent state');
 assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/, 'runner may discover existing provider credentials only through the bounded OpenClaw environment');
-assert.ok(investigationRunner.includes("model: 'opencode-go/glm-5.3-flash'"), 'routine investigations must use the cost-efficient GLM Flash route');
-assert.ok(investigationRunner.includes("model: 'opencode-go/glm-5.2'"), 'deep investigations must use the bounded GLM 5.2 route');
+assert.ok(investigationRunner.includes("model: 'integritas-groq/openai/gpt-oss-20b'"), 'fast investigations must use the live-proven Groq 20B route');
+assert.ok(investigationRunner.includes("model: 'integritas-groq/openai/gpt-oss-120b'"), 'standard investigations must use the live-proven Groq 120B route');
+assert.ok(investigationRunner.includes("model: 'nvidia/nvidia/nemotron-3-ultra-550b-a55b'"), 'deep investigations must use direct long-context NVIDIA');
+assert.ok(investigationRunner.includes("'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'"), 'OpenRouter must use a fixed free model rather than random routing');
+assert.ok(investigationRunner.includes("'opencode-go/glm-5.3-flash'"), 'OpenCode Go may remain only as a last-resort routine fallback');
+assert.ok(investigationRunner.includes("'opencode-go/glm-5.2'"), 'OpenCode Go may remain only as a last-resort deep fallback');
 assert.ok(investigationRunner.includes("'--model', route.model"), 'runner must explicitly pin the job-scoped primary model');
 assert.ok(investigationRunner.includes("args.push('--fallback', fallback)"), 'runner must use only its explicit bounded fallback chain');
-assert.ok(!investigationRunner.includes('opencode-go/kimi-k3'), 'Kimi K3 must not be the default investigation model');
+assert.ok(!investigationRunner.includes('openrouter/free'), 'random OpenRouter free routing is forbidden for deterministic investigations');
+assert.ok(!investigationRunner.includes('opencode-go/kimi-k3'), 'Kimi K3 must not be a default investigation model');
 assert.ok(!investigationRunner.includes('opencode-go/deepseek-v4-pro'), 'DeepSeek Pro must not be a default investigation fallback');
 assert.ok(!investigationRunner.includes('shell: true'), 'runner must never execute through a shell');
 assert.match(investigationConfig, /\$include:\s*["']\.\/openclaw\.json["']/, 'investigation config must inherit the pinned OpenClaw config');
 assert.match(investigationConfig, /workspaceAccess:\s*["']ro["']/, 'investigation evidence workspace must remain read-only');
 assert.match(investigationConfig, /profile:\s*["']minimal["']/, 'investigation agent must start from the minimal tool profile');
+assert.match(investigationConfig, /"integritas-groq"/, 'investigation config must define the narrow Groq custom provider');
+assert.match(investigationConfig, /apiKey:\s*\{\s*source:\s*["']env["'],\s*provider:\s*["']default["'],\s*id:\s*["']GROQ_API_KEY["']\s*\}/, 'Groq key must be an environment SecretRef');
+assert.ok(!investigationConfig.includes('openrouter/free'), 'investigation config must not use random OpenRouter free routing');
 assert.match(investigationConfig, /deny:\s*\[[^\]]*["']write["'][^\]]*["']edit["'][^\]]*["']exec["'][^\]]*["']apply_patch["']/s, 'investigation agent must not mutate files or invoke execution tools');
 assert.match(investigationRunner, /'--code-mode', 'direct'/, 'investigation agent must use direct tool mode');
 assert.match(investigationRunner, /parseAgentBundle\(result\.stdout, manifest\)/, 'trusted runner must parse and validate the structured final response');
@@ -79,6 +88,11 @@ assert.match(installer, /RUNNER_SCRIPT_SRC.*RUNNER_SCRIPT_DEST|RUNNER_SCRIPT_DES
 assert.match(installer, /chown root:openclaw \"\$OPENCLAW_CONFIG_DIR\"/, 'control-worker installer must restore OpenClaw config directory ownership');
 assert.match(installer, /chmod 0750 \"\$OPENCLAW_CONFIG_DIR\"/, 'control-worker installer must restore OpenClaw config directory traversal');
 assert.match(installer, /chmod 0640 \"\$OPENCLAW_CONFIG_PATH\"/, 'control-worker installer must preserve service-readable main config permissions');
+assert.match(installer, /PROVIDER_ENV_FILE=.*provider-secrets\.env/, 'installer must manage a dedicated provider secret environment');
+assert.match(installer, /install -o root -g root -m 0600 \"\$PROVIDER_STAGING_FILE\" \"\$PROVIDER_ENV_FILE\"/, 'provider secrets must be installed root-only');
+for (const requiredProviderKey of ['GROQ_API_KEY', 'OPENROUTER_API_KEY', 'NVIDIA_API_KEY']) {
+  assert.match(installer, new RegExp(requiredProviderKey), `installer must require ${requiredProviderKey}`);
+}
 assert.match(nativeInstaller, /install -d -m 0750 -o root -g openclaw/, 'native installer must keep OpenClaw config directory private but service-readable');
 assert.match(nativeInstaller, /chmod 0750 \"\$\{CONFIG_DIR\}\"/, 'native installer must defensively restore config directory traversal before validation');
 assert.match(investigation, /document digest mismatch/, 'worker must verify downloaded evidence digests');
@@ -103,9 +117,11 @@ assert.match(verifyHost, /systemctl is-active docker/, 'runtime verifier must ch
 assert.ok(!verifyHost.includes('docker info'), 'runtime verifier must not require Docker daemon socket access');
 assert.ok(!verifyHost.match(/docker ps\b/), 'runtime verifier must not enumerate containers through the Docker socket');
 
-for (const file of [commands, worker, client, service, edge]) {
+for (const file of [commands, worker, client, service, edge, investigationRunner, investigationConfig, installer, investigationUnit]) {
   assert.ok(!file.match(/sb_service_role_[A-Za-z0-9_-]+/), 'service-role credential literal must not be committed');
   assert.ok(!file.match(/sk-[A-Za-z0-9_-]{16,}/), 'provider/API key literal must not be committed');
+  assert.ok(!file.match(/gsk_[A-Za-z0-9_-]{16,}/), 'Groq key literal must not be committed');
+  assert.ok(!file.match(/nvapi-[A-Za-z0-9_-]{16,}/), 'NVIDIA key literal must not be committed');
 }
 
 console.log('Integritas control bridge policy checks passed');
