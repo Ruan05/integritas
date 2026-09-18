@@ -30,6 +30,9 @@ test('efficiency policy locks cheap routing and bounded fan-out', () => {
     'input_tokens',
     'output_tokens',
     'cached_input_tokens',
+    'failureKind',
+    'usage_exhausted',
+    'providerText=await response.text()',
     "taskClass==='very_large'||taskClass==='verify'?60000",
   ].join('\n');
   const worker = [
