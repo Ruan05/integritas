@@ -83,3 +83,13 @@ test('investigation skill imposes research and reread budgets', async () => {
   assert.match(skill, /Read each submitted evidence file comprehensively once/);
   assert.match(skill, /Do not repeatedly fetch the same URL/);
 });
+
+test('investigation prompts use the read-only /agent workspace mount', async () => {
+  const runtime = await readFile(new URL('../src/investigation.mjs', import.meta.url), 'utf8');
+  const skill = await readFile(new URL('../../skills/integritas-investigation-v1/SKILL.md', import.meta.url), 'utf8');
+  assert.match(runtime, /workspaceAccess ro/);
+  assert.match(runtime, /\/agent\/bundle-template\.json/);
+  assert.match(skill, /mounted read-only at `\/agent`/);
+  assert.doesNotMatch(runtime, /\/workspace\//, 'runtime prompt must not use writable /workspace paths');
+  assert.doesNotMatch(skill, /\/workspace\//, 'skill must not use writable /workspace paths');
+});

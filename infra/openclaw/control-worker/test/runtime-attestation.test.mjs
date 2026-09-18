@@ -8,7 +8,7 @@ test('worker release attests investigation capabilities from the packaged releas
   const pkg = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
   const source = await readFile(new URL('src/index.mjs', root), 'utf8');
 
-  assert.equal(pkg.version, '0.3.2');
+  assert.equal(pkg.version, '0.3.4');
   assert.match(source, /readPackagedWorkerVersion/);
   assert.match(source, /new URL\('\.\.\/package\.json', import\.meta\.url\)/);
   assert.doesNotMatch(source, /INTEGRITAS_CONTROL_WORKER_VERSION/);
