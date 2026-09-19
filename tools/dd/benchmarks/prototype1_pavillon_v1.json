@@ -1,6 +1,6 @@
 {
   "benchmark_id": "integritas-pavillon-prototype1-2026-09-17-v1",
-  "description": "Hidden regression benchmark for independent reproduction of material Prototype 1 Pavillon findings. Not copied into agent workspaces.",
+  "description": "Hidden regression benchmark for independent reproduction of material Prototype 1 and later final-comprehensive Pavillon findings. Not copied into agent workspaces.",
   "minimums": {
     "submitted_documents": 3,
     "external_sources": 8,
@@ -193,10 +193,41 @@
         "(SBLA|SBLC)",
         "(UCP\\s*600|ICC\\s*500|ICC\\s*600)"
       ]
+    },
+    {
+      "id": "remaining_ownership_open",
+      "patterns": [
+        "remaining\\s+(ownership|50\\s*%)|remaining\\s+ownership",
+        "(fresh|certified).*(shareholder|PSC)|shareholder.*PSC",
+        "(open|unresolved|establish)"
+      ]
+    },
+    {
+      "id": "petroleum_permit_gap",
+      "patterns": [
+        "NMDPRA",
+        "(permit|licen[cs]e)",
+        "(not\\s+verified|none\\s+supplied|no\\s+.*number|verify)"
+      ]
+    },
+    {
+      "id": "debarment_qc",
+      "patterns": [
+        "(World\\s+Bank|AfDB|ADB|EBRD|debarment)",
+        "(no\\s+exact|no\\s+screened|negative|no\\s+.*entry)",
+        "not\\s+(formal\\s+)?clearance|negative.*not"
+      ]
+    },
+    {
+      "id": "false_positive_rejection",
+      "patterns": [
+        "(false[-\\s]+positive|false\\s+hit|namesake|disambiguat)",
+        "(rejected|not\\s+treated|not\\s+attributed|excluded)"
+      ]
     }
   ],
   "thresholds": {
     "critical_required": 13,
-    "secondary_minimum": 9
+    "secondary_minimum": 12
   }
 }
