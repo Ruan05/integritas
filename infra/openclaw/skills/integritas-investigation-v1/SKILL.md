@@ -78,7 +78,7 @@ Use browser automation for dynamic/JavaScript portals, interactive registries, s
 
 **Corporate / legal identity / ownership**
 - Preferred: official national/state company registry, tax/VAT authority, beneficial-ownership/PSC registry, sector regulator/licensing portal.
-- Cross-check: GLEIF LEI Level 1 (“who is who”) and Level 2 (“who owns whom”) where applicable.
+- Cross-check: GLEIF LEI Level 1 (“who is who”) and Level 2 relationship data (“who owns whom”) where applicable. Level 2 primarily records direct/ultimate accounting-consolidating parent relationships and must not be presented as proof of the natural-person UBO/PSC chain.
 - Fallback/discovery: OpenCorporates or reputable local registry-derived services only as leads; verify important results at the official source.
 - Test exact company number, legal name, status, incorporation date, registered office, officers, shareholders/UBOs/PSC, filings and licence scope separately.
 
@@ -194,7 +194,7 @@ For `deep` and `maximum` investigations, use the established Integritas Prototyp
 3. **Executive Summary — Non-Technical** — concise table of the most important areas, status, and plain-English finding.
 4. **Current Diligence Status** — explain whether material verification gates remain open. This is a diligence status, not an automated business or legal decision.
 5. **Evidence Package Reviewed** — one row per uploaded document with stable document reference, filename, available page count/date, and SHA-256 when present in the manifest. Every manifest document must appear here.
-6. **Document Forensics & Internal Consistency** — metadata, signatures, edits, chronology, execution blocks, template/boilerplate signals, and document-to-document conflicts. State the limits of what file properties prove.
+6. **Document Forensics & Internal Consistency** — metadata, signatures, edits, chronology, execution blocks, template/boilerplate signals, and document-to-document conflicts. For DocuSign/Adobe/other platform signatures, distinguish cryptographic revision integrity from signer identity, authority and truth of content; request issuer/envelope/audit evidence when material. State the limits of what file properties prove.
 7. **Corporate / Legal Identity** — exact legal names, registration identifiers, status, incorporation, tax/licence records, and unresolved name/identifier mismatches.
 8. **Ownership, Control, People & Relationship Intelligence** — directors, UBO/PSC/control, authority, related entities, aliases, and disambiguation. Never infer guilt by association.
 9. **Address, Physical Presence, Domain, Website & Email Infrastructure** — independently corroborate addresses and digital infrastructure; distinguish technical existence from ownership/control.
