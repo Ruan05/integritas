@@ -421,6 +421,62 @@ Deno.serve(async (req) => {
           p_report_sha256: reportSha,
           p_bundle: bundle,
         });
+
+        // Learn only from aggregate execution quality signals. Never persist names,
+        // claims, excerpts, URLs, identifiers, or other case evidence as a lesson.
+        try {
+          const sources = Array.isArray(bundle.sources) ? bundle.sources : [];
+          const submittedDocumentIds = new Set(
+            sources
+              .filter((source) => isObject(source) && source.evidence_origin === 'submitted_document' && validUuid(source.document_id))
+              .map((source) => String(source.document_id)),
+          );
+          const safeMetadata = {
+            case_job_id: caseJobId,
+            case_revision: caseRevision,
+            depth: typeof bundle.depth === 'string' ? bundle.depth : null,
+            document_count: submittedDocumentIds.size,
+            entity_count: Array.isArray(bundle.entities) ? bundle.entities.length : 0,
+            relationship_count: Array.isArray(bundle.relationships) ? bundle.relationships.length : 0,
+            source_count: sources.length,
+            external_source_count: sources.filter((source) => isObject(source) && source.evidence_origin === 'external_research').length,
+            finding_count: Array.isArray(bundle.findings) ? bundle.findings.length : 0,
+            check_count: Array.isArray(bundle.checks) ? bundle.checks.length : 0,
+            contradiction_count: Array.isArray(bundle.contradictions) ? bundle.contradictions.length : 0,
+            unresolved_count: Array.isArray(bundle.unresolved_checks) ? bundle.unresolved_checks.length : 0,
+            terminal_outcome: isObject(bundle.execution) && typeof bundle.execution.terminal_outcome === 'string'
+              ? bundle.execution.terminal_outcome
+              : 'unknown',
+          };
+          const { data: existingLesson, error: lessonLookupError } = await service
+            .from('integritas_agent_lessons')
+            .select('id')
+            .eq('task_class', 'openclaw_investigation')
+            .contains('safe_metadata', { case_job_id: caseJobId })
+            .limit(1)
+            .maybeSingle();
+          if (lessonLookupError) throw lessonLookupError;
+          if (!existingLesson) {
+            const toolCount = isObject(bundle.execution) && Array.isArray(bundle.execution.tool_results)
+              ? bundle.execution.tool_results.length
+              : 0;
+            const { error: lessonInsertError } = await service.from('integritas_agent_lessons').insert({
+              task_class: 'openclaw_investigation',
+              provider: null,
+              model: null,
+              outcome: safeMetadata.terminal_outcome,
+              retry_count: 0,
+              tool_count: toolCount,
+              reviewer_result: 'deterministic_qa_passed',
+              human_correction: null,
+              safe_metadata: safeMetadata,
+            });
+            if (lessonInsertError) throw lessonInsertError;
+          }
+        } catch (lessonError) {
+          console.error('integritas lesson recording failed', safeError(lessonError));
+        }
+
         return json({ commit_summary: commitSummary }, 200, origin);
       }
 
