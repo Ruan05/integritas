@@ -154,6 +154,71 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
   }
 });
 
+test('reuses retained output and normalizes unresolved completed outcome without restarting OpenClaw', async () => {
+  const spoolRoot = await mkdtemp(path.join(os.tmpdir(), 'integritas-investigation-'));
+  const bytes = Buffer.from('alpha evidence');
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const jobDir = path.join(spoolRoot, JOB_ID);
+  const documentsDir = path.join(jobDir, 'documents');
+  await mkdir(documentsDir, { recursive: true });
+  await writeFile(path.join(documentsDir, `${DOC_ID}.pdf`), bytes);
+  const report = '# Retained report\n\nManual registry work remains.';
+  const bundle = {
+    schema_version: 1, case_id: CASE_ID, case_job_id: JOB_ID, case_revision: 7, depth: 'deep',
+    generated_at: '2026-09-18T08:00:00Z', entities: [], relationships: [], sources: [], findings: [],
+    checks: [{
+      check_key: 'registry-check', check_type: 'registry_verification', description: 'Verify registry directly.',
+      priority: 'high', required_source: 'Official registry', status: 'blocked', outcome: 'Unavailable.',
+    }],
+    contradictions: [],
+    unresolved_checks: [{
+      unresolved_key: 'registry-unresolved', description: 'Registry verification remains outstanding.',
+      reason: 'Registry unavailable.', attempted_methods: ['Public lookup'], blocker: 'Direct access unavailable.',
+      next_manual_action: 'Verify with the official registry.',
+    }],
+    limitations: ['Registry verification remains outstanding.'],
+    report: { summary: 'Retained', markdown: report, status: 'draft' },
+    execution: {
+      started_at: '2026-09-18T07:50:00Z', completed_at: '2026-09-18T08:00:00Z',
+      stages: [], tool_results: [], warnings: [], terminal_outcome: 'completed',
+    },
+  };
+  await writeFile(path.join(jobDir, 'bundle.json'), JSON.stringify(bundle));
+  await writeFile(path.join(jobDir, 'report.md'), report);
+  const checkpoints = [];
+  const commits = [];
+  const client = {
+    baseUrl: 'https://project.supabase.co/functions/v1/integritas-control',
+    storageSelfTest: async () => ({ storage: { ok: true } }),
+    manifest: async () => manifestFor(bytes, sha256, { job_stage: 'verifying', job_progress: 80 }),
+    checkpoint: async (...args) => { checkpoints.push(args); return { ok: true }; },
+    publishOutput: async () => ({ ok: true }),
+    commitBundle: async (...args) => { commits.push(args); return { commit_summary: {} }; },
+  };
+  const systemctlRunner = async (_file, args) => {
+    if (args[0] === 'show') return { stdout: 'inactive\n', stderr: '' };
+    throw new Error('retained valid output must not restart OpenClaw');
+  };
+  try {
+    const result = await executeInvestigation(command, {
+      client,
+      fetchImpl: async () => new Response(bytes, { status: 200, headers: { 'content-length': String(bytes.length) } }),
+      systemctlRunner,
+      spoolRoot,
+      repoRoot: REPO_ROOT,
+      retainWorkspace: true,
+      qaRunner: async () => ({ valid: true, errors: [], summary: { unresolved_checks: 1 } }),
+    });
+    assert.equal(result.terminal_outcome, 'incomplete');
+    const retained = JSON.parse(await readFile(path.join(jobDir, 'bundle.json'), 'utf8'));
+    assert.equal(retained.execution.terminal_outcome, 'incomplete');
+    assert.equal(commits[0][5].execution.terminal_outcome, 'incomplete');
+    assert.ok(checkpoints.some((entry) => entry[3] === 'incomplete' && entry[4] === 100));
+  } finally {
+    await rm(spoolRoot, { recursive: true, force: true });
+  }
+});
+
 test('rejects a document digest mismatch before starting OpenClaw', async () => {
   const spoolRoot = await mkdtemp(path.join(os.tmpdir(), 'integritas-investigation-'));
   const bytes = Buffer.from('tampered');
