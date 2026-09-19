@@ -55,9 +55,12 @@ assert.match(source, /action === 'cancel_case_investigation'/, 'admin cancel act
 assert.match(source, /integritas_cancel_case_investigation/, 'admin cancellation must use the bounded database RPC');
 assert.match(source, /new TextEncoder\(\)\.encode\(encodedBundle\)\.byteLength/, 'bundle commit limit must be enforced in UTF-8 bytes');
 assert.match(source, /\.\.\/_shared\/investigation-runtime-contract\.ts/, 'control API must import the shared investigation runtime contract');
-for (const key of ['document_count', 'bundle_sha256', 'report_sha256', 'qa_summary', 'commit_summary']) {
+for (const key of ['document_count', 'bundle_sha256', 'report_sha256', 'qa_summary', 'commit_summary', 'milestones']) {
   assert.match(runtimeContractSource, new RegExp(`'${key}'`), `shared checkpoint contract must allow ${key}`);
 }
+assert.match(source, /validMilestones/, 'checkpoint metadata must validate bounded milestone arrays');
+assert.match(source, /\['waiting', 'active', 'complete', 'blocked', 'manual'\]/, 'milestone status vocabulary must remain bounded');
+assert.match(source, /encoded\.length <= 32768/, 'checkpoint payloads must remain size-bounded');
 assert.match(runtimeContractSource, /'report_markdown'/, 'shared output contract must allow canonical Markdown reports');
 assert.match(runtimeContractSource, /'text\/markdown'/, 'shared content-type contract must allow Markdown output');
 assert.match(source, /integritas-case-files/, 'investigation artifacts must remain in the private case-files bucket');
