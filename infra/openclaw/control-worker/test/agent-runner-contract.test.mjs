@@ -14,13 +14,21 @@ test('OpenClaw runner materializes only validated structured final output', asyn
   assert.match(source, /'--config', '\/etc\/openclaw\/integritas-investigation\.json'/);
 });
 
-test('OpenClaw runner uses bounded GLM research plus one independent Kimi critic for deep work', async () => {
+test('OpenClaw runner uses evidence-first planning, bounded research and an independent critic for deep work', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
+  assert.match(source, /planner: \{ model: 'opencode-go\/glm-5\.3-flash'/);
   assert.match(source, /research: \{ model: 'opencode-go\/glm-5\.3-flash'/);
   assert.match(source, /critic: \{ model: 'opencode-go\/kimi-k3'/);
   assert.match(source, /synthesis: \{ model: 'opencode-go\/glm-5\.3-flash'/);
   assert.match(source, /nvidia\/nemotron-3-ultra-550b-a55b/);
   assert.match(source, /integritas-openrouter\/nvidia\/nemotron-3-ultra-550b-a55b:free/);
+  assert.match(source, /parsePlan/);
+  assert.match(source, /plannerTask/);
+  assert.match(source, /researchTask/);
+  assert.match(source, /investigation-plan\.json/);
+  assert.match(source, /planner must not perform external research/);
+  assert.match(source, /MASTER SUMMARY — READ THIS FIRST/);
+  assert.match(source, /DIRECT NEXT STEPS — WHAT TO DO NOW/);
   assert.match(source, /parseCritique/);
   assert.match(source, /critic must not perform external research/);
   assert.match(source, /synthesis pass must not perform external research/);
@@ -76,10 +84,10 @@ test('runner passes only required provider environment names into OpenClaw', asy
 
 test('investigation skill imposes research and reread budgets', async () => {
   const skill = await readFile(new URL('../../skills/integritas-investigation-v1/SKILL.md', import.meta.url), 'utf8');
-  assert.match(skill, /fast.*6 distinct external sources.*12 web\/browser tool calls/s);
-  assert.match(skill, /standard.*10 distinct external sources.*20 web\/browser tool calls/s);
-  assert.match(skill, /deep.*18 distinct external sources.*36 web\/browser tool calls/s);
-  assert.match(skill, /maximum.*24 distinct external sources.*48 web\/browser tool calls/s);
+  assert.match(skill, /fast.*8 distinct external sources.*16 web\/browser tool calls/s);
+  assert.match(skill, /standard.*16 distinct external sources.*32 web\/browser tool calls/s);
+  assert.match(skill, /deep.*32 distinct external sources.*64 web\/browser tool calls/s);
+  assert.match(skill, /maximum.*50 distinct external sources.*100 web\/browser tool calls/s);
   assert.match(skill, /Read each submitted evidence file comprehensively once/);
   assert.match(skill, /Do not repeatedly fetch the same URL/);
 });
@@ -89,6 +97,7 @@ test('investigation prompts use the read-only /agent workspace mount', async () 
   const skill = await readFile(new URL('../../skills/integritas-investigation-v1/SKILL.md', import.meta.url), 'utf8');
   assert.match(runtime, /workspaceAccess ro/);
   assert.match(runtime, /\/agent\/bundle-template\.json/);
+  assert.match(runtime, /\/agent\/investigation-plan\.json/);
   assert.match(skill, /mounted read-only at `\/agent`/);
   assert.doesNotMatch(runtime, /\/workspace\//, 'runtime prompt must not use writable /workspace paths');
   assert.doesNotMatch(skill, /\/workspace\//, 'skill must not use writable /workspace paths');
