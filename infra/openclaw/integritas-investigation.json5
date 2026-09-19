@@ -47,6 +47,7 @@
         "integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free": {},
         "integritas-openrouter/openrouter/free": {},
         "opencode-go/glm-5.3-flash": {},
+        "opencode-go/kimi-k3": {},
         "opencode-go/glm-5.2": {},
         "nvidia/nemotron-3-ultra-550b-a55b": {
           params: {
