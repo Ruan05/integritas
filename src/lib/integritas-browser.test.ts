@@ -56,6 +56,19 @@ describe('Integritas browser adapter', () => {
     expect(String(init.body)).not.toMatch(/opencode/i);
   });
 
+  it('routes retry and cancel through typed case-scoped control actions', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ investigation: { command_status: 'queued' } }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ investigation: { command_status: 'running', cancel_requested: true } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const client = createIntegritasBrowserClient({ adminApiUrl: 'https://example.test/admin', controlApiUrl: 'https://example.test/control', fetchImpl });
+    await client.retryInvestigation('token', '11111111-1111-4111-8111-111111111111');
+    await client.cancelInvestigation('token', '11111111-1111-4111-8111-111111111111');
+    expect(fetchImpl.mock.calls.map(([, init]) => JSON.parse(String(init.body)))).toEqual([
+      { action: 'retry_case_investigation', case_job_id: '11111111-1111-4111-8111-111111111111' },
+      { action: 'cancel_case_investigation', case_job_id: '11111111-1111-4111-8111-111111111111' },
+    ]);
+  });
+
   it('requires a fresh attested 0.3.0+ Oracle runtime with deterministic QA and atomic commit before enabling start', () => {
     const now = new Date('2026-09-16T22:00:00Z').getTime();
     const flags = {
