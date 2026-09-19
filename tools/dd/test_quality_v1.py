@@ -59,8 +59,8 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
             "case_revision": 2,
             "depth": "maximum",
             "documents": [
-                {"id": self.doc1, "name": "one.pdf"},
-                {"id": self.doc2, "name": "two.txt"},
+                {"id": self.doc1, "name": "one.pdf", "sha256": "a" * 64, "size_bytes": 100},
+                {"id": self.doc2, "name": "two.txt", "sha256": "b" * 64, "size_bytes": 50},
             ],
         }
         report = prototype1_maximum_report()
@@ -122,14 +122,41 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
                 "started_at": "2026-09-19T05:00:00+00:00",
                 "completed_at": "2026-09-19T05:03:00+00:00",
                 "stages": ["analyzing_documents", "researching", "drafting_report"],
-                "tool_results": [],
+                "tool_results": [
+                    {"tool": "integritas_forensics_v1", "status": "completed", "summary": "Trusted pre-pass complete."}
+                ],
                 "warnings": [],
                 "terminal_outcome": "incomplete",
             },
         }
 
-    def errors(self, bundle=None):
-        return validate(bundle or self.bundle, self.manifest, self.report, 2)[0]
+        self.forensics = {
+            "schema_version": 1,
+            "tool": "integritas_forensics_v1",
+            "reports": [
+                {
+                    "document_id": self.doc1,
+                    "original_name": "one.pdf",
+                    "local_path": f"documents/{self.doc1}.pdf",
+                    "sha256": "a" * 64,
+                    "size_bytes": 100,
+                    "kind": "pdf",
+                    "pdf": {"cryptographic_signature_present": False},
+                },
+                {
+                    "document_id": self.doc2,
+                    "original_name": "two.txt",
+                    "local_path": f"documents/{self.doc2}.txt",
+                    "sha256": "b" * 64,
+                    "size_bytes": 50,
+                    "kind": "other",
+                },
+            ],
+        }
+
+    def errors(self, bundle=None, forensics=None):
+        evidence_forensics = self.forensics if forensics is None else forensics
+        return validate(bundle or self.bundle, self.manifest, self.report, 2, evidence_forensics)[0]
 
     def test_valid_bundle_covers_every_manifest_document(self):
         self.assertEqual(self.errors(), [])
@@ -138,12 +165,25 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
         bundle = copy.deepcopy(self.bundle)
         bundle["report"]["markdown"] = "# Executive Summary\nShort maximum report."
         errors, summary = validate(
-            bundle, self.manifest, bundle["report"]["markdown"], 2
+            bundle, self.manifest, bundle["report"]["markdown"], 2, self.forensics
         )
         self.assertTrue(any("Prototype 1 report is too short" in error for error in errors))
         self.assertTrue(any("Prototype 1 lanes missing" in error for error in errors))
         self.assertTrue(any("Prototype 1 features missing" in error for error in errors))
         self.assertGreater(len(summary["prototype1_missing_lanes"]), 0)
+
+    def test_maximum_requires_trusted_forensics(self):
+        self.assertTrue(any("requires trusted forensic pre-pass" in error for error in self.errors(forensics={})))
+
+    def test_forensic_hash_mismatch_is_rejected(self):
+        forensic = copy.deepcopy(self.forensics)
+        forensic["reports"][0]["sha256"] = "0" * 64
+        self.assertTrue(any("sha256 mismatch" in error for error in self.errors(forensics=forensic)))
+
+    def test_maximum_requires_forensic_execution_marker(self):
+        bundle = copy.deepcopy(self.bundle)
+        bundle["execution"]["tool_results"] = []
+        self.assertTrue(any("must record completed integritas_forensics_v1" in error for error in self.errors(bundle)))
 
     def test_missing_manifest_document_is_rejected(self):
         bundle = copy.deepcopy(self.bundle)
