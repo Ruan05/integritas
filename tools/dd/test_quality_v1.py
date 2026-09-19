@@ -6,6 +6,8 @@ from quality_v1 import validate
 
 def prototype1_maximum_report():
     sections = [
+        "# MASTER SUMMARY — READ THIS FIRST\nCurrent position, verified positives, critical blockers and diligence status in plain language.",
+        "# DIRECT NEXT STEPS — WHAT TO DO NOW\nObtain authoritative identity, authority and transaction evidence through independently sourced channels; stop if critical verification is refused.",
         "# Master Issue Dashboard\nCurrent position and why each material issue matters.",
         "## 1. Investigation Completion Statement\nMaximum-depth investigation completed to public-source limits.",
         "## 2. Intake Context / Translation and Evidentiary Test\nSender assertions are separated from documentary proof.",
@@ -171,6 +173,28 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
         self.assertTrue(any("Prototype 1 lanes missing" in error for error in errors))
         self.assertTrue(any("Prototype 1 features missing" in error for error in errors))
         self.assertGreater(len(summary["prototype1_missing_lanes"]), 0)
+
+    def test_front_matter_requires_master_summary_then_direct_next_steps(self):
+        bundle = copy.deepcopy(self.bundle)
+        bad_report = prototype1_maximum_report().replace(
+            "# DIRECT NEXT STEPS — WHAT TO DO NOW\nObtain authoritative identity, authority and transaction evidence through independently sourced channels; stop if critical verification is refused.\n\n",
+            "",
+        )
+        bundle["report"]["markdown"] = bad_report
+        errors, summary = validate(bundle, self.manifest, bad_report, 2, self.forensics)
+        self.assertTrue(any("DIRECT NEXT STEPS" in error for error in errors))
+        self.assertFalse(summary["front_matter_valid"])
+
+    def test_front_matter_rejects_detailed_section_between_summary_and_next_steps(self):
+        bundle = copy.deepcopy(self.bundle)
+        bad_report = prototype1_maximum_report().replace(
+            "# DIRECT NEXT STEPS — WHAT TO DO NOW",
+            "## Detailed Finding Before Actions\nThis section is deliberately misplaced.\n\n# DIRECT NEXT STEPS — WHAT TO DO NOW",
+            1,
+        )
+        bundle["report"]["markdown"] = bad_report
+        errors, _ = validate(bundle, self.manifest, bad_report, 2, self.forensics)
+        self.assertTrue(any("no detailed report section" in error for error in errors))
 
     def test_maximum_requires_trusted_forensics(self):
         errors, _ = validate(self.bundle, self.manifest, self.report, 2, None)
