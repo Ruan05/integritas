@@ -45,6 +45,11 @@ if (!UUID.test(jobId)) throw new Error('invalid investigation job id');
 const jobDir = `/var/lib/integritas-runner/jobs/${jobId}`;
 const manifest = JSON.parse(await readFile(path.join(jobDir, 'manifest.json'), 'utf8'));
 if (manifest.case_job_id !== jobId) throw new Error('job manifest mismatch');
+const trustedForensics = JSON.parse(await readFile(path.join(jobDir, 'forensics.json'), 'utf8'));
+if (trustedForensics?.schema_version !== 1 || trustedForensics?.tool !== 'integritas_forensics_v1'
+  || !Array.isArray(trustedForensics?.reports)) {
+  throw new Error('trusted forensic pre-pass is unavailable or invalid');
+}
 const route = MODEL_ROUTES[manifest.depth];
 if (!route) throw new Error('invalid investigation depth');
 
@@ -452,6 +457,13 @@ const finalEnvelope = parseEnvelope(finalStdout, 'final');
 const existingTools = Array.isArray(finalParsed.bundle?.execution?.tool_results)
   ? finalParsed.bundle.execution.tool_results
   : [];
+if (!existingTools.some((row) => row?.tool === 'integritas_forensics_v1')) {
+  existingTools.unshift({
+    tool: 'integritas_forensics_v1',
+    status: 'completed',
+    summary: `Trusted evidence metadata/signature pre-pass covered ${trustedForensics.reports.length} submitted document(s).`,
+  });
+}
 if (!existingTools.some((row) => row?.tool === 'integritas_adaptive_planner_v1')) {
   existingTools.unshift({
     tool: 'integritas_adaptive_planner_v1',
