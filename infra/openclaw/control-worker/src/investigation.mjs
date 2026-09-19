@@ -103,6 +103,18 @@ async function copySupport(repoRoot, jobDir) {
   }
 }
 
+function normalizeRetainedTerminalOutcome(bundle) {
+  if (!bundle || Array.isArray(bundle) || typeof bundle !== 'object') return bundle;
+  const hasUnresolvedChecks = Array.isArray(bundle.unresolved_checks) && bundle.unresolved_checks.length > 0;
+  const hasIncompleteChecks = Array.isArray(bundle.checks)
+    && bundle.checks.some((check) => check && typeof check === 'object' && !Array.isArray(check) && check.status !== 'complete');
+  if (bundle.execution?.terminal_outcome !== 'completed' || (!hasUnresolvedChecks && !hasIncompleteChecks)) return bundle;
+  return {
+    ...bundle,
+    execution: { ...bundle.execution, terminal_outcome: 'incomplete' },
+  };
+}
+
 function buildBundleTemplate(manifest) {
   const now = new Date().toISOString();
   return {
@@ -331,9 +343,17 @@ export async function executeInvestigation(command, {
     let reusable = false;
     if (!rejoiningActiveUnit) {
       try {
-        const existingBundle = await readBounded(bundlePath);
+        let existingBundle = await readBounded(bundlePath);
         const existingReport = await readBounded(reportPath);
-        const existingJson = JSON.parse(existingBundle.toString('utf8'));
+        let existingJson = JSON.parse(existingBundle.toString('utf8'));
+        const normalizedJson = normalizeRetainedTerminalOutcome(existingJson);
+        if (normalizedJson !== existingJson) {
+          existingJson = normalizedJson;
+          await writeFile(bundlePath, `${JSON.stringify(existingJson, null, 2)}\n`, { mode: SHARED_FILE_MODE });
+          await chown(bundlePath, -1, process.getgid());
+          await chmod(bundlePath, SHARED_FILE_MODE);
+          existingBundle = await readBounded(bundlePath);
+        }
         validateInvestigationBundle(existingJson, safeManifest, existingReport.toString('utf8'));
         if (existingBundle.includes('/storage/v1/object/sign/') || existingReport.includes('/storage/v1/object/sign/')) throw new Error('signed URL leaked into retained output');
         reusable = true;
