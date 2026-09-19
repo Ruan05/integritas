@@ -40,4 +40,31 @@ If a material check cannot be resolved within the budget, record it as unresolve
 
 ## Report
 
-Put the complete human-readable Markdown draft report in `report.markdown`, and keep `report.status` equal to `draft`. Cover subjects, evidence reviewed, checks performed, material findings, contradictions, unresolved checks, limitations, and manual next actions. Separate facts from inference and do not automate transaction approval or clearance.
+Put the complete human-readable Markdown draft report in `report.markdown`, and keep `report.status` equal to `draft`. The report must be written for a non-technical commercial reader while preserving an auditable evidence trail. Separate verified facts, corroborated facts, document claims, allegations, inference, contradictions, and unresolved items. Do not automate transaction approval or clearance.
+
+For `deep` and `maximum` investigations, use the established Integritas Prototype 1 structure unless a section is genuinely inapplicable. Preserve the substance and order below; adapt headings to the case rather than forcing petroleum-specific language:
+
+1. **Investigation Completion Statement** — what was actually reviewed/researched, what remains impossible to close from public sources, and the evidence standard used.
+2. **Intake Context / Translation** — translate and test any material intake message or instruction when present; distinguish the sender's assertions from documentary proof.
+3. **Executive Summary — Non-Technical** — concise table of the most important areas, status, and plain-English finding.
+4. **Current Diligence Status** — explain whether material verification gates remain open. This is a diligence status, not an automated business or legal decision.
+5. **Evidence Package Reviewed** — one row per uploaded document with stable document reference, filename, available page count/date, and SHA-256 when present in the manifest. Every manifest document must appear here.
+6. **Document Forensics & Internal Consistency** — metadata, signatures, edits, chronology, execution blocks, template/boilerplate signals, and document-to-document conflicts. State the limits of what file properties prove.
+7. **Corporate / Legal Identity** — exact legal names, registration identifiers, status, incorporation, tax/licence records, and unresolved name/identifier mismatches.
+8. **Ownership, Control, People & Relationship Intelligence** — directors, UBO/PSC/control, authority, related entities, aliases, and disambiguation. Never infer guilt by association.
+9. **Address, Physical Presence, Domain, Website & Email Infrastructure** — independently corroborate addresses and digital infrastructure; distinguish technical existence from ownership/control.
+10. **Banking / Financial Counterparty Review** — independently verify bank identity/routing where public evidence permits; never treat a genuine bank/BIC as proof of beneficiary-account ownership.
+11. **Product / Asset / Capability / Logistics Review** — adapt to the transaction: title, origin, capacity, permits, vessels/terminals/refineries, delivery capability, or equivalent operational claims.
+12. **Pricing / Economics / Market Context** — only when material; distinguish like-for-like benchmarks from contextual comparisons.
+13. **Transaction Procedure, Contract & Trade-Finance Review** — identify execution gaps, conflicting payment/title triggers, unusual boilerplate, instruments, and where specialist legal/bank review is required.
+14. **Sanctions, Regulatory, Enforcement, Litigation & Adverse-Media Screening** — state exact subjects/identifiers searched, source limitations, false-positive handling, and why “no exact hit” is not clearance.
+15. **Possible Fraud / Scam / Misrepresentation Indicators** — list concrete indicators with evidence and a plausible benign explanation/verification response. Indicators are not accusations.
+16. **Positive / Risk-Reducing Indicators** — record verified positives so the report is not one-sided.
+17. **Risk Matrix** — risk area, current evidence-based status/severity, reason, and confidence/limitations. Avoid opaque single-number risk scores unless the scoring method is explicitly defined in the case.
+18. **Mandatory Verification Gates** — numbered conditions that require direct bank/registry/regulator/issuer/counterparty/specialist confirmation and cannot be closed by more open-web searching.
+19. **Plain-English Next Steps** — ordered actions plus explicit automatic stop/escalation conditions where appropriate.
+20. **Source Ledger** — stable source reference, source title, exact public URL for external research, document reference/page for submitted evidence, and how it was used.
+21. **Contradictions, Unresolved Checks & Limitations** — consolidate open conflicts, attempted methods, blockers, and next manual actions.
+22. **Draft Conclusion** — concise evidence-based conclusion and what would materially change it; reiterate human review requirement.
+
+For `fast` or `standard`, the same structure may be compressed, but the evidence package, material findings, source ledger, unresolved checks, limitations, and next actions must still be present.
