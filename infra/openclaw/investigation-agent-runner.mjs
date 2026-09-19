@@ -252,6 +252,84 @@ function parsePlan(stdout) {
   return { envelope, plan };
 }
 
+function normalizeCandidate(value) {
+  return String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function ibanChecksum(candidate) {
+  const value = normalizeCandidate(candidate);
+  if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{10,30}$/.test(value)) return null;
+  const rotated = value.slice(4) + value.slice(0, 4);
+  let remainder = 0;
+  for (const ch of rotated) {
+    const digits = /[A-Z]/.test(ch) ? String(ch.charCodeAt(0) - 55) : ch;
+    for (const digit of digits) remainder = (remainder * 10 + Number(digit)) % 97;
+  }
+  return { value, mod97_remainder: remainder, checksum_valid: remainder === 1 };
+}
+
+function imoChecksum(candidate) {
+  const compact = String(candidate ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const match = compact.match(/(?:IMO)?([0-9]{7})/);
+  if (!match) return null;
+  const value = match[1];
+  const digits = [...value].map(Number);
+  const checksum = digits.slice(0, 6).reduce((sum, digit, index) => sum + digit * (7 - index), 0) % 10;
+  return { value: `IMO${value}`, calculated_check_digit: checksum, checksum_valid: checksum === digits[6] };
+}
+
+function bicFormat(candidate) {
+  const value = normalizeCandidate(candidate);
+  if (!/^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/.test(value)) return null;
+  return {
+    value,
+    format_valid: true,
+    note: 'Format only; this does not establish that the bank, branch, account, beneficiary or transaction instruction is genuine.',
+  };
+}
+
+function buildDeterministicChecks(plan) {
+  const candidates = [];
+  for (const profile of plan.document_profiles ?? []) {
+    for (const value of profile.material_identifiers ?? []) {
+      candidates.push({ document_id: profile.document_id, value });
+    }
+  }
+  const ibans = [];
+  const imo_numbers = [];
+  const bic_candidates = [];
+  const repeated = new Map();
+  for (const candidate of candidates) {
+    const normalized = normalizeCandidate(candidate.value);
+    if (normalized.length >= 6) {
+      const rows = repeated.get(normalized) ?? [];
+      rows.push(candidate.document_id);
+      repeated.set(normalized, rows);
+    }
+    const iban = ibanChecksum(candidate.value);
+    if (iban) ibans.push({ document_id: candidate.document_id, ...iban });
+    const imo = imoChecksum(candidate.value);
+    if (imo) imo_numbers.push({ document_id: candidate.document_id, ...imo });
+    const bic = bicFormat(candidate.value);
+    if (bic) bic_candidates.push({ document_id: candidate.document_id, ...bic });
+  }
+  return {
+    schema_version: 1,
+    tool: 'integritas_transaction_checks_v1',
+    derived_from: 'planner-extracted candidate identifiers; verify candidate extraction against submitted evidence before relying on a result',
+    iban_checks: ibans.slice(0, 100),
+    imo_checks: imo_numbers.slice(0, 100),
+    bic_format_checks: bic_candidates.slice(0, 100),
+    repeated_identifier_candidates: [...repeated.entries()]
+      .filter(([, ids]) => new Set(ids).size > 1)
+      .slice(0, 100)
+      .map(([normalized_value, ids]) => ({
+        normalized_value,
+        document_ids: [...new Set(ids)],
+      })),
+  };
+}
+
 function mergeToolSummaries(envelopes) {
   const tools = new Set();
   let calls = 0;
@@ -328,12 +406,13 @@ Read:
 - /agent/manifest.json
 - /agent/forensics.json
 - /agent/investigation-plan.json
+- /agent/deterministic-checks.json
 - /agent/bundle-template.json
 - /agent/contracts/investigation-bundle-v1.schema.json
 - /agent/skills/integritas-investigation-v1/SKILL.md
 - submitted evidence under /agent/documents/
 
-Execute the case-specific research plan using the strongest available sources and the full permitted research toolset. Use web_search for discovery, web_fetch for stable pages, browser for dynamic/interactive portals and verification forms, pdf/view_image for document or visual evidence. Adapt the plan when newly verified evidence creates a material lead, but stay within the depth budget and explain unavailable/manual-only lanes honestly.
+Execute the case-specific research plan using the strongest available sources and the full permitted research toolset. Use web_search for discovery, web_fetch for stable pages, browser for dynamic/interactive portals and verification forms, pdf/view_image for document or visual evidence. Use /agent/deterministic-checks.json for arithmetic/checksum support after verifying the candidate identifier against the submitted page; an IBAN/IMO checksum or BIC-format result is a structural check, never proof of account ownership, vessel control or transaction authenticity. Adapt the plan when newly verified evidence creates a material lead, but stay within the depth budget and explain unavailable/manual-only lanes honestly.
 
 For critical claims, prefer at least one Grade A/B source and independent corroboration when available. Do not waste calls on repeated snippets or low-value biography while critical legal identity, authority, banking, product/title, terminal/vessel, licence, issuer-authenticity or payment gates remain open.
 
@@ -355,6 +434,7 @@ Read:
 - /agent/manifest.json
 - /agent/forensics.json
 - /agent/investigation-plan.json
+- /agent/deterministic-checks.json
 - /agent/research-bundle.json
 - /agent/skills/integritas-investigation-v1/SKILL.md
 - every submitted file under /agent/documents/ when needed to challenge a material claim.
@@ -403,6 +483,8 @@ const plannerStdout = await runAgent('planner-task.md', route.planner);
 await writeSharedAtomic('planner-agent-exec.json', plannerStdout);
 const { envelope: plannerEnvelope, plan } = parsePlan(plannerStdout);
 await writeSharedAtomic('investigation-plan.json', `${JSON.stringify(plan, null, 2)}\n`);
+const deterministicChecks = buildDeterministicChecks(plan);
+await writeSharedAtomic('deterministic-checks.json', `${JSON.stringify(deterministicChecks, null, 2)}\n`);
 
 await writeSharedAtomic('research-task.md', researchTask());
 await writeProgress('researching', 30, 'primary_research');
@@ -452,6 +534,13 @@ if (!existingTools.some((row) => row?.tool === 'integritas_adaptive_planner_v1')
     tool: 'integritas_adaptive_planner_v1',
     status: 'completed',
     summary: `Evidence-first plan classified ${plan.document_profiles.length} document(s) and ${plan.research_lanes.length} research lane(s).`,
+  });
+}
+if (!existingTools.some((row) => row?.tool === 'integritas_transaction_checks_v1')) {
+  existingTools.unshift({
+    tool: 'integritas_transaction_checks_v1',
+    status: 'completed',
+    summary: `Deterministic candidate checks: ${deterministicChecks.iban_checks.length} IBAN, ${deterministicChecks.imo_checks.length} IMO and ${deterministicChecks.bic_format_checks.length} BIC-format candidate(s).`,
   });
 }
 finalParsed.bundle.execution.tool_results = existingTools.slice(0, 200);
