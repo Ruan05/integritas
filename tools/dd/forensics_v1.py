@@ -96,6 +96,24 @@ def find_pdf_value(data, key):
     return None
 
 
+def embedded_image_stream_hashes(data):
+    hashes = []
+    for match in re.finditer(rb'(?s)\\b\\d+\\s+\\d+\\s+obj\\b(.*?)endobj', data):
+        body = match.group(1)
+        if not re.search(rb'/Subtype\\s*/Image\\b', body):
+            continue
+        stream = re.search(rb'(?s)stream(?:\\r\\n|\\n|\\r)(.*?)endstream', body)
+        if stream is None:
+            continue
+        payload = stream.group(1).rstrip(b'\\r\\n')
+        if not payload:
+            continue
+        hashes.append(hashlib.sha256(payload).hexdigest())
+        if len(hashes) >= 200:
+            break
+    return sorted(set(hashes))
+
+
 def audit_file(path):
     path = Path(path)
     size = path.stat().st_size
@@ -129,6 +147,7 @@ def audit_file(path):
         "signature_object_markers": sig_objects,
         "byte_range_markers": byte_ranges,
         "cryptographic_signature_present": bool(sig_fields or sig_objects or byte_ranges),
+        "embedded_image_stream_hashes": embedded_image_stream_hashes(data),
     }
     return base
 
@@ -137,10 +156,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("files", nargs="+", type=Path)
     args = parser.parse_args()
+    reports = [audit_file(path) for path in args.files]
+    image_owners = {}
+    for report in reports:
+        for sha in report.get("pdf", {}).get("embedded_image_stream_hashes", []):
+            image_owners.setdefault(sha, []).append(report["filename"])
+    cross_document_image_reuse = [
+        {"sha256": sha, "filenames": sorted(set(names))}
+        for sha, names in sorted(image_owners.items())
+        if len(set(names)) > 1
+    ][:200]
     print(json.dumps({
         "schema_version": 1,
         "tool": "integritas_forensics_v1",
-        "reports": [audit_file(path) for path in args.files],
+        "reports": reports,
+        "cross_document_image_reuse": cross_document_image_reuse,
     }, ensure_ascii=False, indent=2))
 
 
