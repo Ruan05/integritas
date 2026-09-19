@@ -116,3 +116,38 @@ select:disabled, input:disabled { opacity: 0.6; }
   .audit-stream > div { align-items: flex-start; flex-direction: column; }
   .audit-stream small { text-align: left; }
 }
+
+
+.milestone-board { display: grid; gap: 16px; }
+.milestone-head { align-items: flex-start; margin-bottom: 0; }
+.milestone-head > div { display: grid; gap: 5px; }
+.milestone-head span { white-space: nowrap; font-weight: 700; }
+.milestone-progress { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.milestone-progress > span { display: block; height: 100%; border-radius: inherit; background: #d4af37; transition: width 220ms ease; }
+.milestone-alert { padding: 10px 12px; border: 1px solid rgba(212, 175, 55, 0.28); border-radius: 8px; color: #f0dba1; background: rgba(212, 175, 55, 0.08); }
+.milestone-columns { display: grid; grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr); gap: 18px; }
+.milestone-group { min-width: 0; }
+.milestone-group h3 { margin: 0 0 10px; color: #d4af37; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+.milestone-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.milestone-item { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-width: 0; padding: 10px; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; background: #0b0907; }
+.milestone-item.complete { border-color: rgba(140, 174, 104, 0.28); }
+.milestone-item.active { border-color: rgba(212, 175, 55, 0.42); }
+.milestone-item.blocked, .milestone-item.manual { border-color: rgba(201, 122, 91, 0.32); }
+.milestone-check { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid #6c6048; border-radius: 6px; color: #151007; font-weight: 900; }
+.milestone-item.complete .milestone-check { border-color: #8cae68; background: #8cae68; }
+.milestone-item.active .milestone-check { border-color: #d4af37; color: #d4af37; font-size: 20px; line-height: 1; }
+.milestone-item.blocked .milestone-check, .milestone-item.manual .milestone-check { border-color: #c97a5b; }
+.milestone-copy { display: grid; gap: 3px; min-width: 0; }
+.milestone-copy strong { font-size: 14px; overflow-wrap: anywhere; }
+.milestone-copy small { color: #8f856f; font-size: 12px; text-transform: capitalize; }
+.milestone-state { border-radius: 999px; padding: 5px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; color: #b7ab91; background: rgba(255,255,255,0.05); }
+.milestone-state.complete { color: #dff7c8; background: rgba(116, 168, 74, 0.16); }
+.milestone-state.active { color: #ffe2a7; background: rgba(212, 175, 55, 0.14); }
+.milestone-state.blocked, .milestone-state.manual { color: #ffd2bf; background: rgba(201, 122, 91, 0.14); }
+
+@media (max-width: 820px) {
+  .milestone-columns { grid-template-columns: 1fr; }
+  .milestone-item { grid-template-columns: 28px minmax(0, 1fr); }
+  .milestone-state { grid-column: 2; justify-self: start; }
+  .milestone-head { align-items: flex-start; }
+}
