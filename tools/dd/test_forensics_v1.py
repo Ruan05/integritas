@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from forensics_v1 import audit_file
+from forensics_v1 import audit_file, embedded_image_stream_hashes
 
 
 class ForensicsV1Tests(unittest.TestCase):
@@ -31,6 +31,15 @@ class ForensicsV1Tests(unittest.TestCase):
         self.assertTrue(result["pdf"]["cryptographic_signature_present"])
         self.assertEqual(result["pdf"]["signature_field_markers"], 1)
         self.assertEqual(result["pdf"]["byte_range_markers"], 1)
+
+    def test_embedded_image_stream_hashes_are_exact_and_reusable(self):
+        image = b"identical-image-payload"
+        pdf_a = b"%PDF-1.7\n1 0 obj << /Subtype /Image /Length 23 >>\nstream\n" + image + b"\nendstream\nendobj\n%%EOF\n"
+        pdf_b = b"%PDF-1.7\n9 0 obj << /Type /XObject /Subtype /Image /Length 23 >>\nstream\n" + image + b"\nendstream\nendobj\n%%EOF\n"
+        hashes_a = embedded_image_stream_hashes(pdf_a)
+        hashes_b = embedded_image_stream_hashes(pdf_b)
+        self.assertEqual(hashes_a, hashes_b)
+        self.assertEqual(hashes_a, [hashlib.sha256(image).hexdigest()])
 
     def test_non_pdf_still_preserves_hash_and_size(self):
         data = b"plain evidence"
