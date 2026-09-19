@@ -20,6 +20,40 @@ TOP_LEVEL = {
     'execution',
 }
 
+MAXIMUM_REPORT_LANES = [
+    ('investigation completion', r'investigation\s+completion|completion\s+statement'),
+    ('intake context', r'intake\s+(context|message)|translation|evidentiary\s+test'),
+    ('executive summary', r'executive\s+summary|executive\s+decision'),
+    ('current diligence status', r'current\s+(diligence|transaction)\s+status|immediate\s+decision|current\s+decision'),
+    ('evidence package', r'evidence\s+(package|register).*review|evidence\s+package|evidence\s+register'),
+    ('document forensics', r'document[-\s]+forensics|forensic\s+document'),
+    ('corporate identity', r'corporate\s+(identity|legal)|legal\s+identity|company\s+identity'),
+    ('people and relationships', r'ownership.*people|people.*relationship|beneficial\s+ownership|relationship\s+intelligence'),
+    ('physical and digital footprint', r'address.*physical|physical\s+presence|domain.*website|website.*email|digital\s+footprint'),
+    ('banking review', r'banking|bank\s+review|financial\s+counterparty'),
+    ('product capability logistics', r'product.*logistics|asset.*capability|commercial\s+capacity|delivery\s+capacity'),
+    ('pricing and economics', r'pricing|price\s+context|economics|market\s+context'),
+    ('transaction and trade finance', r'transaction.*procedure|trade[-\s]+finance|contract.*review|transaction[-\s]+risk'),
+    ('screening', r'sanctions.*adverse|sanctions.*pep|regulatory.*adverse|enforcement.*litigation'),
+    ('fraud pattern indicators', r'fraud[-/\s]+pattern|scam.*indicator|misrepresentation.*indicator'),
+    ('positive indicators', r'positive.*indicator|risk[-\s]+reducing'),
+    ('risk matrix', r'risk\s+matrix|risk\s+composition'),
+    ('mandatory verification gates', r'mandatory\s+verification\s+gates|critical\s+gates|required\s+edd.*release'),
+    ('plain english next steps', r'plain[-\s]+english\s+next\s+steps|next\s+steps|recommended\s+order\s+of\s+work'),
+    ('source ledger', r'source\s+ledger|sources\s+and\s+verification|sources\s+and\s+final'),
+    ('unresolved checks and limitations', r'contradictions.*unresolved|unresolved\s+checks|limitations'),
+    ('conclusion', r'final\s+conclusion|draft\s+conclusion|final\s+assessment'),
+]
+MAXIMUM_REPORT_FEATURES = [
+    ('subject status matrix', r'person-by-person|entity-by-entity|clearance\s+heatmap|subject\s+matrix'),
+    ('relationship evidence network', r'relationship.*(network|map)|evidence\s+network|relationship\s+intelligence\s+summary'),
+    ('claim-to-evidence matrix', r'claim-to-evidence|claim\s+to\s+evidence'),
+    ('research coverage statement', r'research[-\s]+lane\s+coverage|research\s+coverage|coverage\s+statement'),
+    ('false-positive controls', r'false[-\s]+positive|namesake|disambiguation'),
+    ('closure register', r'closure\s+register|mandatory\s+verification\s+gates|required\s+edd.*release'),
+]
+MAXIMUM_REPORT_MIN_CHARS = 8000
+
 
 def timestamp(value):
     try:
@@ -249,6 +283,37 @@ def validate_cross_records(bundle, findings, errors):
         methods = row.get('attempted_methods')
         if not isinstance(methods, list) or len(methods) > 100 or any(not isinstance(x, str) or len(x) > 2000 for x in methods):
             errors.append(f'unresolved {key}: invalid attempted_methods')
+def validate_maximum_report(bundle, report_text, errors):
+    if bundle.get('depth') != 'maximum':
+        return {'required_lanes': 0, 'missing_lanes': [], 'missing_features': []}
+    if len(report_text) < MAXIMUM_REPORT_MIN_CHARS:
+        errors.append(
+            f'report: maximum-depth Prototype 1 report is too short '
+            f'({len(report_text)} chars; minimum {MAXIMUM_REPORT_MIN_CHARS})'
+        )
+    missing_lanes = [
+        label for label, pattern in MAXIMUM_REPORT_LANES
+        if not re.search(pattern, report_text, flags=re.I | re.S)
+    ]
+    missing_features = [
+        label for label, pattern in MAXIMUM_REPORT_FEATURES
+        if not re.search(pattern, report_text, flags=re.I | re.S)
+    ]
+    if missing_lanes:
+        errors.append(
+            'report: maximum-depth Prototype 1 lanes missing: ' + ', '.join(missing_lanes)
+        )
+    if missing_features:
+        errors.append(
+            'report: maximum-depth Prototype 1 features missing: ' + ', '.join(missing_features)
+        )
+    return {
+        'required_lanes': len(MAXIMUM_REPORT_LANES),
+        'missing_lanes': missing_lanes,
+        'missing_features': missing_features,
+    }
+
+
 def validate_execution(bundle, errors):
     execution = bundle.get('execution')
     if not isinstance(execution, dict):
@@ -302,6 +367,7 @@ def validate(bundle, manifest, report_text, current_revision):
     limitations = bundle.get('limitations')
     if not isinstance(limitations, list) or len(limitations) > 100 or any(not isinstance(x, str) or len(x) > 4000 for x in limitations):
         errors.append('limitations: invalid')
+    prototype1 = validate_maximum_report(bundle, report_text, errors)
     validate_execution(bundle, errors)
     execution = bundle.get('execution') if isinstance(bundle.get('execution'), dict) else {}
     if execution.get('terminal_outcome') == 'completed':
@@ -318,6 +384,9 @@ def validate(bundle, manifest, report_text, current_revision):
         'checks': len(checks),
         'contradictions': len(bundle.get('contradictions', [])) if isinstance(bundle.get('contradictions'), list) else 0,
         'unresolved_checks': len(bundle.get('unresolved_checks', [])) if isinstance(bundle.get('unresolved_checks'), list) else 0,
+        'prototype1_required_lanes': prototype1.get('required_lanes', 0),
+        'prototype1_missing_lanes': prototype1.get('missing_lanes', []),
+        'prototype1_missing_features': prototype1.get('missing_features', []),
     }
     return errors, summary
 
