@@ -286,6 +286,51 @@ def validate_cross_records(bundle, findings, errors):
         methods = row.get('attempted_methods')
         if not isinstance(methods, list) or len(methods) > 100 or any(not isinstance(x, str) or len(x) > 2000 for x in methods):
             errors.append(f'unresolved {key}: invalid attempted_methods')
+def validate_forensics(bundle, manifest, forensics, errors):
+    if forensics is None:
+        if bundle.get('depth') == 'maximum':
+            errors.append('forensics: maximum-depth investigation requires trusted forensic pre-pass')
+        return {'documents': 0}
+    if not isinstance(forensics, dict) or forensics.get('schema_version') != 1 or forensics.get('tool') != 'integritas_forensics_v1':
+        errors.append('forensics: invalid trusted forensic result')
+        return {'documents': 0}
+    reports = forensics.get('reports')
+    if not isinstance(reports, list):
+        errors.append('forensics: reports must be an array')
+        return {'documents': 0}
+    manifest_docs = {
+        row.get('id'): row for row in manifest.get('documents', [])
+        if isinstance(row, dict) and isinstance(row.get('id'), str)
+    }
+    seen = set()
+    for index, row in enumerate(reports):
+        if not isinstance(row, dict):
+            errors.append(f'forensics report {index}: invalid')
+            continue
+        document_id = row.get('document_id')
+        expected = manifest_docs.get(document_id)
+        if expected is None:
+            errors.append(f'forensics report {index}: unknown document_id')
+            continue
+        if document_id in seen:
+            errors.append(f'forensics report {index}: duplicate document_id')
+        seen.add(document_id)
+        if row.get('sha256') != expected.get('sha256'):
+            errors.append(f'forensics report {index}: sha256 mismatch')
+        if row.get('size_bytes') != expected.get('size_bytes'):
+            errors.append(f'forensics report {index}: size mismatch')
+        if row.get('original_name') != expected.get('name'):
+            errors.append(f'forensics report {index}: original name mismatch')
+        if row.get('kind') == 'pdf':
+            pdf = row.get('pdf')
+            if not isinstance(pdf, dict) or not isinstance(pdf.get('cryptographic_signature_present'), bool):
+                errors.append(f'forensics report {index}: invalid PDF forensic metadata')
+    missing = sorted(set(manifest_docs) - seen)
+    if missing:
+        errors.append('forensics: every manifest document must be audited: ' + ','.join(missing))
+    return {'documents': len(seen)}
+
+
 def validate_maximum_report(bundle, report_text, errors):
     if bundle.get('depth') != 'maximum':
         return {'required_lanes': 0, 'missing_lanes': [], 'missing_features': []}
@@ -347,9 +392,16 @@ def validate_execution(bundle, errors):
         if row.get('status') not in {'completed', 'failed', 'unavailable', 'skipped'}:
             errors.append(f'tool_result {index}: invalid status')
         require_string(row.get('summary'), f'tool_result {index}.summary', errors, 4000, allow_empty=True)
+    if bundle.get('depth') == 'maximum' and not any(
+        isinstance(row, dict)
+        and row.get('tool') == 'integritas_forensics_v1'
+        and row.get('status') == 'completed'
+        for row in tools
+    ):
+        errors.append('execution: maximum-depth investigation must record completed integritas_forensics_v1')
 
 
-def validate(bundle, manifest, report_text, current_revision):
+def validate(bundle, manifest, report_text, current_revision, forensics=None):
     errors = []
     if not isinstance(bundle, dict):
         return ['bundle: must be an object'], {}
@@ -370,6 +422,7 @@ def validate(bundle, manifest, report_text, current_revision):
     limitations = bundle.get('limitations')
     if not isinstance(limitations, list) or len(limitations) > 100 or any(not isinstance(x, str) or len(x) > 4000 for x in limitations):
         errors.append('limitations: invalid')
+    forensics_summary = validate_forensics(bundle, manifest, forensics, errors)
     prototype1 = validate_maximum_report(bundle, report_text, errors)
     validate_execution(bundle, errors)
     execution = bundle.get('execution') if isinstance(bundle.get('execution'), dict) else {}
@@ -390,6 +443,7 @@ def validate(bundle, manifest, report_text, current_revision):
         'prototype1_required_lanes': prototype1.get('required_lanes', 0),
         'prototype1_missing_lanes': prototype1.get('missing_lanes', []),
         'prototype1_missing_features': prototype1.get('missing_features', []),
+        'forensic_documents': forensics_summary.get('documents', 0),
     }
     return errors, summary
 
@@ -401,6 +455,7 @@ def main():
     parser.add_argument('manifest_pos', nargs='?', type=Path)
     parser.add_argument('--manifest', dest='manifest_opt', type=Path)
     parser.add_argument('--report', dest='report_opt', type=Path)
+    parser.add_argument('--forensics', type=Path)
     parser.add_argument('--current-revision', type=int)
     args = parser.parse_args()
     manifest_path = args.manifest_opt or args.manifest_pos
@@ -411,8 +466,9 @@ def main():
         bundle = json.loads(args.bundle.read_text(encoding='utf-8'))
         manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
         report_text = report_path.read_text(encoding='utf-8')
+        forensics = json.loads(args.forensics.read_text(encoding='utf-8')) if args.forensics else None
         revision = args.current_revision if args.current_revision is not None else manifest.get('case_revision')
-        errors, summary = validate(bundle, manifest, report_text, revision)
+        errors, summary = validate(bundle, manifest, report_text, revision, forensics)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         errors, summary = [f'input: {type(exc).__name__}'], {}
     print(json.dumps({'valid': not errors, 'errors': errors, 'summary': summary}, sort_keys=True))
