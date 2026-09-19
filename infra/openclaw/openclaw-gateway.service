@@ -1,0 +1,43 @@
+[Unit]
+Description=Integritas OpenClaw Gateway
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=openclaw
+Group=openclaw
+SupplementaryGroups=docker
+Environment=HOME=/var/lib/openclaw
+Environment=OPENCLAW_HOME=/var/lib/openclaw
+Environment=OPENCLAW_STATE_DIR=/var/lib/openclaw
+Environment=OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-gateway.json
+Environment=OPENCLAW_SERVICE_REPAIR_POLICY=external
+EnvironmentFile=-/etc/integritas/provider-secrets.env
+ExecStart=/opt/openclaw/bin/openclaw gateway --port 18789
+Restart=always
+RestartSec=5
+RestartPreventExitStatus=78
+TimeoutStartSec=30
+TimeoutStopSec=330
+SuccessExitStatus=0 143
+KillMode=mixed
+OOMPolicy=continue
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/var/lib/openclaw
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

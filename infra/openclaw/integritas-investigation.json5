@@ -1,0 +1,68 @@
+{
+  $include: "./openclaw.json",
+  models: {
+    mode: "merge",
+    providers: {
+      "integritas-openrouter": {
+        baseUrl: "https://openrouter.ai/api/v1",
+        apiKey: { source: "env", provider: "default", id: "OPENROUTER_API_KEY" },
+        api: "openai-completions",
+        authHeader: true,
+        timeoutSeconds: 90,
+        headers: {
+          "HTTP-Referer": "https://integritass.com",
+          "X-Title": "Integritas",
+        },
+        models: [
+          {
+            id: "nvidia/nemotron-3-ultra-550b-a55b:free",
+            name: "Integritas OpenRouter Free Nemotron 3 Ultra",
+            reasoning: true,
+            input: ["text"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 1048576,
+            contextTokens: 1000000,
+            maxTokens: 8192,
+          },
+          {
+            id: "openrouter/free",
+            name: "Integritas OpenRouter Dynamic Free Router",
+            reasoning: true,
+            input: ["text"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 200000,
+            contextTokens: 180000,
+            maxTokens: 8192,
+          },
+        ],
+      },
+    },
+  },
+  agents: {
+    defaults: {
+      sandbox: {
+        workspaceAccess: "ro",
+      },
+      models: {
+        "integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free": {},
+        "integritas-openrouter/openrouter/free": {},
+        "opencode-go/glm-5.3-flash": {},
+        "opencode-go/kimi-k3": {},
+        "opencode-go/glm-5.2": {},
+        "nvidia/nemotron-3-ultra-550b-a55b": {
+          params: {
+            chat_template_kwargs: {
+              enable_thinking: false,
+              force_nonempty_content: true,
+            },
+          },
+        },
+      },
+    },
+  },
+  tools: {
+    profile: "minimal",
+    alsoAllow: ["ls", "read", "web_search", "web_fetch", "browser", "view_image", "pdf"],
+    deny: ["write", "edit", "exec", "apply_patch", "process", "code_execution", "terminal", "screen", "dashboard", "portal", "sessions", "sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents", "secrets"],
+  },
+}

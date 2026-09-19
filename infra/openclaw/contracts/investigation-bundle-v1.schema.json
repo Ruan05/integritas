@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://integritas.local/contracts/investigation-bundle-v1.schema.json",
+  "title": "Integritas investigation bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "case_id", "case_job_id", "case_revision", "depth", "generated_at",
+    "entities", "relationships", "sources", "findings", "checks", "contradictions",
+    "unresolved_checks", "limitations", "report", "execution"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "case_id": { "$ref": "#/$defs/uuid" },
+    "case_job_id": { "$ref": "#/$defs/uuid" },
+    "case_revision": { "type": "integer", "minimum": 0 },
+    "depth": { "enum": ["fast", "standard", "deep", "maximum"] },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "entities": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/entity" } },
+    "relationships": { "type": "array", "maxItems": 1000, "items": { "$ref": "#/$defs/relationship" } },
+    "sources": { "type": "array", "maxItems": 2000, "items": { "$ref": "#/$defs/source" } },
+    "findings": { "type": "array", "maxItems": 2000, "items": { "$ref": "#/$defs/finding" } },
+    "checks": { "type": "array", "maxItems": 2000, "items": { "$ref": "#/$defs/check" } },
+    "contradictions": { "type": "array", "maxItems": 1000, "items": { "$ref": "#/$defs/contradiction" } },
+    "unresolved_checks": { "type": "array", "maxItems": 1000, "items": { "$ref": "#/$defs/unresolved" } },
+    "limitations": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 4000 } },
+    "report": { "$ref": "#/$defs/report" },
+    "execution": { "$ref": "#/$defs/execution" }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$" },
+    "key": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$" },
+    "entity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["entity_key", "entity_type", "display_name", "aliases", "identifiers", "match_status", "confidence"],
+      "properties": {
+        "entity_key": { "$ref": "#/$defs/key" },
+        "entity_type": { "enum": ["person", "company", "organization", "bank", "vessel", "other"] },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "aliases": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 240 } },
+        "identifiers": { "type": "object", "maxProperties": 100 },
+        "match_status": { "enum": ["proposed", "probable", "verified", "conflicting", "rejected"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "relationship": {
+      "type": "object", "additionalProperties": false,
+      "required": ["relationship_key", "from_entity_key", "to_entity_key", "relationship_type", "claim", "evidence_status", "source_keys", "confidence"],
+      "properties": {
+        "relationship_key": { "$ref": "#/$defs/key" },
+        "from_entity_key": { "$ref": "#/$defs/key" },
+        "to_entity_key": { "$ref": "#/$defs/key" },
+        "relationship_type": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "claim": { "type": "string", "maxLength": 12000 },
+        "evidence_status": { "enum": ["verified", "alleged", "conflicting", "uncertain"] },
+        "source_keys": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/key" } },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_key", "source_type", "title", "excerpt", "reliability_note", "evidence_origin", "retrieved_at"],
+      "properties": {
+        "source_key": { "$ref": "#/$defs/key" },
+        "source_type": { "enum": ["document", "official", "primary", "secondary", "other"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "url": { "type": ["string", "null"], "maxLength": 2048 },
+        "document_id": { "anyOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }] },
+        "page_reference": { "type": ["string", "null"], "maxLength": 500 },
+        "excerpt": { "type": "string", "maxLength": 8000 },
+        "reliability_note": { "type": "string", "maxLength": 4000 },
+        "evidence_origin": { "enum": ["submitted_document", "external_research"] },
+        "retrieved_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "finding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["finding_key", "finding_type", "claim", "evidence_status", "materiality", "reliability", "evidence_excerpt", "source_keys"],
+      "properties": {
+        "finding_key": { "$ref": "#/$defs/key" },
+        "entity_key": { "anyOf": [{ "$ref": "#/$defs/key" }, { "type": "null" }] },
+        "finding_type": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "claim": { "type": "string", "minLength": 1, "maxLength": 12000 },
+        "evidence_status": { "enum": ["verified", "alleged", "conflicting", "uncertain"] },
+        "materiality": { "enum": ["informational", "low", "medium", "high", "critical"] },
+        "reliability": { "enum": ["high", "medium", "low", "unknown"] },
+        "evidence_excerpt": { "type": "string", "maxLength": 8000 },
+        "source_keys": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/key" } }
+      }
+    },
+    "check": {
+      "type": "object", "additionalProperties": false,
+      "required": ["check_key", "check_type", "description", "priority", "required_source", "status", "outcome"],
+      "properties": {
+        "check_key": { "$ref": "#/$defs/key" },
+        "entity_key": { "anyOf": [{ "$ref": "#/$defs/key" }, { "type": "null" }] },
+        "check_type": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 12000 },
+        "priority": { "enum": ["low", "medium", "high", "critical"] },
+        "required_source": { "type": "string", "maxLength": 4000 },
+        "status": { "enum": ["open", "in_progress", "complete", "blocked"] },
+        "outcome": { "type": "string", "maxLength": 12000 }
+      }
+    },
+    "contradiction": {
+      "type": "object", "additionalProperties": false,
+      "required": ["contradiction_key", "finding_keys", "description"],
+      "properties": {
+        "contradiction_key": { "$ref": "#/$defs/key" },
+        "finding_keys": { "type": "array", "minItems": 2, "maxItems": 20, "items": { "$ref": "#/$defs/key" } },
+        "description": { "type": "string", "minLength": 1, "maxLength": 12000 }
+      }
+    },
+    "unresolved": {
+      "type": "object", "additionalProperties": false,
+      "required": ["unresolved_key", "description", "reason", "attempted_methods", "blocker", "next_manual_action"],
+      "properties": {
+        "unresolved_key": { "$ref": "#/$defs/key" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 12000 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "attempted_methods": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 2000 } },
+        "blocker": { "type": "string", "maxLength": 4000 },
+        "next_manual_action": { "type": "string", "maxLength": 4000 }
+      }
+    },
+    "report": {
+      "type": "object", "additionalProperties": false,
+      "required": ["summary", "markdown", "status"],
+      "properties": {
+        "summary": { "type": "string", "maxLength": 12000 },
+        "markdown": { "type": "string", "minLength": 1, "maxLength": 5242880 },
+        "status": { "const": "draft" }
+      }
+    },
+    "execution": {
+      "type": "object", "additionalProperties": false,
+      "required": ["started_at", "completed_at", "stages", "tool_results", "warnings", "terminal_outcome"],
+      "properties": {
+        "started_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": "string", "format": "date-time" },
+        "stages": { "type": "array", "maxItems": 32, "items": { "type": "string", "maxLength": 80 } },
+        "tool_results": {
+          "type": "array", "maxItems": 200,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["tool", "status", "summary"],
+            "properties": {
+              "tool": { "type": "string", "maxLength": 160 },
+              "status": { "enum": ["completed", "failed", "unavailable", "skipped"] },
+              "summary": { "type": "string", "maxLength": 4000 }
+            }
+          }
+        },
+        "warnings": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 4000 } },
+        "terminal_outcome": { "enum": ["completed", "incomplete", "research_limit_reached"] }
+      }
+    }
+  }
+}
