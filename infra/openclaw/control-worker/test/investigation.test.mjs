@@ -219,6 +219,76 @@ test('reuses retained output and normalizes unresolved completed outcome without
   }
 });
 
+test('recovers fast investigation from validated research artifacts without another model run', async () => {
+  const spoolRoot = await mkdtemp(path.join(os.tmpdir(), 'integritas-investigation-'));
+  const bytes = Buffer.from('alpha evidence');
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const jobDir = path.join(spoolRoot, JOB_ID);
+  const documentsDir = path.join(jobDir, 'documents');
+  await mkdir(documentsDir, { recursive: true });
+  await writeFile(path.join(documentsDir, `${DOC_ID}.pdf`), bytes);
+  const report = '# Recovered research report\n\nManual verification remains.';
+  const bundle = {
+    schema_version: 1, case_id: CASE_ID, case_job_id: JOB_ID, case_revision: 7, depth: 'fast',
+    generated_at: '2026-09-18T08:00:00Z', entities: [], relationships: [], sources: [], findings: [],
+    checks: [{
+      check_key: 'manual-check', check_type: 'manual_verification', description: 'Manual verification remains.',
+      priority: 'medium', required_source: 'Authoritative source', status: 'blocked', outcome: 'Unavailable.',
+    }],
+    contradictions: [],
+    unresolved_checks: [{
+      unresolved_key: 'manual-unresolved', description: 'Manual verification remains.',
+      reason: 'Source unavailable.', attempted_methods: ['Public lookup'], blocker: 'Direct access unavailable.',
+      next_manual_action: 'Verify manually.',
+    }],
+    limitations: ['Manual verification remains.'],
+    report: { summary: 'Recovered', markdown: report, status: 'draft' },
+    execution: {
+      started_at: '2026-09-18T07:50:00Z', completed_at: '2026-09-18T08:00:00Z',
+      stages: [], tool_results: [], warnings: [], terminal_outcome: 'completed',
+    },
+  };
+  await writeFile(path.join(jobDir, 'research-bundle.json'), JSON.stringify(bundle));
+  await writeFile(path.join(jobDir, 'research-report.md'), report);
+  await writeFile(path.join(jobDir, 'research-agent-exec.json'), '{}');
+  const fastCommand = { ...command, payload: { ...command.payload, depth: 'fast' } };
+  const fastManifest = manifestFor(bytes, sha256, { job_stage: 'drafting_report', job_progress: 90 });
+  fastManifest.manifest.depth = 'fast';
+  const checkpoints = [];
+  const client = {
+    baseUrl: 'https://project.supabase.co/functions/v1/integritas-control',
+    storageSelfTest: async () => ({ storage: { ok: true } }),
+    manifest: async () => fastManifest,
+    checkpoint: async (...args) => { checkpoints.push(args); return { ok: true }; },
+    jobState: async () => ({ state: { cancel_requested: false, stale_revision: false, job_progress: 90, job_stage: 'drafting_report' } }),
+    publishOutput: async () => ({ ok: true }),
+    commitBundle: async () => ({ commit_summary: {} }),
+  };
+  const systemctlRunner = async (_file, args) => {
+    if (args[0] === 'show') return { stdout: 'inactive\n', stderr: '' };
+    throw new Error('validated retained research output must not restart OpenClaw');
+  };
+  try {
+    const result = await executeInvestigation(fastCommand, {
+      client,
+      fetchImpl: async () => new Response(bytes, { status: 200, headers: { 'content-length': String(bytes.length) } }),
+      systemctlRunner,
+      spoolRoot,
+      repoRoot: REPO_ROOT,
+      retainWorkspace: true,
+      qaRunner: async () => ({ valid: true, errors: [], summary: { unresolved_checks: 1 } }),
+    });
+    assert.equal(result.terminal_outcome, 'incomplete');
+    const recovered = JSON.parse(await readFile(path.join(jobDir, 'bundle.json'), 'utf8'));
+    assert.equal(recovered.execution.terminal_outcome, 'incomplete');
+    assert.equal(await readFile(path.join(jobDir, 'report.md'), 'utf8'), report);
+    assert.equal(await readFile(path.join(jobDir, 'agent-exec.json'), 'utf8'), '{}');
+    assert.ok(checkpoints.some((entry) => entry[3] === 'incomplete' && entry[4] === 100));
+  } finally {
+    await rm(spoolRoot, { recursive: true, force: true });
+  }
+});
+
 test('rejects a document digest mismatch before starting OpenClaw', async () => {
   const spoolRoot = await mkdtemp(path.join(os.tmpdir(), 'integritas-investigation-'));
   const bytes = Buffer.from('tampered');
