@@ -149,8 +149,10 @@ select pg_temp.assert_true(
 );
 
 select pg_temp.assert_true(
-  (select count(*)=1 and bundle_sha256=repeat('c',64) and report_sha256=repeat('d',64)
-   and summary='Second draft'
+  (select count(*)=1
+          and bool_and(bundle_sha256=repeat('c',64)
+                       and report_sha256=repeat('d',64)
+                       and summary='Second draft')
    from public.integritas_reports where case_job_id=:'rep_case_job_id'::uuid),
   'replacement atomically updates the one draft report'
 );
