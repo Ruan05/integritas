@@ -161,6 +161,20 @@ export function createIntegritasBrowserClient(options: BrowserClientOptions) {
       }
       return payload.investigation;
     },
+    async retryInvestigation(token: string, caseJobId: string) {
+      const payload = await controlRequest(token, {
+        action: 'retry_case_investigation',
+        case_job_id: caseJobId,
+      });
+      return payload.investigation;
+    },
+    async cancelInvestigation(token: string, caseJobId: string) {
+      const payload = await controlRequest(token, {
+        action: 'cancel_case_investigation',
+        case_job_id: caseJobId,
+      });
+      return payload.investigation;
+    },
   };
 }
 
