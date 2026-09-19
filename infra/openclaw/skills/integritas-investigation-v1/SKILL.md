@@ -71,8 +71,11 @@ For `deep` and `maximum` investigations, use the established Integritas Prototyp
 
 For `maximum` investigations, the report must also include the strongest reusable elements from the later Integritas dossiers:
 
+- a **master issue dashboard** that gives the non-technical current position and verification significance for every critical issue;
 - a **person-by-person / entity-by-entity status matrix** covering identity, authority/role, screening, capability and current disposition/status for every material subject;
+- **comprehensive subject/entity dossiers** for every material person, company, bank, domain or related organization surfaced by the evidence, with aliases/identifiers, source hierarchy, role, relationships, screening result, adverse leads, positive evidence and unresolved authority/capacity questions;
 - a **relationship and evidence network** in text or table form that identifies each material edge, the source that supports it, and whether the edge is verified, alleged, conflicting or uncertain;
+- a **digital/commercial chronology or timeline** when dates, domain history, transaction revisions or entity history are material;
 - a **claim-to-evidence matrix** for the material transaction and identity claims, showing the claim, submitted-document source, external corroboration where available, evidence status, and remaining verification action;
 - a **research coverage statement** that distinguishes lanes attempted from evidence actually proven; high search coverage must never be described as high evidence completeness;
 - a **forensic evidence register** linking material document observations to document IDs/page references and explaining what metadata/signatures/visual stamps do and do not prove;
