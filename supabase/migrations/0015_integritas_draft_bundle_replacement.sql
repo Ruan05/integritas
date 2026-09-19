@@ -204,7 +204,7 @@ begin
   return jsonb_build_object('case_job_id',v_job.id,'case_revision',v_job.case_revision,'report_id',v_report.id,'report_status',v_report.status,
     'entities',v_count_entities,'relationships',v_count_relationships,'sources',v_count_sources,'findings',v_count_findings,'checks',v_count_checks);
 end;
-$function$
+$function$;
 
 
 commit;
