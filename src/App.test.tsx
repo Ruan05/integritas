@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { App, InvestigationResultsView } from './App';
+import { InvestigationMilestones } from './InvestigationMilestones';
 
 describe('Integritas Command Center', () => {
   it('renders the private case workflow without fabricating case data or OpenClaw readiness', () => {
@@ -25,6 +26,34 @@ describe('Integritas Command Center', () => {
     render(<App />);
     expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /send secure sign-in link/i })).toBeInTheDocument();
+  });
+});
+
+describe('live investigation milestone presentation', () => {
+  it('shows checked, active and manual research milestones without pretending blocked work is complete', () => {
+    render(
+      <InvestigationMilestones
+        jobProgress={60}
+        checkpoints={[{
+          id: 'cp-1', stage: 'cross_checking', progress: 60, created_at: '2026-09-19T20:00:00Z',
+          safe_metadata: {
+            milestones: [
+              { id: 'core.research', label: 'External and browser research', status: 'complete', priority: 'high' },
+              { id: 'lane.registry', label: 'Verify company registry', status: 'complete', priority: 'critical' },
+              { id: 'lane.bank', label: 'Confirm bank beneficiary', status: 'manual', priority: 'critical' },
+              { id: 'lane.media', label: 'Review adverse media', status: 'active', priority: 'high' },
+            ],
+          },
+        }]}
+        checks={[]}
+      />,
+    );
+    expect(screen.getByRole('heading', { name: /live investigation milestones/i })).toBeInTheDocument();
+    expect(screen.getByText('Verify company registry')).toBeInTheDocument();
+    expect(screen.getAllByText('Complete').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Manual check').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('In progress').length).toBeGreaterThan(0);
+    expect(screen.getByText(/1 check still needs manual verification or is blocked/i)).toBeInTheDocument();
   });
 });
 
