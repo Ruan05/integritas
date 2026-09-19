@@ -178,6 +178,14 @@ export function createIntegritasBrowserClient(options: BrowserClientOptions) {
   };
 }
 
+export type InvestigationMilestoneStatus = 'waiting' | 'active' | 'complete' | 'blocked' | 'manual';
+export type InvestigationMilestonePriority = 'low' | 'medium' | 'high' | 'critical';
+export type InvestigationMilestone = {
+  id: string;
+  label: string;
+  status: InvestigationMilestoneStatus;
+  priority: InvestigationMilestonePriority;
+};
 export type CheckpointRow = { id: string; stage: string; progress: number; safe_metadata: Record<string, unknown>; created_at: string };
 export type EntityResultRow = { id: string; entity_key: string; entity_type: string; display_name: string; match_status: string; match_confidence: number | null; identifiers: Record<string, unknown>; aliases: string[] };
 export type RelationshipResultRow = { id: string; relationship_key: string; from_entity_id: string; to_entity_id: string; relationship_type: string; claim: string; evidence_status: string; confidence: number | null };
@@ -199,6 +207,73 @@ export type PersistedInvestigationResults = {
   report: ReportResultRow | null;
   auditEvents: AuditEventRow[];
 };
+
+const milestoneStatuses = new Set<InvestigationMilestoneStatus>(['waiting', 'active', 'complete', 'blocked', 'manual']);
+const milestonePriorities = new Set<InvestigationMilestonePriority>(['low', 'medium', 'high', 'critical']);
+
+function normalizeMilestone(value: unknown): InvestigationMilestone | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const id = typeof row.id === 'string' ? row.id : '';
+  const label = typeof row.label === 'string' ? row.label : '';
+  const status = row.status as InvestigationMilestoneStatus;
+  const priority = row.priority as InvestigationMilestonePriority;
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id)
+    || label.length < 1 || label.length > 160
+    || !milestoneStatuses.has(status)
+    || !milestonePriorities.has(priority)) return null;
+  return { id, label, status, priority };
+}
+
+function checkStatusToMilestone(status: string): InvestigationMilestoneStatus {
+  if (status === 'complete') return 'complete';
+  if (status === 'in_progress') return 'active';
+  if (status === 'blocked') return 'blocked';
+  return 'waiting';
+}
+
+export function deriveInvestigationMilestones(
+  checkpoints: CheckpointRow[],
+  checks: CheckResultRow[],
+): InvestigationMilestone[] {
+  const ordered = [...checkpoints].sort((a, b) => {
+    const at = Date.parse(a.created_at || '') || 0;
+    const bt = Date.parse(b.created_at || '') || 0;
+    return at - bt || a.progress - b.progress;
+  });
+  const latestWithMilestones = [...ordered].reverse().find((checkpoint) => Array.isArray(checkpoint.safe_metadata?.milestones));
+  const raw = Array.isArray(latestWithMilestones?.safe_metadata?.milestones)
+    ? latestWithMilestones.safe_metadata.milestones
+    : [];
+  const rows: InvestigationMilestone[] = [];
+  const seen = new Set<string>();
+  for (const value of raw) {
+    const normalized = normalizeMilestone(value);
+    if (!normalized || seen.has(normalized.id)) continue;
+    seen.add(normalized.id);
+    rows.push(normalized);
+  }
+
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  for (const check of checks) {
+    if (!check.check_key.startsWith('lane.')) continue;
+    const existing = byId.get(check.check_key);
+    const status = checkStatusToMilestone(check.status);
+    if (existing) {
+      if (existing.status !== 'manual') existing.status = status;
+      continue;
+    }
+    const added: InvestigationMilestone = {
+      id: check.check_key,
+      label: check.description || check.check_key,
+      status,
+      priority: 'medium',
+    };
+    rows.push(added);
+    byId.set(added.id, added);
+  }
+  return rows;
+}
 
 export function isInvestigationResultStale(caseRevision: number, jobRevision: number, reportRevision: number | null) {
   return jobRevision !== caseRevision || (reportRevision !== null && reportRevision !== caseRevision);
@@ -245,7 +320,7 @@ export async function loadPersistedInvestigationResults(
     source_ids: sourceIdsByFinding.get(finding.id) ?? [],
   }));
   return {
-    checkpoints: checkpoints as CheckpointRow[],
+    checkpoints: (checkpoints as CheckpointRow[]).sort((a, b) => (Date.parse(a.created_at || '') || 0) - (Date.parse(b.created_at || '') || 0)),
     entities: entities as EntityResultRow[],
     relationships: relationships as RelationshipResultRow[],
     findings: normalizedFindings,
