@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 test('OpenClaw runner materializes only validated structured final output', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
-  assert.match(source, /parseAgentBundle\(result\.stdout, manifest\)/);
+  assert.match(source, /parseAgentBundle\(researchStdout, manifest\)/);\n  assert.match(source, /parseAgentBundle\(finalStdout, manifest\)/);
   assert.match(source, /writeSharedAtomic\('bundle\.json'/);
   assert.match(source, /writeSharedAtomic\('report\.md'/);
   assert.match(source, /'--code-mode', 'direct'/);
