@@ -321,6 +321,69 @@ test('rejects a document digest mismatch before starting OpenClaw', async () => 
 });
 
 
+test('retries a transient recovery-state fetch without failing or duplicating the agent start', async () => {
+  const spoolRoot = await mkdtemp(path.join(os.tmpdir(), 'integritas-investigation-'));
+  const bytes = Buffer.from('alpha evidence');
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  let jobStateCalls = 0;
+  let showCount = 0;
+  let startCount = 0;
+  const report = '# Transient recovery test';
+  const bundle = {
+    schema_version: 1, case_id: CASE_ID, case_job_id: JOB_ID, case_revision: 7, depth: 'deep',
+    generated_at: '2026-09-19T19:00:00Z', entities: [], relationships: [], sources: [], findings: [], checks: [],
+    contradictions: [], unresolved_checks: [], limitations: [],
+    report: { summary: 'Transient recovery', markdown: report, status: 'draft' },
+    execution: {
+      started_at: '2026-09-19T18:59:00Z', completed_at: '2026-09-19T19:00:00Z',
+      stages: [], tool_results: [], warnings: [], terminal_outcome: 'completed',
+    },
+  };
+  const client = {
+    baseUrl: 'https://project.supabase.co/functions/v1/integritas-control',
+    storageSelfTest: async () => ({ storage: { ok: true } }),
+    manifest: async () => manifestFor(bytes, sha256, { job_stage: 'analyzing_documents', job_progress: 15 }),
+    checkpoint: async () => ({ ok: true }),
+    jobState: async () => {
+      jobStateCalls += 1;
+      if (jobStateCalls === 1) throw new Error('fetch failed');
+      return { state: { cancel_requested: false, stale_revision: false, job_progress: 15, job_stage: 'analyzing_documents' } };
+    },
+    publishOutput: async () => ({ ok: true }),
+    commitBundle: async () => ({ commit_summary: {} }),
+  };
+  const systemctlRunner = async (_file, args) => {
+    if (args[0] === 'start') {
+      startCount += 1;
+      return { stdout: '', stderr: '' };
+    }
+    if (args[0] !== 'show') throw new Error('unexpected systemctl action');
+    showCount += 1;
+    if (showCount === 1) return { stdout: 'inactive\n', stderr: '' };
+    const jobDir = path.join(spoolRoot, JOB_ID);
+    await writeFile(path.join(jobDir, 'bundle.json'), JSON.stringify(bundle));
+    await writeFile(path.join(jobDir, 'report.md'), report);
+    return { stdout: 'inactive\n', stderr: '' };
+  };
+  try {
+    const result = await executeInvestigation(command, {
+      client,
+      fetchImpl: async () => new Response(bytes, { status: 200, headers: { 'content-length': String(bytes.length) } }),
+      systemctlRunner,
+      spoolRoot,
+      repoRoot: REPO_ROOT,
+      retainWorkspace: true,
+      statePollMs: 1,
+      qaRunner: async () => ({ valid: true, errors: [], summary: {} }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(jobStateCalls, 3);
+    assert.equal(startCount, 1);
+  } finally {
+    await rm(spoolRoot, { recursive: true, force: true });
+  }
+});
+
 test('acknowledges a requested cancellation before launching OpenClaw', async () => {
   const spoolRoot = await mkdtemp(path.join(os.tmpdir(), 'integritas-investigation-'));
   const bytes = Buffer.from('alpha evidence');
