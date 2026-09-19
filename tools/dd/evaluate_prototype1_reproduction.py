@@ -24,8 +24,32 @@ def match_requirement(text, requirement):
     return not missing, missing
 
 
-def evaluate(bundle, benchmark):
+def evaluate(bundle, benchmark, manifest=None):
     text = combined_text(bundle)
+    expected_documents = benchmark.get("expected_documents", [])
+    document_fidelity = {"required": bool(expected_documents), "passed": True, "missing": [], "unexpected": []}
+    if expected_documents:
+        if not isinstance(manifest, dict) or not isinstance(manifest.get("documents"), list):
+            document_fidelity = {
+                "required": True,
+                "passed": False,
+                "missing": [row.get("sha256") for row in expected_documents],
+                "unexpected": [],
+            }
+        else:
+            actual_hashes = {
+                str(row.get("sha256", "")).lower()
+                for row in manifest["documents"]
+                if isinstance(row, dict) and row.get("sha256")
+            }
+            expected_hashes = {str(row.get("sha256", "")).lower() for row in expected_documents}
+            document_fidelity = {
+                "required": True,
+                "passed": actual_hashes == expected_hashes,
+                "missing": sorted(expected_hashes - actual_hashes),
+                "unexpected": sorted(actual_hashes - expected_hashes),
+            }
+
     critical_results = []
     secondary_results = []
     for group_name, target in (("critical", critical_results), ("secondary", secondary_results)):
@@ -62,6 +86,7 @@ def evaluate(bundle, benchmark):
         critical_passed >= critical_required
         and secondary_passed >= secondary_minimum
         and not count_failures
+        and document_fidelity["passed"]
     )
     return {
         "benchmark_id": benchmark.get("benchmark_id"),
@@ -80,6 +105,7 @@ def evaluate(bundle, benchmark):
         },
         "counts": counts,
         "count_failures": count_failures,
+        "document_fidelity": document_fidelity,
     }
 
 
@@ -91,11 +117,13 @@ def main():
         type=Path,
         default=Path(__file__).parent / "benchmarks" / "prototype1_pavillon_v1.json",
     )
+    parser.add_argument("--manifest", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     bundle = json.loads(args.bundle.read_text(encoding="utf-8"))
     benchmark = json.loads(args.benchmark.read_text(encoding="utf-8"))
-    result = evaluate(bundle, benchmark)
+    manifest = json.loads(args.manifest.read_text(encoding="utf-8")) if args.manifest else None
+    result = evaluate(bundle, benchmark, manifest)
     encoded = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.output:
         args.output.write_text(encoded, encoding="utf-8")
