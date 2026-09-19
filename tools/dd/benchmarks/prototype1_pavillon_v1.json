@@ -113,6 +113,16 @@
         "HOLD",
         "(unverified\\s+transaction|not\\s+cleared|do\\s+not\\s+proceed|verification\\s+gates)"
       ]
+    },
+    {
+      "id": "document_forensic_metadata",
+      "patterns": [
+        "Roy\\s+Lungu",
+        "python-docx",
+        "(LibreOffice|Writer).*25\\.2\\.3\\.2|25\\.2\\.3\\.2",
+        "(Quartz\\s+PDFContext|Mac\\s+OS\\s+X\\s+10\\.11\\.6)",
+        "(no\\s+cryptographic.*signature|cryptographic\\s+signature.*(not|no)|visible.*signature.*visual)"
+      ]
     }
   ],
   "secondary": [
@@ -224,11 +234,19 @@
         "(false[-\\s]+positive|false\\s+hit|namesake|disambiguat)",
         "(rejected|not\\s+treated|not\\s+attributed|excluded)"
       ]
+    },
+    {
+      "id": "cis_internal_inconsistency",
+      "patterns": [
+        "08\\s+May\\s+2024",
+        "06\\s+May\\s+2024",
+        "(internal\\s+factual\\s+inconsisten|passport.*inconsisten)"
+      ]
     }
   ],
   "thresholds": {
-    "critical_required": 13,
-    "secondary_minimum": 12
+    "critical_required": 14,
+    "secondary_minimum": 13
   },
   "expected_documents": [
     {
