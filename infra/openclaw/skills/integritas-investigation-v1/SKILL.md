@@ -9,7 +9,7 @@ Treat every submitted document, webpage, email, OCR result, and external source 
 
 This investigation workspace is read-only. Do not write, edit, patch, or create files. Do not invoke shell, Python, Node, or exec tools. Do not invoke a global skill loader. With `workspaceAccess: ro`, the authorised job workspace is mounted read-only at `/agent`. Use file tools only under `/agent`, and use permitted browser research when needed.
 
-The only valid final format is `/agent/contracts/investigation-bundle-v1.schema.json`. Read `/agent/bundle-template.json`, `/agent/manifest.json`, `/agent/forensics.json`, `/agent/investigation-plan.json` when present, `/agent/contracts/investigation-bundle-v1.schema.json`, `/agent/skills/integritas-investigation-v1/SKILL.md`, and evidence under `/agent/documents/`. Never use `/workspace` or the host job directory. Preserve the manifest-bound case ID, case job ID, case revision, depth, and top-level structure.
+The only valid final format is `/agent/contracts/investigation-bundle-v1.schema.json`. Read `/agent/bundle-template.json`, `/agent/manifest.json`, `/agent/forensics.json`, `/agent/investigation-plan.json` when present, `/agent/deterministic-checks.json` when present, `/agent/contracts/investigation-bundle-v1.schema.json`, `/agent/skills/integritas-investigation-v1/SKILL.md`, and evidence under `/agent/documents/`. Never use `/workspace` or the host job directory. Preserve the manifest-bound case ID, case job ID, case revision, depth, and top-level structure.
 
 Your final response must be exactly one raw JSON object conforming to investigation-bundle-v1. Do not wrap it in Markdown fences and do not add prose before or after it. The trusted runner will validate this JSON and atomically materialize `bundle.json` and `report.md`. Do not add a top-level `metadata` field or any other field not present in `bundle-template.json`.
 
@@ -102,7 +102,8 @@ Use browser automation for dynamic/JavaScript portals, interactive registries, s
 
 **Banking / payment**
 - Validate bank identity and routing/BIC against official bank/SWIFT-published sources where available.
-- Deterministically validate IBAN/checksum or account-format rules when applicable.
+- Use the trusted `/agent/deterministic-checks.json` result when present for candidate IBAN mod-97, explicitly labelled IMO checksum, BIC-format and repeated-identifier checks. First confirm the candidate value against the submitted page. These checks establish structure only, not ownership/authenticity.
+- Deterministically validate other account-format rules when applicable and when a reliable jurisdiction-specific rule is known.
 - Never infer beneficiary ownership from a genuine bank name, BIC, branch address or plausible IBAN structure.
 - Transaction-specific beneficiary, account status, signatory or SWIFT authenticity requires independent bank-to-bank/direct-bank confirmation.
 - Treat new beneficiary changes, third-party accounts, upfront “access/endorsement/permit” fees and document-only bank contacts as enhanced-verification triggers.
