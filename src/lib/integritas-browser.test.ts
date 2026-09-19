@@ -7,6 +7,7 @@ import {
   getIntegritasFunctionUrls,
   getAuthRedirectUrl,
   isInvestigationRuntimeReady,
+  deriveInvestigationMilestones,
   isInvestigationResultStale,
   loadPersistedInvestigationResults,
   validateCaseDocumentSelection,
@@ -141,6 +142,51 @@ function fakeRlsClient(fixtures: Record<string, unknown[]>) {
     },
   };
 }
+
+describe('live investigation milestones', () => {
+  it('uses the latest durable checkpoint and reconciles final structured lane checks', () => {
+    const checkpoints = [
+      {
+        id: 'cp-1', stage: 'planning_research', progress: 25, created_at: '2026-09-19T20:00:00Z',
+        safe_metadata: {
+          milestones: [
+            { id: 'core.plan', label: 'Case-specific research plan built', status: 'complete', priority: 'high' },
+            { id: 'lane.registry', label: 'Verify legal entity in official registry', status: 'waiting', priority: 'critical' },
+            { id: 'lane.bank', label: 'Confirm beneficiary account independently', status: 'manual', priority: 'critical' },
+          ],
+        },
+      },
+      {
+        id: 'cp-2', stage: 'researching', progress: 30, created_at: '2026-09-19T20:01:00Z',
+        safe_metadata: {
+          milestones: [
+            { id: 'core.plan', label: 'Case-specific research plan built', status: 'complete', priority: 'high' },
+            { id: 'lane.registry', label: 'Verify legal entity in official registry', status: 'active', priority: 'critical' },
+            { id: 'lane.bank', label: 'Confirm beneficiary account independently', status: 'manual', priority: 'critical' },
+          ],
+        },
+      },
+    ] as any;
+    const checks = [
+      { id: 'c-1', check_key: 'lane.registry', check_type: 'registry', description: 'Verify legal entity in official registry', status: 'complete', outcome: 'Matched official record' },
+      { id: 'c-2', check_key: 'lane.bank', check_type: 'bank', description: 'Confirm beneficiary account independently', status: 'blocked', outcome: 'Direct bank confirmation required' },
+    ] as any;
+    const rows = deriveInvestigationMilestones(checkpoints, checks);
+    expect(rows.find((row) => row.id === 'lane.registry')?.status).toBe('complete');
+    expect(rows.find((row) => row.id === 'lane.bank')?.status).toBe('manual');
+    expect(rows.find((row) => row.id === 'core.plan')?.status).toBe('complete');
+  });
+
+  it('adds persisted lane checks even when an older checkpoint has no milestone payload', () => {
+    const rows = deriveInvestigationMilestones(
+      [{ id: 'cp-old', stage: 'verifying', progress: 80, safe_metadata: {}, created_at: '2026-09-19T20:00:00Z' }] as any,
+      [{ id: 'c-1', check_key: 'lane.sanctions', check_type: 'screening', description: 'Run sanctions screening', status: 'complete', outcome: 'No attributable hit' }] as any,
+    );
+    expect(rows).toEqual([
+      { id: 'lane.sanctions', label: 'Run sanctions screening', status: 'complete', priority: 'medium' },
+    ]);
+  });
+});
 
 describe('persisted investigation result reads', () => {
   it('detects stale jobs or reports against the current case revision', () => {
