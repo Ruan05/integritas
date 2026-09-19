@@ -50,6 +50,8 @@ jobs:
           bash -n infra/oracle/bootstrap-oracle-linux.sh
           bash -n infra/oracle/provision-always-free-a1.sh
           bash -n infra/oracle/run-command.sh
+          bash -n infra/oracle/deploy-integritas-release.sh
+          bash -n infra/oracle/test-release-rollback.sh
           bash -n infra/openclaw/verify-image.sh
           bash -n infra/openclaw/install-native.sh
           bash -n infra/openclaw/install-control-worker.sh
