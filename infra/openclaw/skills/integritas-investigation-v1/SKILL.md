@@ -67,4 +67,19 @@ For `deep` and `maximum` investigations, use the established Integritas Prototyp
 21. **Contradictions, Unresolved Checks & Limitations** — consolidate open conflicts, attempted methods, blockers, and next manual actions.
 22. **Draft Conclusion** — concise evidence-based conclusion and what would materially change it; reiterate human review requirement.
 
+### Maximum-depth Prototype 1 reproducibility requirements
+
+For `maximum` investigations, the report must also include the strongest reusable elements from the later Integritas dossiers:
+
+- a **person-by-person / entity-by-entity status matrix** covering identity, authority/role, screening, capability and current disposition/status for every material subject;
+- a **relationship and evidence network** in text or table form that identifies each material edge, the source that supports it, and whether the edge is verified, alleged, conflicting or uncertain;
+- a **claim-to-evidence matrix** for the material transaction and identity claims, showing the claim, submitted-document source, external corroboration where available, evidence status, and remaining verification action;
+- a **research coverage statement** that distinguishes lanes attempted from evidence actually proven; high search coverage must never be described as high evidence completeness;
+- a **forensic evidence register** linking material document observations to document IDs/page references and explaining what metadata/signatures/visual stamps do and do not prove;
+- a **closure register** mapping every critical unresolved issue to its blocker, required authoritative source, next manual action, and automatic stop/escalation condition;
+- explicit **false-positive controls** for namesake, sanctions, adverse-media and related-company matches;
+- both **risk-increasing and risk-reducing evidence**, with plausible benign explanations for each fraud/scam-pattern indicator where one exists.
+
+A Maximum report is not Prototype-1-equivalent merely because it is long. It must demonstrate complete lane coverage, source-linked findings, independent entity resolution, contradiction handling, transaction-specific verification gates, and a defensible stop rule.
+
 For `fast` or `standard`, the same structure may be compressed, but the evidence package, material findings, source ledger, unresolved checks, limitations, and next actions must still be present.
