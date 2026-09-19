@@ -13,22 +13,20 @@ test('OpenClaw runner materializes only validated structured final output', asyn
   assert.match(source, /'--config', '\/etc\/openclaw\/integritas-investigation\.json'/);
 });
 
-test('OpenClaw runner uses independent bounded provider routes by investigation depth', async () => {
+test('OpenClaw runner uses bounded GLM research plus one independent Kimi critic for deep work', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
-  assert.ok(source.includes("fast: {\n    model: 'nvidia/nemotron-3-ultra-550b-a55b'"));
-  assert.ok(source.includes("standard: {\n    model: 'nvidia/nemotron-3-ultra-550b-a55b'"));
-  assert.ok(source.includes("deep: {\n    model: 'nvidia/nemotron-3-ultra-550b-a55b'"));
-  assert.ok(source.includes("maximum: {\n    model: 'nvidia/nemotron-3-ultra-550b-a55b'"));
-  assert.ok(source.includes("timeoutSeconds: 600"));
-  assert.ok(source.includes("timeoutSeconds: 900"));
-  assert.ok(source.includes("timeoutSeconds: 1200"));
-  assert.ok(source.includes("timeoutSeconds: 1500"));
+  assert.match(source, /research: \{ model: 'opencode-go\/glm-5\.3-flash'/);
+  assert.match(source, /critic: \{ model: 'opencode-go\/kimi-k3'/);
+  assert.match(source, /synthesis: \{ model: 'opencode-go\/glm-5\.3-flash'/);
+  assert.match(source, /nvidia\/nemotron-3-ultra-550b-a55b/);
   assert.match(source, /integritas-openrouter\/nvidia\/nemotron-3-ultra-550b-a55b:free/);
-  assert.match(source, /opencode-go\/glm-5\.3-flash/);
-  assert.match(source, /opencode-go\/glm-5\.2/);
-  assert.match(source, /'--model', route\.model/);
+  assert.match(source, /parseCritique/);
+  assert.match(source, /critic must not perform external research/);
+  assert.match(source, /synthesis pass must not perform external research/);
+  assert.match(source, /mergeToolSummaries/);
+  assert.match(source, /agent-progress\.json/);
+  assert.match(source, /'--model', phaseRoute\.model/);
   assert.match(source, /args\.push\('--fallback', fallback\)/);
-  assert.doesNotMatch(source, /opencode-go\/kimi-k3/);
   assert.doesNotMatch(source, /opencode-go\/deepseek-v4-pro/);
 });
 
@@ -46,6 +44,7 @@ test('investigation profile uses only required provider SecretRefs and keeps the
     'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
     'integritas-openrouter/openrouter/free',
     'opencode-go/glm-5.3-flash',
+    'opencode-go/kimi-k3',
     'opencode-go/glm-5.2',
     'nvidia/nemotron-3-ultra-550b-a55b',
   ]) {
