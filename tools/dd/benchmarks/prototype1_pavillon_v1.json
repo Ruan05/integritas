@@ -1,0 +1,202 @@
+{
+  "benchmark_id": "integritas-pavillon-prototype1-2026-09-17-v1",
+  "description": "Hidden regression benchmark for independent reproduction of material Prototype 1 Pavillon findings. Not copied into agent workspaces.",
+  "minimums": {
+    "submitted_documents": 3,
+    "external_sources": 8,
+    "entities": 5,
+    "findings": 12,
+    "checks": 10,
+    "unresolved_checks": 8
+  },
+  "critical": [
+    {
+      "id": "legal_entity",
+      "patterns": [
+        "PAVILLON\\s+X11\\s+LIMITED",
+        "1093130",
+        "ACTIVE"
+      ]
+    },
+    {
+      "id": "theophilus_control",
+      "patterns": [
+        "THEOPHILUS\\s+EMEKA\\s+NWANGUMA",
+        "50\\s*%",
+        "(PSC|significant\\s+control|beneficial\\s+owner|voting\\s+rights)"
+      ]
+    },
+    {
+      "id": "x11_xii_mismatch",
+      "patterns": [
+        "PAVILLON\\s+X11",
+        "PAVILLON\\s+XII",
+        "(mismatch|inconsisten|variant|reconcile)"
+      ]
+    },
+    {
+      "id": "seller_approval_gap",
+      "patterns": [
+        "seller",
+        "(blank|unsigned|not\\s+evidenced|not\\s+proved|countersign)",
+        "ICPO"
+      ]
+    },
+    {
+      "id": "bank_bic_vs_account",
+      "patterns": [
+        "UBNINGLA",
+        "UNION\\s+BANK",
+        "(account|beneficiary).*(unverified|not\\s+verified|not\\s+cleared|confirm)"
+      ]
+    },
+    {
+      "id": "bank_email_domain",
+      "patterns": [
+        "unionbanking\\.com",
+        "unionbankng\\.com",
+        "(for\\s+sale|no\\s+MX|unauthenticated|mismatch|inconsistent)"
+      ]
+    },
+    {
+      "id": "address_lpres",
+      "patterns": [
+        "77\\s+Kwame\\s+Nkrumah",
+        "L[-\\s]?PRES",
+        "(address|presence|office)"
+      ]
+    },
+    {
+      "id": "product_title_terminal_gap",
+      "patterns": [
+        "(product|title)",
+        "terminal",
+        "(SGS|inspect)",
+        "(unverified|not\\s+verified|not\\s+cleared|missing)"
+      ]
+    },
+    {
+      "id": "extraordinary_capacity",
+      "patterns": [
+        "100\\s*(?:m|million).*gallon",
+        "200\\s*(?:m|million).*gallon",
+        "(extraordinary|capacity|throughput)"
+      ]
+    },
+    {
+      "id": "procedure_contradiction",
+      "patterns": [
+        "(pre[-\\s]?injection|before\\s+injection)",
+        "(post[-\\s]?delivery|after\\s+injection|after\\s+delivery)",
+        "(contradict|conflict|different\\s+risk)"
+      ]
+    },
+    {
+      "id": "oman_origin_gap",
+      "patterns": [
+        "Oman",
+        "(origin|chain\\s+of\\s+title)",
+        "(unverified|assertion|not\\s+verified|validate)"
+      ]
+    },
+    {
+      "id": "sanctions_not_clearance",
+      "patterns": [
+        "OFAC",
+        "(no\\s+(?:potential\\s+)?match|no\\s+exact|no\\s+direct)",
+        "not\\s+clearance"
+      ]
+    },
+    {
+      "id": "final_hold",
+      "patterns": [
+        "HOLD",
+        "(unverified\\s+transaction|not\\s+cleared|do\\s+not\\s+proceed|verification\\s+gates)"
+      ]
+    }
+  ],
+  "secondary": [
+    {
+      "id": "tax_identity",
+      "patterns": [
+        "18540363-0001",
+        "1048856718",
+        "tax"
+      ]
+    },
+    {
+      "id": "fleetdown",
+      "patterns": [
+        "FLEETDOWN\\s+NIGERIA\\s+LIMITED",
+        "1821750",
+        "100\\s*%"
+      ]
+    },
+    {
+      "id": "soul_imina",
+      "patterns": [
+        "SOUL\\s+IMINA",
+        "(secondary|unverified|not\\s+established|officer\\s+link)"
+      ]
+    },
+    {
+      "id": "saravin_disambiguation",
+      "patterns": [
+        "SARAVIN",
+        "(disambiguat|not\\s+attribute|network\\s+lead|association\\s+is\\s+not)"
+      ]
+    },
+    {
+      "id": "domain_infrastructure",
+      "patterns": [
+        "pavillonxii\\.com",
+        "(Microsoft\\s+365|MX|DMARC|SPF)",
+        "(2025|March)"
+      ]
+    },
+    {
+      "id": "pkaba00",
+      "patterns": [
+        "PKABA00",
+        "25,?000",
+        "55,?000"
+      ]
+    },
+    {
+      "id": "price_context",
+      "patterns": [
+        "1\\.05\\s*/?(?:US\\s*)?gallon|USD\\s*1\\.05",
+        "29[2-9]|30[0-2]",
+        "(context|benchmark|different\\s+grade)"
+      ]
+    },
+    {
+      "id": "boilerplate",
+      "patterns": [
+        "Due\\s+Diligence\\s+Convention",
+        "(boilerplate|template\\s+reuse|authenticity\\s+value)"
+      ]
+    },
+    {
+      "id": "storage_spoofing",
+      "patterns": [
+        "storage\\s+spoofing",
+        "Rotterdam",
+        "(terminal|VOTOB|Port\\s+of\\s+Rotterdam)"
+      ]
+    },
+    {
+      "id": "trade_finance_terms",
+      "patterns": [
+        "MT799",
+        "BCL",
+        "(SBLA|SBLC)",
+        "(UCP\\s*600|ICC\\s*500|ICC\\s*600)"
+      ]
+    }
+  ],
+  "thresholds": {
+    "critical_required": 13,
+    "secondary_minimum": 9
+  }
+}
