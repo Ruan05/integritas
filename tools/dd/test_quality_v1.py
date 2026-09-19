@@ -6,6 +6,7 @@ from quality_v1 import validate
 
 def prototype1_maximum_report():
     sections = [
+        "# Master Issue Dashboard\nCurrent position and why each material issue matters.",
         "## 1. Investigation Completion Statement\nMaximum-depth investigation completed to public-source limits.",
         "## 2. Intake Context / Translation and Evidentiary Test\nSender assertions are separated from documentary proof.",
         "## 3. Executive Summary - Non-Technical\nPlain-English findings and current status.",
@@ -29,7 +30,9 @@ def prototype1_maximum_report():
         "## 21. Contradictions, Unresolved Checks & Limitations\nUnresolved checks, blockers and limitations are consolidated.",
         "## 22. Draft Conclusion / Final Assessment\nHuman review remains required.",
         "### Person-by-person clearance heatmap / subject matrix\nIdentity, role, sanctions and capability status are shown per subject.",
+        "### Comprehensive Profile Dossiers - Every Material Person and Entity\nPerson Profile and Entity Profile records preserve identifiers, roles, screening and unresolved authority.",
         "### Visual relationship and evidence network\nRelationship map edges are source-linked and disambiguated.",
+        "### Entity and digital-identity timeline / chronology\nDigital timeline and commercial chronology preserve material dates and revisions.",
         "### Claim-to-evidence matrix\nEach material claim is mapped to evidence and next verification.",
         "### Research-lane coverage statement\nResearch coverage is not evidence completeness.",
         "### False-positive controls\nNamesake disambiguation and false-positive handling are explicit.",
