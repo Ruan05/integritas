@@ -2,6 +2,45 @@ import { validateInvestigationBundle } from './control-worker/src/bundle.mjs';
 
 const MAX_AGENT_ENVELOPE_BYTES = 5 * 1024 * 1024;
 
+export function parseSingleJsonObject(text, label = 'agent final response') {
+  if (typeof text !== 'string') throw new Error(`${label} must contain one valid JSON object`);
+  const trimmed = text.trim();
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // Providers occasionally wrap otherwise valid structured output in a single
+    // Markdown JSON fence despite an explicit raw-JSON instruction.
+  }
+
+  const fenced = trimmed.match(/^\`\`\`(?:json)?\\s*([\\s\\S]*?)\\s*\`\`\`$/i);
+  if (fenced) {
+    try {
+      return JSON.parse(fenced[1].trim());
+    } catch {
+      throw new Error(`${label} must contain one valid JSON object`);
+    }
+  }
+
+  const first = trimmed.indexOf('{');
+  const last = trimmed.lastIndexOf('}');
+  if (first >= 0 && last > first) {
+    const prefix = trimmed.slice(0, first).trim();
+    const suffix = trimmed.slice(last + 1).trim();
+    const wrapperIsBounded = prefix.length <= 500 && suffix.length <= 500
+      && !/[{}]/.test(prefix) && !/[{}]/.test(suffix);
+    if (wrapperIsBounded) {
+      try {
+        return JSON.parse(trimmed.slice(first, last + 1));
+      } catch {
+        // Fall through to the single deterministic error below.
+      }
+    }
+  }
+
+  throw new Error(`${label} must contain one valid JSON object`);
+}
+
 function canonicalizeAgentBundle(bundle, manifest) {
   if (!bundle || Array.isArray(bundle) || typeof bundle !== 'object') return bundle;
 
@@ -46,12 +85,7 @@ export function parseAgentBundle(stdout, manifest) {
     throw new Error('agent exec did not complete successfully');
   }
   const finalText = envelope.final.trim();
-  let bundle;
-  try {
-    bundle = JSON.parse(finalText);
-  } catch {
-    throw new Error('agent final response must be raw JSON');
-  }
+  let bundle = parseSingleJsonObject(finalText);
   if (!bundle || Array.isArray(bundle) || typeof bundle !== 'object') {
     throw new Error('agent final response must be a JSON object');
   }
