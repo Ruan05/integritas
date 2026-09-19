@@ -33,6 +33,10 @@ USD 1.05/gallon equates to roughly 292-302 per metric tonne; broader benchmark c
 Due Diligence Convention wording is generic boilerplate/template reuse and has little authenticity value.
 Rotterdam storage spoofing controls require direct terminal verification; Port of Rotterdam / VOTOB context is relevant.
 MT799, BCL, SBLA/SBLC and UCP 600 / ICC 500 terminology require bank/legal review.
+Remaining ownership is open and must be established through a fresh certified shareholder/PSC filing.
+No NMDPRA permit or licence number was supplied, so petroleum authorization is not verified and must be verified.
+World Bank and AfDB debarment screening returned no exact entry; negative debarment results are not formal clearance.
+A false positive / namesake hit was rejected after disambiguation and is not attributed to the subject.
 """
     sources = []
     for i in range(3):
