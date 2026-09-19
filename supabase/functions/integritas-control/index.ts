@@ -84,12 +84,29 @@ function validUuid(value: unknown): value is string {
   return typeof value === 'string' && UUID_PATTERN.test(value);
 }
 
+function validMilestones(value: unknown) {
+  if (!Array.isArray(value) || value.length > 64) return false;
+  const ids = new Set<string>();
+  for (const row of value) {
+    if (!isObject(row)) return false;
+    const keys = Object.keys(row);
+    if (keys.some((key) => !['id', 'label', 'status', 'priority'].includes(key))) return false;
+    if (typeof row.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(row.id) || ids.has(row.id)) return false;
+    if (typeof row.label !== 'string' || row.label.length < 1 || row.label.length > 160) return false;
+    if (typeof row.status !== 'string' || !['waiting', 'active', 'complete', 'blocked', 'manual'].includes(row.status)) return false;
+    if (typeof row.priority !== 'string' || !['low', 'medium', 'high', 'critical'].includes(row.priority)) return false;
+    ids.add(row.id);
+  }
+  return true;
+}
+
 function validCheckpointMetadata(value: unknown): value is Record<string, unknown> {
   if (!isObject(value)) return false;
   const keys = Object.keys(value);
   if (keys.some((key) => !CHECKPOINT_METADATA_KEYS.has(key))) return false;
+  if ('milestones' in value && !validMilestones(value.milestones)) return false;
   const encoded = JSON.stringify(value);
-  return encoded.length <= 16384 && !encoded.includes('/storage/v1/object/sign/');
+  return encoded.length <= 32768 && !encoded.includes('/storage/v1/object/sign/');
 }
 
 function decodeArtifactContent(content: unknown, encoding: unknown): Uint8Array | null {
