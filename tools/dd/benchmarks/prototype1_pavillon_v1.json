@@ -229,5 +229,19 @@
   "thresholds": {
     "critical_required": 13,
     "secondary_minimum": 12
-  }
+  },
+  "expected_documents": [
+    {
+      "name": "PAVILLON XII - CIS - 2025 current.pdf",
+      "sha256": "f960389a68f5fbbb61a4b7c05f1f0cbd15f4c9bc5d2169fb560073393b9e654e"
+    },
+    {
+      "name": "PavillonXII_FCO_D6_Rotterdam_Trial_12M_2026-09-14 (1).pdf",
+      "sha256": "14a7f40da6be5f3cf1427dfc5ffe0ad94dad42026e3c49c987d6be43fa3a1228"
+    },
+    {
+      "name": "ICPO-GA1-PAVILLONXII LIMITED _Rotterdam_TTT_TTV_D6_200MGALS_202609-9924_SBG-HS.pdf",
+      "sha256": "25a006651dac8c9b6febf9c731943f2fcfb78b9b03f2f0d26bfcabd657f77cfe"
+    }
+  ]
 }
