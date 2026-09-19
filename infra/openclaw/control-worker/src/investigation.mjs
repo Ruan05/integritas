@@ -149,9 +149,33 @@ async function defaultSystemctlRunner(file, args) {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function readRecoveryState(client, commandId, jobId) {
+function isTransientFetchFailure(error) {
+  const message = String(error?.message ?? error ?? '');
+  const causeCode = String(error?.cause?.code ?? '');
+  return message === 'fetch failed'
+    || ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET'].includes(causeCode);
+}
+
+async function retryTransientFetch(operation, delayMs = 500, attempts = 4) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientFetchFailure(error) || attempt === attempts - 1) throw error;
+      await delay(Math.min(Math.max(delayMs, 1) * (2 ** attempt), 2000));
+    }
+  }
+  throw lastError;
+}
+
+async function readRecoveryState(client, commandId, jobId, retryDelayMs = 500) {
   if (typeof client.jobState !== 'function') return null;
-  const response = await client.jobState(commandId, jobId);
+  const response = await retryTransientFetch(
+    () => client.jobState(commandId, jobId),
+    retryDelayMs,
+  );
   const state = response?.state ?? response;
   if (!state || typeof state !== 'object') throw new Error('invalid investigation recovery state response');
   return state;
@@ -194,7 +218,7 @@ async function runAgentWithRecovery({
 
   while (true) {
     await delay(statePollMs);
-    const state = await readRecoveryState(client, commandId, jobId);
+    const state = await readRecoveryState(client, commandId, jobId, Math.min(statePollMs, 1000));
     if (state?.stale_revision) {
       await systemctlRunner('/usr/bin/systemctl', ['stop', unit]);
       throw new Error('case revision became stale during investigation');
@@ -298,7 +322,10 @@ export async function executeInvestigation(command, {
       const nextIndex = STAGE_ORDER.indexOf(stage);
       if (progress < currentProgress) return null;
       if (progress === currentProgress && currentIndex >= 0 && nextIndex >= 0 && nextIndex < currentIndex) return null;
-      const result = await client.checkpoint(command.id, jobId, revision, stage, progress, safeMetadata);
+      const result = await retryTransientFetch(
+        () => client.checkpoint(command.id, jobId, revision, stage, progress, safeMetadata),
+        Math.min(statePollMs, 1000),
+      );
       currentProgress = Math.max(currentProgress, progress);
       currentStage = stage;
       return result;
@@ -397,7 +424,7 @@ export async function executeInvestigation(command, {
       }
     }
 
-    const recoveryState = await readRecoveryState(client, command.id, jobId);
+    const recoveryState = await readRecoveryState(client, command.id, jobId, Math.min(statePollMs, 1000));
     if (recoveryState?.stale_revision) throw new Error('case revision became stale during investigation');
     if (recoveryState?.cancel_requested) {
       await client.acknowledgeCancel(command.id, jobId);
