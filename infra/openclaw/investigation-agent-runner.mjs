@@ -33,7 +33,7 @@ const MODEL_ROUTES = Object.freeze({
   },
   maximum: {
     planner: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 420 },
-    research: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 1500 },
+    research: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 2400 },
     critic: { model: 'opencode-go/kimi-k3', fallbacks: ['opencode-go/glm-5.3-flash'], timeoutSeconds: 480 },
     synthesis: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 720 },
   },
