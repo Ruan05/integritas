@@ -154,9 +154,28 @@ async function readUnitState(systemctlRunner, unit) {
   return state;
 }
 
-async function runAgentWithRecovery({ client, commandId, jobId, systemctlRunner, statePollMs, initialUnitState = null }) {
+async function readAgentProgress(jobDir) {
+  try {
+    const raw = await readFile(path.join(jobDir, 'agent-progress.json'), 'utf8');
+    const progress = JSON.parse(raw);
+    if (!progress || typeof progress !== 'object'
+      || typeof progress.stage !== 'string' || !STAGE_ORDER.includes(progress.stage)
+      || !Number.isInteger(progress.progress) || progress.progress < 15 || progress.progress > 89) {
+      return null;
+    }
+    return { stage: progress.stage, progress: progress.progress };
+  } catch {
+    return null;
+  }
+}
+
+async function runAgentWithRecovery({
+  client, commandId, jobId, jobDir, systemctlRunner, statePollMs,
+  initialUnitState = null, onProgress = null,
+}) {
   const unit = `integritas-openclaw-investigation@${jobId}.service`;
   let unitState = initialUnitState ?? await readUnitState(systemctlRunner, unit);
+  let lastAgentProgress = '';
   if (unitState === 'inactive' || unitState === 'failed') {
     await systemctlRunner('/usr/bin/systemctl', ['start', '--no-block', unit]);
   }
@@ -172,6 +191,14 @@ async function runAgentWithRecovery({ client, commandId, jobId, systemctlRunner,
       await systemctlRunner('/usr/bin/systemctl', ['stop', unit]);
       await client.acknowledgeCancel(commandId, jobId);
       return { cancelled: true };
+    }
+    if (jobDir && typeof onProgress === 'function') {
+      const agentProgress = await readAgentProgress(jobDir);
+      const key = agentProgress ? `${agentProgress.stage}:${agentProgress.progress}` : '';
+      if (agentProgress && key !== lastAgentProgress) {
+        await onProgress(agentProgress.stage, agentProgress.progress, {});
+        lastAgentProgress = key;
+      }
     }
     unitState = await readUnitState(systemctlRunner, unit);
     if (unitState === 'inactive') return { cancelled: false };
@@ -318,7 +345,8 @@ export async function executeInvestigation(command, {
     }
     if (!reusable) {
       const agentRun = await runAgentWithRecovery({
-        client, commandId: command.id, jobId, systemctlRunner, statePollMs, initialUnitState,
+        client, commandId: command.id, jobId, jobDir, systemctlRunner, statePollMs, initialUnitState,
+        onProgress: checkpoint,
       });
       if (agentRun.cancelled) {
         return { ok: true, cancelled: true, case_job_id: jobId, case_revision: revision };
