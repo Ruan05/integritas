@@ -15,7 +15,7 @@ Environment=OPENCLAW_STATE_DIR=/var/lib/openclaw
 EnvironmentFile=-/etc/integritas/provider-secrets.env
 WorkingDirectory=/var/lib/integritas-runner/jobs/%i
 ExecStart=/usr/bin/node /opt/integritas/current/infra/openclaw/investigation-agent-runner.mjs %i
-TimeoutStartSec=1800
+TimeoutStartSec=3600
 TimeoutStopSec=30
 NoNewPrivileges=true
 PrivateTmp=true
