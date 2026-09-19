@@ -66,6 +66,33 @@ test('recovers one bounded wrapped JSON object but rejects ambiguity and manifes
   assert.throws(() => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }), manifest), /bundle manifest mismatch/);
 });
 
+test('normalizes a completed model outcome to incomplete when unresolved work remains', () => {
+  const value = bundle();
+  value.execution.terminal_outcome = 'completed';
+  value.checks = [{
+    check_key: 'manual-registry',
+    check_type: 'registry_verification',
+    description: 'Verify the registry directly.',
+    priority: 'high',
+    required_source: 'Official registry',
+    status: 'blocked',
+    outcome: 'Registry access unavailable.',
+  }];
+  value.unresolved_checks = [{
+    unresolved_key: 'registry-unresolved',
+    description: 'Direct registry verification remains outstanding.',
+    reason: 'Registry access unavailable.',
+    attempted_methods: ['Public web lookup'],
+    blocker: 'Direct registry unavailable.',
+    next_manual_action: 'Verify with the official registry.',
+  }];
+  const parsed = parseAgentBundle(
+    JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }),
+    manifest,
+  );
+  assert.equal(parsed.bundle.execution.terminal_outcome, 'incomplete');
+});
+
 test('drops only provider-added top-level metadata before strict validation', () => {
   const value = bundle();
   value.metadata = { provider_note: 'non-canonical provider bookkeeping' };
