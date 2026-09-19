@@ -333,7 +333,44 @@ def validate_forensics(bundle, manifest, forensics, errors):
 
 def validate_report_front_matter(report_text, errors):
     master = re.search(
-        r'(?im)^#{1,6}\\s*MASTER\\s+(?:ISSUE\\s+)?SUMMARY(?:\\s*[—-]\\s*READ\\s+THIS\\s+FIRST)?\\s*    if bundle.get('depth') != 'maximum':
+        r'(?im)^#{1,6}\s*MASTER\s+(?:ISSUE\s+)?SUMMARY(?:\s*[—-]\s*READ\s+THIS\s+FIRST)?\s*$',
+        report_text,
+    )
+    next_steps = re.search(
+        r'(?im)^#{1,6}\s*DIRECT\s+NEXT\s+STEPS(?:\s*[—-]\s*WHAT\s+TO\s+DO\s+NOW)?\s*$',
+        report_text,
+    )
+    valid = True
+    if master is None:
+        errors.append('report: MASTER SUMMARY must be the first substantive section')
+        valid = False
+    elif master.start() > 1500:
+        errors.append('report: MASTER SUMMARY must appear at the start of the report')
+        valid = False
+    if next_steps is None:
+        errors.append('report: DIRECT NEXT STEPS must immediately follow MASTER SUMMARY')
+        valid = False
+    elif master is not None:
+        if next_steps.start() <= master.end():
+            errors.append('report: DIRECT NEXT STEPS must follow MASTER SUMMARY')
+            valid = False
+        between = report_text[master.end():next_steps.start()]
+        intervening_heading = re.search(r'(?m)^#{1,6}\s+\S', between)
+        if intervening_heading:
+            errors.append('report: no detailed report section may appear between MASTER SUMMARY and DIRECT NEXT STEPS')
+            valid = False
+        if len(between) > 7000:
+            errors.append('report: DIRECT NEXT STEPS is too far from MASTER SUMMARY')
+            valid = False
+    return {
+        'valid': valid,
+        'master_summary_present': master is not None,
+        'direct_next_steps_present': next_steps is not None,
+    }
+
+
+def validate_maximum_report(bundle, report_text, errors):
+    if bundle.get('depth') != 'maximum':
         return {'required_lanes': 0, 'missing_lanes': [], 'missing_features': []}
     if len(report_text) < MAXIMUM_REPORT_MIN_CHARS:
         errors.append(
