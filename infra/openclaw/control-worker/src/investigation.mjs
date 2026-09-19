@@ -340,27 +340,51 @@ export async function executeInvestigation(command, {
 
     const bundlePath = path.join(jobDir, 'bundle.json');
     const reportPath = path.join(jobDir, 'report.md');
+    const agentExecPath = path.join(jobDir, 'agent-exec.json');
     let reusable = false;
     if (!rejoiningActiveUnit) {
-      try {
-        let existingBundle = await readBounded(bundlePath);
-        const existingReport = await readBounded(reportPath);
-        let existingJson = JSON.parse(existingBundle.toString('utf8'));
-        const normalizedJson = normalizeRetainedTerminalOutcome(existingJson);
-        if (normalizedJson !== existingJson) {
-          existingJson = normalizedJson;
-          await writeFile(bundlePath, `${JSON.stringify(existingJson, null, 2)}\n`, { mode: SHARED_FILE_MODE });
+      const retainedCandidates = [
+        { bundle: bundlePath, report: reportPath, provenance: agentExecPath, materialize: false },
+      ];
+      if (manifest.depth === 'fast' || manifest.depth === 'standard') {
+        retainedCandidates.push({
+          bundle: path.join(jobDir, 'research-bundle.json'),
+          report: path.join(jobDir, 'research-report.md'),
+          provenance: path.join(jobDir, 'research-agent-exec.json'),
+          materialize: true,
+        });
+      }
+      for (const candidate of retainedCandidates) {
+        try {
+          let existingJson = JSON.parse((await readBounded(candidate.bundle)).toString('utf8'));
+          existingJson = normalizeRetainedTerminalOutcome(existingJson);
+          const existingReport = await readBounded(candidate.report);
+          validateInvestigationBundle(existingJson, safeManifest, existingReport.toString('utf8'));
+          const normalizedBundle = Buffer.from(`${JSON.stringify(existingJson, null, 2)}\n`);
+          if (normalizedBundle.includes('/storage/v1/object/sign/') || existingReport.includes('/storage/v1/object/sign/')) {
+            throw new Error('signed URL leaked into retained output');
+          }
+          await writeFile(bundlePath, normalizedBundle, { mode: SHARED_FILE_MODE });
           await chown(bundlePath, -1, process.getgid());
           await chmod(bundlePath, SHARED_FILE_MODE);
-          existingBundle = await readBounded(bundlePath);
+          if (candidate.materialize) {
+            await writeFile(reportPath, existingReport, { mode: SHARED_FILE_MODE });
+            await chown(reportPath, -1, process.getgid());
+            await chmod(reportPath, SHARED_FILE_MODE);
+            const provenance = await readBounded(candidate.provenance);
+            await writeFile(agentExecPath, provenance, { mode: SHARED_FILE_MODE });
+            await chown(agentExecPath, -1, process.getgid());
+            await chmod(agentExecPath, SHARED_FILE_MODE);
+          }
+          reusable = true;
+          break;
+        } catch {
+          // Try the next safe retained representation before launching a new agent run.
         }
-        validateInvestigationBundle(existingJson, safeManifest, existingReport.toString('utf8'));
-        if (existingBundle.includes('/storage/v1/object/sign/') || existingReport.includes('/storage/v1/object/sign/')) throw new Error('signed URL leaked into retained output');
-        reusable = true;
-      } catch {
+      }
+      if (!reusable) {
         await rm(bundlePath, { force: true }).catch(() => {});
         await rm(reportPath, { force: true }).catch(() => {});
-        await rm(path.join(jobDir, 'agent-exec.json'), { force: true }).catch(() => {});
       }
     }
     if (!reusable) {
