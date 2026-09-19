@@ -73,7 +73,7 @@ async function runQa(value, report) {
 }
 
 test('v1 deterministic QA accepts a source-linked draft bundle', async () => {
-  const report = '# DD Report';
+  const report = '# MASTER SUMMARY — READ THIS FIRST\nCase summary.\n\n# DIRECT NEXT STEPS — WHAT TO DO NOW\nVerify material claims independently.';
   const { stdout } = await runQa(bundle(report), report);
   const result = JSON.parse(stdout);
   assert.equal(result.valid, true);
@@ -81,7 +81,7 @@ test('v1 deterministic QA accepts a source-linked draft bundle', async () => {
 });
 
 test('v1 deterministic QA rejects report divergence and unsupported completed gaps', async () => {
-  const report = '# DD Report';
+  const report = '# MASTER SUMMARY — READ THIS FIRST\nCase summary.\n\n# DIRECT NEXT STEPS — WHAT TO DO NOW\nVerify material claims independently.';
   const bad = bundle(report, {
     unresolved_checks: [{
       unresolved_key: 'u1', description: 'Registry blocked', reason: 'timeout',
