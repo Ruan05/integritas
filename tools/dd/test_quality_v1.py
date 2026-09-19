@@ -4,6 +4,48 @@ import unittest
 from quality_v1 import validate
 
 
+def prototype1_maximum_report():
+    sections = [
+        "## 1. Investigation Completion Statement\nMaximum-depth investigation completed to public-source limits.",
+        "## 2. Intake Context / Translation and Evidentiary Test\nSender assertions are separated from documentary proof.",
+        "## 3. Executive Summary - Non-Technical\nPlain-English findings and current status.",
+        "## 4. Current Diligence Status\nMaterial verification gates remain open.",
+        "## 5. Evidence Package Reviewed\nEvidence register covers every submitted document and SHA-256 provenance.",
+        "## 6. Document Forensics & Internal Consistency\nMetadata, signatures, chronology and contradictions are assessed.",
+        "## 7. Corporate / Legal Identity\nLegal identity and registry claims are assessed.",
+        "## 8. Ownership, Control, People & Relationship Intelligence\nBeneficial ownership, authority and relationship intelligence are assessed.",
+        "## 9. Address, Physical Presence, Domain, Website & Email Infrastructure\nPhysical presence and digital footprint are assessed.",
+        "## 10. Banking / Financial Counterparty Review\nBanking claims are separated from account ownership proof.",
+        "## 11. Product / Asset / Capability / Logistics Review\nCommercial capacity and delivery capability are assessed.",
+        "## 12. Pricing / Economics / Market Context\nPricing and economics are compared cautiously.",
+        "## 13. Transaction Procedure, Contract & Trade-Finance Review\nTransaction procedure and trade-finance risks are assessed.",
+        "## 14. Sanctions, PEP, Regulatory, Enforcement, Litigation & Adverse-Media Screening\nNo exact hit is not clearance.",
+        "## 15. Possible Fraud / Scam / Misrepresentation Indicators\nIndicators are not accusations and require verification.",
+        "## 16. Positive / Risk-Reducing Indicators\nVerified positive indicators and risk-reducing evidence are recorded.",
+        "## 17. Risk Matrix\nRisk matrix separates exposure, evidence and confidence.",
+        "## 18. Mandatory Verification Gates / Closure Register\nCritical gates list blocker, required source and next action.",
+        "## 19. Plain-English Next Steps\nRecommended order of work and stop conditions.",
+        "## 20. Source Ledger\nSources and verification record preserve exact provenance.",
+        "## 21. Contradictions, Unresolved Checks & Limitations\nUnresolved checks, blockers and limitations are consolidated.",
+        "## 22. Draft Conclusion / Final Assessment\nHuman review remains required.",
+        "### Person-by-person clearance heatmap / subject matrix\nIdentity, role, sanctions and capability status are shown per subject.",
+        "### Visual relationship and evidence network\nRelationship map edges are source-linked and disambiguated.",
+        "### Claim-to-evidence matrix\nEach material claim is mapped to evidence and next verification.",
+        "### Research-lane coverage statement\nResearch coverage is not evidence completeness.",
+        "### False-positive controls\nNamesake disambiguation and false-positive handling are explicit.",
+    ]
+    detail = (
+        "\nDetailed evidence narrative preserves identifiers, dates, source hierarchy, "
+        "page references, benign explanations, attempted methods, blockers and manual next actions. "
+        "Verified facts, corroborated facts, submitted claims, allegations, inference, contradictions "
+        "and unresolved items remain distinct. "
+    )
+    report = "\n\n".join(sections)
+    while len(report) < 8500:
+        report += detail
+    return report
+
+
 class InvestigationBundleV1QualityTests(unittest.TestCase):
     def setUp(self):
         self.doc1 = "11111111-1111-4111-8111-111111111111"
@@ -18,7 +60,7 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
                 {"id": self.doc2, "name": "two.txt"},
             ],
         }
-        report = "# Integritas report\n\nAll submitted evidence was reviewed."
+        report = prototype1_maximum_report()
         self.report = report
         self.bundle = {
             "schema_version": 1,
@@ -88,6 +130,17 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
 
     def test_valid_bundle_covers_every_manifest_document(self):
         self.assertEqual(self.errors(), [])
+
+    def test_maximum_report_rejects_missing_prototype1_lanes(self):
+        bundle = copy.deepcopy(self.bundle)
+        bundle["report"]["markdown"] = "# Executive Summary\nShort maximum report."
+        errors, summary = validate(
+            bundle, self.manifest, bundle["report"]["markdown"], 2
+        )
+        self.assertTrue(any("Prototype 1 report is too short" in error for error in errors))
+        self.assertTrue(any("Prototype 1 lanes missing" in error for error in errors))
+        self.assertTrue(any("Prototype 1 features missing" in error for error in errors))
+        self.assertGreater(len(summary["prototype1_missing_lanes"]), 0)
 
     def test_missing_manifest_document_is_rejected(self):
         bundle = copy.deepcopy(self.bundle)
