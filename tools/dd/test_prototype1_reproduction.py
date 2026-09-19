@@ -56,12 +56,28 @@ A false positive / namesake hit was rejected after disambiguation and is not att
     }
 
 
+def prototype1_manifest():
+    return {
+        "documents": [
+            {"name": row["name"], "sha256": row["sha256"]}
+            for row in BENCHMARK["expected_documents"]
+        ]
+    }
+
+
 class Prototype1ReproductionEvaluatorTests(unittest.TestCase):
     def test_reference_equivalent_bundle_passes(self):
-        result = evaluate(passing_bundle(), BENCHMARK)
+        result = evaluate(passing_bundle(), BENCHMARK, prototype1_manifest())
         self.assertTrue(result["passed"], result)
         self.assertEqual(result["critical"]["passed"], result["critical"]["total"])
         self.assertGreaterEqual(result["secondary"]["passed"], result["secondary"]["required"])
+
+    def test_wrong_input_hashes_fail_even_when_findings_match(self):
+        manifest = prototype1_manifest()
+        manifest["documents"][0]["sha256"] = "0" * 64
+        result = evaluate(passing_bundle(), BENCHMARK, manifest)
+        self.assertFalse(result["passed"])
+        self.assertFalse(result["document_fidelity"]["passed"])
 
     def test_missing_material_finding_fails(self):
         bundle = passing_bundle()
@@ -70,7 +86,7 @@ class Prototype1ReproductionEvaluatorTests(unittest.TestCase):
             "",
         )
         bundle["findings"] = [{"finding_key": f"f-{i}", "claim": "other evidence"} for i in range(12)]
-        result = evaluate(bundle, BENCHMARK)
+        result = evaluate(bundle, BENCHMARK, prototype1_manifest())
         self.assertFalse(result["passed"])
         failed = {row["id"] for row in result["critical"]["results"] if not row["passed"]}
         self.assertIn("address_lpres", failed)
