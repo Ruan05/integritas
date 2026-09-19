@@ -26,6 +26,9 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.match(source, /plannerTask/);
   assert.match(source, /researchTask/);
   assert.match(source, /investigation-plan\.json/);
+  assert.match(source, /deterministic-checks\.json/);
+  assert.match(source, /buildDeterministicChecks/);
+  assert.match(source, /integritas_transaction_checks_v1/);
   assert.match(source, /planner must not perform external research/);
   assert.match(source, /MASTER SUMMARY — READ THIS FIRST/);
   assert.match(source, /DIRECT NEXT STEPS — WHAT TO DO NOW/);
@@ -98,6 +101,7 @@ test('investigation prompts use the read-only /agent workspace mount', async () 
   assert.match(runtime, /workspaceAccess ro/);
   assert.match(runtime, /\/agent\/bundle-template\.json/);
   assert.match(runtime, /\/agent\/investigation-plan\.json/);
+  assert.match(runtime, /\/agent\/deterministic-checks\.json/);
   assert.match(skill, /mounted read-only at `\/agent`/);
   assert.doesNotMatch(runtime, /\/workspace\//, 'runtime prompt must not use writable /workspace paths');
   assert.doesNotMatch(skill, /\/workspace\//, 'skill must not use writable /workspace paths');
