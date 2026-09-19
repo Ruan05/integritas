@@ -68,7 +68,9 @@ export function InvestigationMilestones({
 
       {blocked > 0 && (
         <p className="milestone-alert">
-          {blocked} check{blocked === 1 ? '' : 's'} still need{blocked === 1 ? 's' : ''} manual verification or are blocked.
+          {blocked === 1
+            ? '1 check still needs manual verification or is blocked.'
+            : `${blocked} checks still need manual verification or are blocked.`}
         </p>
       )}
 
