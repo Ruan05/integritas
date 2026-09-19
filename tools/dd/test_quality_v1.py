@@ -173,7 +173,8 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
         self.assertGreater(len(summary["prototype1_missing_lanes"]), 0)
 
     def test_maximum_requires_trusted_forensics(self):
-        self.assertTrue(any("requires trusted forensic pre-pass" in error for error in self.errors(forensics={})))
+        errors, _ = validate(self.bundle, self.manifest, self.report, 2, None)
+        self.assertTrue(any("requires trusted forensic pre-pass" in error for error in errors))
 
     def test_forensic_hash_mismatch_is_rejected(self):
         forensic = copy.deepcopy(self.forensics)
