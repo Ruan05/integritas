@@ -12,10 +12,12 @@ import {
   loadPersistedInvestigationResults,
   SUPPORTED_CASE_FILE_ACCEPT,
   validateCaseDocumentSelection,
+  type CheckpointRow,
   type InvestigationDepth,
   type PersistedInvestigationResults,
   type RuntimeStatus,
 } from './lib/integritas-browser';
+import { InvestigationMilestones } from './InvestigationMilestones';
 import { InvestigationResultsView } from './InvestigationResultsView';
 import { isSupabaseConfigured, supabase, supabaseUrl } from './lib/supabase';
 export { InvestigationResultsView } from './InvestigationResultsView';
@@ -75,6 +77,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [results, setResults] = useState<PersistedInvestigationResults | null>(null);
+  const [liveCheckpoints, setLiveCheckpoints] = useState<CheckpointRow[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const browserClient = useMemo(() => {
     if (!supabaseUrl) return null;
@@ -164,23 +167,34 @@ export function App() {
   }, [token, selectedCaseId]);
 
   useEffect(() => {
-    if (!token || !browserClient || !supabase || !job?.control_command_id || !selectedCaseId) { setCommandStatus(''); return; }
+    if (!token || !browserClient || !supabase || !job?.control_command_id || !selectedCaseId) {
+      setCommandStatus('');
+      setLiveCheckpoints([]);
+      return;
+    }
     const dataClient = supabase;
     let cancelled = false;
     const refresh = async () => {
       try {
-        const [command, jobResult] = await Promise.all([
+        const [command, jobResult, checkpointResult] = await Promise.all([
           browserClient.commandStatus(token, job.control_command_id as string),
           dataClient.from('integritas_case_jobs')
             .select('id,case_id,case_revision,control_command_id,stage,progress,runtime_provider')
             .eq('id', job.id)
             .eq('case_id', selectedCaseId)
             .maybeSingle(),
+          dataClient.from('integritas_case_job_checkpoints')
+            .select('id,stage,progress,safe_metadata,created_at')
+            .eq('case_id', selectedCaseId)
+            .eq('case_job_id', job.id)
+            .order('created_at'),
         ]);
         if (jobResult.error) throw jobResult.error;
+        if (checkpointResult.error) throw checkpointResult.error;
         if (!cancelled) {
           setCommandStatus(String(command?.status ?? ''));
           if (jobResult.data) setJob(jobResult.data as JobRow);
+          setLiveCheckpoints((checkpointResult.data ?? []) as CheckpointRow[]);
         }
       } catch (error) { if (!cancelled) setNotice(error instanceof Error ? error.message : String(error)); }
     };
@@ -287,6 +301,7 @@ export function App() {
         caseId: selectedCase.id, caseRevision: selectedCase.revision, depth, idempotencyKey,
       });
       setJob({ id: investigation.case_job_id, case_id: selectedCase.id, case_revision: selectedCase.revision, control_command_id: investigation.control_command_id, stage: 'queued', progress: 0, runtime_provider: 'openclaw-oracle' });
+      setLiveCheckpoints([]);
       setCommandStatus('queued');
       setNotice('Investigation queued. You can close this page; progress is durable server-side.');
     } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
@@ -413,6 +428,14 @@ export function App() {
               </div>
             )}
           </article>
+
+          {job && (
+            <InvestigationMilestones
+              checkpoints={liveCheckpoints.length > 0 ? liveCheckpoints : (results?.checkpoints ?? [])}
+              checks={results?.checks ?? []}
+              jobProgress={job.progress ?? 0}
+            />
+          )}
 
           {results && selectedCase && job ? (
             <InvestigationResultsView
