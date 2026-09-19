@@ -37,6 +37,8 @@ Remaining ownership is open and must be established through a fresh certified sh
 No NMDPRA permit or licence number was supplied, so petroleum authorization is not verified and must be verified.
 World Bank and AfDB debarment screening returned no exact entry; negative debarment results are not formal clearance.
 A false positive / namesake hit was rejected after disambiguation and is not attributed to the subject.
+Document forensics recovered author Roy Lungu from the CIS, python-docx authoring plus Writer / LibreOffice 25.2.3.2 for the FCO, and Word / Mac OS X 10.11.6 Quartz PDFContext for the ICPO. No cryptographic PDF signature was detected; visible signature content remains visual page content.
+The CIS contains an internal factual inconsistency: passport issue date 08 May 2024 on the passport versus 06 May 2024 in the declaration table.
 """
     sources = []
     for i in range(3):
