@@ -145,7 +145,9 @@ Use browser automation for dynamic/JavaScript portals, interactive registries, s
 **Adverse media / litigation / fraud-pattern research**
 - Search exact names plus aliases, registration numbers, domains, phones, addresses and related entities. Use date/jurisdiction terms to disambiguate common names.
 - Prefer courts, regulators, police/prosecutor releases and reputable reporting. Preserve the distinction between allegation, charge, judgment, dismissal and unrelated namesake.
-- Search historic documents and prior Integritas evidence for exact identifiers or repeated templates/CI numbers, but do not attribute misconduct merely because wording or an identifier pattern recurs.
+- When authorised historical Integritas evidence is actually available to the case, compare exact document hashes, CI/invoice/reference numbers, beneficiary/account identifiers, domains/emails/phones, named representatives, addresses and distinctive boilerplate. Record the exact matching field and both source references.
+- Treat a cross-case connection as **verified** only when a sufficiently unique identifier or authoritative relationship supports it. Repeated wording, shared registrar/hosting, similar document design or a common name is a discovery lead only and must not be presented as common control or misconduct.
+- If historical Integritas evidence is not exposed in the authorised workspace/toolset, say that cross-case comparison was unavailable; never reconstruct a prior-case link from model memory.
 
 ### Phase 5 — Independent challenge and closure
 
