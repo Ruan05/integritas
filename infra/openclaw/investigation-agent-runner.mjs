@@ -167,6 +167,7 @@ You are the independent critic for an authorised due-diligence investigation. Do
 
 Read:
 - /agent/manifest.json
+- /agent/forensics.json
 - /agent/research-bundle.json
 - /agent/skills/integritas-investigation-v1/SKILL.md
 - every submitted file under /agent/documents/ when needed to challenge a material claim.
@@ -177,7 +178,7 @@ Audit the draft aggressively for:
 3. any verified/corroborated conclusion not supported by a cited source;
 4. missed contradictions or inconsistent transaction terms;
 5. external-source overclaiming, weak source diversity, sanctions/adverse-media false positives, and “no hit” treated as clearance;
-6. missing document-forensics, banking, authority, capability, transaction, market/economic, regulatory, or fraud-pattern checks that are material to this case;
+6. missing document-forensics, banking, authority, capability, transaction, market/economic, regulatory, or fraud-pattern checks that are material to this case; cross-check every metadata/signature assertion against /agent/forensics.json;
 7. one-sided analysis that omits positive/risk-reducing evidence;
 8. missing manual verification gates or stop conditions;
 9. omissions from the Integritas Prototype 1 report structure;
@@ -195,6 +196,7 @@ You are the final synthesis pass. Do not perform web_search, web_fetch, or brows
 
 Read:
 - /agent/manifest.json
+- /agent/forensics.json
 - /agent/bundle-template.json
 - /agent/research-bundle.json
 - /agent/critic.json
