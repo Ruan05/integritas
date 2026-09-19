@@ -54,21 +54,34 @@ function canonicalizeAgentBundle(bundle, manifest) {
     canonical = withoutMetadata;
   }
 
-  if (!Array.isArray(canonical.sources) || !Array.isArray(manifest?.documents)) return canonical;
-  const documents = manifest.documents;
-  let changed = false;
-  const sources = canonical.sources.map((source) => {
-    if (!source || typeof source !== 'object' || Array.isArray(source)
-      || source.evidence_origin !== 'submitted_document' || source.document_id != null) {
-      return source;
-    }
-    const exactMatches = documents.filter((document) => document?.name === source.title);
-    const match = exactMatches.length === 1 ? exactMatches[0] : (documents.length === 1 ? documents[0] : null);
-    if (!match?.id) return source;
-    changed = true;
-    return { ...source, document_id: match.id };
-  });
-  return changed ? { ...canonical, sources } : canonical;
+  if (Array.isArray(canonical.sources) && Array.isArray(manifest?.documents)) {
+    const documents = manifest.documents;
+    let sourcesChanged = false;
+    const sources = canonical.sources.map((source) => {
+      if (!source || typeof source !== 'object' || Array.isArray(source)
+        || source.evidence_origin !== 'submitted_document' || source.document_id != null) {
+        return source;
+      }
+      const exactMatches = documents.filter((document) => document?.name === source.title);
+      const match = exactMatches.length === 1 ? exactMatches[0] : (documents.length === 1 ? documents[0] : null);
+      if (!match?.id) return source;
+      sourcesChanged = true;
+      return { ...source, document_id: match.id };
+    });
+    if (sourcesChanged) canonical = { ...canonical, sources };
+  }
+
+  const hasUnresolvedChecks = Array.isArray(canonical.unresolved_checks) && canonical.unresolved_checks.length > 0;
+  const hasIncompleteChecks = Array.isArray(canonical.checks)
+    && canonical.checks.some((check) => check && typeof check === 'object' && !Array.isArray(check) && check.status !== 'complete');
+  if (canonical.execution?.terminal_outcome === 'completed' && (hasUnresolvedChecks || hasIncompleteChecks)) {
+    canonical = {
+      ...canonical,
+      execution: { ...canonical.execution, terminal_outcome: 'incomplete' },
+    };
+  }
+
+  return canonical;
 }
 
 export function parseAgentBundle(stdout, manifest) {
