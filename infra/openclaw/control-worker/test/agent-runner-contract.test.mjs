@@ -22,6 +22,8 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.match(source, /synthesis: \{ model: 'opencode-go\/glm-5\.3-flash'/);
   assert.match(source, /nvidia\/nemotron-3-ultra-550b-a55b/);
   assert.match(source, /integritas-openrouter\/nvidia\/nemotron-3-ultra-550b-a55b:free/);
+  assert.match(source, /trustedForensics/);
+  assert.match(source, /integritas_forensics_v1/);
   assert.match(source, /parsePlan/);
   assert.match(source, /plannerTask/);
   assert.match(source, /researchTask/);
