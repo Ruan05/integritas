@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ibanChecksum, imoChecksum, bicFormat, buildDeterministicChecks,
-} from '../transaction-checks.mjs';
+} from '../../transaction-checks.mjs';
 
 test('IBAN mod-97 catches the historical Shell-style invalid account and accepts a valid control', () => {
   const invalid = ibanChecksum('NL91ABNA0793164363');
