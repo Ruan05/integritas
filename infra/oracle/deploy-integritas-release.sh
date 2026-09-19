@@ -80,7 +80,20 @@ if [[ ! -d "${NEW}" ]]; then
   chown -R root:root "${NEW}"
 fi
 
-for required in   infra/openclaw/install-control-worker.sh   infra/openclaw/investigation-agent-runner.mjs   infra/openclaw/integritas-gateway.json5   infra/openclaw/integritas-investigation.json5   infra/openclaw/integritas-control-worker.service   infra/openclaw/openclaw-gateway.service   infra/openclaw/integritas-openclaw-investigation@.service; do
+for required in \
+  infra/openclaw/install-control-worker.sh \
+  infra/openclaw/investigation-agent-runner.mjs \
+  infra/openclaw/agent-result.mjs \
+  infra/openclaw/transaction-checks.mjs \
+  infra/openclaw/skills/integritas-investigation-v1/SKILL.md \
+  infra/openclaw/contracts/investigation-bundle-v1.schema.json \
+  infra/openclaw/integritas-gateway.json5 \
+  infra/openclaw/integritas-investigation.json5 \
+  infra/openclaw/integritas-control-worker.service \
+  infra/openclaw/openclaw-gateway.service \
+  infra/openclaw/integritas-openclaw-investigation@.service \
+  tools/dd/quality_v1.py \
+  tools/dd/forensics_v1.py; do
   [[ -f "${NEW}/${required}" ]] || { echo "Release is missing ${required}." >&2; exit 6; }
 done
 
