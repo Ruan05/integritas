@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { chmod, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { parseAgentBundle } from './agent-result.mjs';
+import { parseAgentBundle, parseSingleJsonObject } from './agent-result.mjs';
 
 const execFileAsync = promisify(execFile);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -110,8 +110,7 @@ function parseEnvelope(stdout, label) {
 
 function parseCritique(stdout) {
   const envelope = parseEnvelope(stdout, 'critic');
-  let critique;
-  try { critique = JSON.parse(envelope.final.trim()); } catch { throw new Error('critic final response must be raw JSON'); }
+  const critique = parseSingleJsonObject(envelope.final, 'critic final response');
   if (!critique || Array.isArray(critique) || typeof critique !== 'object') throw new Error('critic response must be a JSON object');
   const allowed = new Set(['verdict', 'issues', 'missing_document_ids', 'report_gaps']);
   if (Object.keys(critique).some((key) => !allowed.has(key))) throw new Error('critic response contains unknown fields');
@@ -210,9 +209,9 @@ Your final response must be exactly one raw JSON object conforming to /agent/con
 
 await writeProgress('researching', 30, 'primary_research');
 const researchStdout = await runAgent('task.md', route.research);
+await writeSharedAtomic('research-agent-exec.json', researchStdout);
 const researchEnvelope = parseEnvelope(researchStdout, 'research');
 const researchParsed = parseAgentBundle(researchStdout, manifest);
-await writeSharedAtomic('research-agent-exec.json', researchStdout);
 await writeSharedAtomic('research-bundle.json', `${JSON.stringify(researchParsed.bundle, null, 2)}\n`);
 await writeSharedAtomic('research-report.md', researchParsed.reportMarkdown);
 
@@ -225,14 +224,15 @@ if (route.critic && route.synthesis) {
   await writeSharedAtomic('critic-task.md', criticTask());
   await writeProgress('independent_review', 70, 'independent_critic');
   const criticStdout = await runAgent('critic-task.md', route.critic);
+  await writeSharedAtomic('critic-agent-exec.json', criticStdout);
   const { envelope: criticEnvelope, critique } = parseCritique(criticStdout);
   phaseEnvelopes.push(criticEnvelope);
-  await writeSharedAtomic('critic-agent-exec.json', criticStdout);
   await writeSharedAtomic('critic.json', `${JSON.stringify(critique, null, 2)}\n`);
 
   await writeProgress('independent_review', 78, 'final_synthesis');
   await writeSharedAtomic('synthesis-task.md', synthesisTask());
   finalStdout = await runAgent('synthesis-task.md', route.synthesis);
+  await writeSharedAtomic('synthesis-agent-exec.json', finalStdout);
   const finalEnvelope = parseEnvelope(finalStdout, 'synthesis');
   const synthesisResearchTools = Array.isArray(finalEnvelope?.toolSummary?.tools)
     ? finalEnvelope.toolSummary.tools.filter((tool) => RESEARCH_TOOLS.has(tool))
