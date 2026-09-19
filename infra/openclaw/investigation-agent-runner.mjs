@@ -74,11 +74,92 @@ async function writeSharedAtomic(name, content) {
   await rename(temporary, target);
 }
 
-async function writeProgress(stage, progress, phase) {
+async function writeProgress(stage, progress, phase, milestones = []) {
   await writeSharedAtomic(
     'agent-progress.json',
-    `${JSON.stringify({ stage, progress, phase, updated_at: new Date().toISOString() })}\n`,
+    `${JSON.stringify({
+      stage, progress, phase,
+      milestones: Array.isArray(milestones) ? milestones.slice(0, 64) : [],
+      updated_at: new Date().toISOString(),
+    })}\n`,
   );
+}
+
+const CORE_MILESTONES = Object.freeze([
+  ['core.evidence', 'Evidence securely staged'],
+  ['core.forensics', 'Trusted document forensics'],
+  ['core.classification', 'Documents classified and claims extracted'],
+  ['core.plan', 'Case-specific research plan built'],
+  ['core.research', 'External and browser research'],
+  ['core.crosscheck', 'Evidence cross-checked and contradictions tested'],
+  ['core.review', 'Independent critic review and synthesis'],
+  ['core.qa', 'Deterministic quality checks'],
+  ['core.persist', 'Findings and report safely saved'],
+]);
+
+function milestone(id, label, status, priority = 'medium') {
+  return {
+    id: String(id).slice(0, 128),
+    label: String(label).replace(/\s+/g, ' ').trim().slice(0, 160),
+    status,
+    priority,
+  };
+}
+
+function researchLaneMilestones(plan, state = 'waiting', bundle = null) {
+  const checkByKey = new Map((bundle?.checks ?? []).map((row) => [row?.check_key, row]));
+  return (plan?.research_lanes ?? []).slice(0, 50).map((lane) => {
+    const check = checkByKey.get(`lane.${lane.lane_id}`);
+    let status = lane.manual_only ? 'manual' : state;
+    if (check?.status === 'complete') status = 'complete';
+    else if (check?.status === 'blocked') status = lane.manual_only ? 'manual' : 'blocked';
+    else if (check?.status === 'in_progress') status = 'active';
+    else if (check?.status === 'open' && state !== 'active') status = 'waiting';
+    return milestone(`lane.${lane.lane_id}`, lane.question, status, lane.priority);
+  });
+}
+
+function coreMilestones(statuses = {}) {
+  return CORE_MILESTONES.map(([id, label]) => milestone(id, label, statuses[id] ?? 'waiting', 'high'));
+}
+
+function milestoneSnapshot(phase, plan = null, bundle = null) {
+  const states = {};
+  for (const [id] of CORE_MILESTONES) states[id] = 'waiting';
+  states['core.evidence'] = 'complete';
+  states['core.forensics'] = 'complete';
+
+  if (['adaptive_planning', 'research_plan_ready', 'primary_research', 'cross_check', 'independent_critic', 'final_synthesis', 'ready_for_deterministic_qa'].includes(phase)) {
+    states['core.classification'] = phase === 'adaptive_planning' ? 'active' : 'complete';
+  }
+  if (['research_plan_ready', 'primary_research', 'cross_check', 'independent_critic', 'final_synthesis', 'ready_for_deterministic_qa'].includes(phase)) {
+    states['core.plan'] = 'complete';
+  }
+  if (phase === 'primary_research') states['core.research'] = 'active';
+  if (['cross_check', 'independent_critic', 'final_synthesis', 'ready_for_deterministic_qa'].includes(phase)) states['core.research'] = 'complete';
+  if (phase === 'cross_check') states['core.crosscheck'] = 'active';
+  if (['independent_critic', 'final_synthesis', 'ready_for_deterministic_qa'].includes(phase)) states['core.crosscheck'] = 'complete';
+  if (['independent_critic', 'final_synthesis'].includes(phase)) states['core.review'] = 'active';
+  if (phase === 'ready_for_deterministic_qa') states['core.review'] = 'complete';
+  if (phase === 'ready_for_deterministic_qa') states['core.qa'] = 'active';
+
+  let laneState = 'waiting';
+  if (phase === 'primary_research') laneState = 'active';
+  if (['cross_check', 'independent_critic', 'final_synthesis', 'ready_for_deterministic_qa'].includes(phase)) laneState = 'waiting';
+  return [
+    ...coreMilestones(states),
+    ...researchLaneMilestones(plan, laneState, bundle),
+  ];
+}
+
+function assertPlanCheckCoverage(bundle, plan, label) {
+  const keys = new Set((bundle?.checks ?? []).map((row) => row?.check_key));
+  const missing = (plan?.research_lanes ?? [])
+    .filter((lane) => !keys.has(`lane.${lane.lane_id}`))
+    .map((lane) => lane.lane_id);
+  if (missing.length) {
+    throw new Error(`${label} is missing planner research-lane checks: ${missing.slice(0, 10).join(', ')}`);
+  }
 }
 
 function buildArgs(messageFile, phaseRoute) {
@@ -224,7 +305,7 @@ function parsePlan(stdout) {
   boundedStringArray(plan.case_profile.payment_instruments, 'planner payment_instruments', 30, 240);
   boundedStringArray(plan.case_profile.critical_transaction_features, 'planner critical_transaction_features', 60, 1200);
 
-  if (!Array.isArray(plan.research_lanes) || plan.research_lanes.length < 1 || plan.research_lanes.length > 60) {
+  if (!Array.isArray(plan.research_lanes) || plan.research_lanes.length < 1 || plan.research_lanes.length > 50) {
     throw new Error('planner research_lanes are invalid');
   }
   const laneIds = new Set();
@@ -236,6 +317,7 @@ function parsePlan(stdout) {
     ]);
     if (Object.keys(lane).some((key) => !laneAllowed.has(key))) throw new Error('planner research lane contains unknown fields');
     boundedString(lane.lane_id, `planner lane ${index} lane_id`, 120);
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(lane.lane_id)) throw new Error('planner research lane id format is invalid');
     if (laneIds.has(lane.lane_id)) throw new Error('planner research lane ids must be unique');
     laneIds.add(lane.lane_id);
     if (!['critical', 'high', 'medium', 'low'].includes(lane.priority)) throw new Error('planner lane priority is invalid');
@@ -344,6 +426,8 @@ Execute the case-specific research plan using the strongest available sources an
 
 For critical claims, prefer at least one Grade A/B source and independent corroboration when available. Do not waste calls on repeated snippets or low-value biography while critical legal identity, authority, banking, product/title, terminal/vessel, licence, issuer-authenticity or payment gates remain open.
 
+For **every** research lane in /agent/investigation-plan.json, create exactly one corresponding structured check in the bundle with `check_key` equal to `lane.<lane_id>`. Use the lane question as the check description, preserve its priority, name the strongest required source, and set status to `complete`, `blocked`, `open`, or `in_progress` based only on what was actually achieved. A manual-only lane should remain open/blocked unless authoritative manual confirmation was genuinely obtained. This check coverage is mandatory and drives the live admin milestone display.
+
 The report inside report.markdown must begin with:
 1. MASTER SUMMARY — READ THIS FIRST
 2. DIRECT NEXT STEPS — WHAT TO DO NOW
@@ -406,20 +490,22 @@ Your final response must be exactly one raw JSON object conforming to /agent/con
 }
 
 await writeSharedAtomic('planner-task.md', plannerTask());
-await writeProgress('mapping', 20, 'adaptive_planning');
+await writeProgress('mapping_entities', 20, 'adaptive_planning', milestoneSnapshot('adaptive_planning'));
 const plannerStdout = await runAgent('planner-task.md', route.planner);
 await writeSharedAtomic('planner-agent-exec.json', plannerStdout);
 const { envelope: plannerEnvelope, plan } = parsePlan(plannerStdout);
 await writeSharedAtomic('investigation-plan.json', `${JSON.stringify(plan, null, 2)}\n`);
+await writeProgress('planning_research', 25, 'research_plan_ready', milestoneSnapshot('research_plan_ready', plan));
 const deterministicChecks = buildDeterministicChecks(plan);
 await writeSharedAtomic('deterministic-checks.json', `${JSON.stringify(deterministicChecks, null, 2)}\n`);
 
 await writeSharedAtomic('research-task.md', researchTask());
-await writeProgress('researching', 30, 'primary_research');
+await writeProgress('researching', 30, 'primary_research', milestoneSnapshot('primary_research', plan));
 const researchStdout = await runAgent('research-task.md', route.research);
 await writeSharedAtomic('research-agent-exec.json', researchStdout);
 const researchEnvelope = parseEnvelope(researchStdout, 'research');
 const researchParsed = parseAgentBundle(researchStdout, manifest);
+assertPlanCheckCoverage(researchParsed.bundle, plan, 'research bundle');
 await writeSharedAtomic('research-bundle.json', `${JSON.stringify(researchParsed.bundle, null, 2)}\n`);
 await writeSharedAtomic('research-report.md', researchParsed.reportMarkdown);
 
@@ -431,16 +517,16 @@ const phaseRecords = [
 ];
 
 if (route.critic && route.synthesis) {
-  await writeProgress('cross_checking', 60, 'cross_check');
+  await writeProgress('cross_checking', 60, 'cross_check', milestoneSnapshot('cross_check', plan, researchParsed.bundle));
   await writeSharedAtomic('critic-task.md', criticTask());
-  await writeProgress('independent_review', 70, 'independent_critic');
+  await writeProgress('independent_review', 70, 'independent_critic', milestoneSnapshot('independent_critic', plan, researchParsed.bundle));
   const criticStdout = await runAgent('critic-task.md', route.critic);
   await writeSharedAtomic('critic-agent-exec.json', criticStdout);
   const { envelope: criticEnvelope, critique } = parseCritique(criticStdout);
   phaseRecords.push({ phase: 'critic', envelope: criticEnvelope });
   await writeSharedAtomic('critic.json', `${JSON.stringify(critique, null, 2)}\n`);
 
-  await writeProgress('independent_review', 78, 'final_synthesis');
+  await writeProgress('independent_review', 78, 'final_synthesis', milestoneSnapshot('final_synthesis', plan, researchParsed.bundle));
   await writeSharedAtomic('synthesis-task.md', synthesisTask());
   finalStdout = await runAgent('synthesis-task.md', route.synthesis);
   await writeSharedAtomic('synthesis-agent-exec.json', finalStdout);
@@ -451,6 +537,7 @@ if (route.critic && route.synthesis) {
   if (synthesisResearchTools.length) throw new Error('synthesis pass must not perform external research');
   phaseRecords.push({ phase: 'synthesis', envelope: finalEnvelope });
   finalParsed = parseAgentBundle(finalStdout, manifest);
+  assertPlanCheckCoverage(finalParsed.bundle, plan, 'synthesis bundle');
 }
 
 const finalEnvelope = parseEnvelope(finalStdout, 'final');
@@ -494,4 +581,4 @@ const combinedEnvelope = {
 await writeSharedAtomic('agent-exec.json', `${JSON.stringify(combinedEnvelope)}\n`);
 await writeSharedAtomic('bundle.json', `${JSON.stringify(finalParsed.bundle, null, 2)}\n`);
 await writeSharedAtomic('report.md', finalParsed.reportMarkdown);
-await writeProgress('drafting_report', 82, 'ready_for_deterministic_qa');
+await writeProgress('drafting_report', 82, 'ready_for_deterministic_qa', milestoneSnapshot('ready_for_deterministic_qa', plan, finalParsed.bundle));
