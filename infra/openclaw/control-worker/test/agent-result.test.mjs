@@ -44,11 +44,23 @@ test('parses raw v1 JSON from successful agent-exec envelope', () => {
   assert.equal(parsed.reportMarkdown, '# Draft report');
 });
 
-test('rejects prose, code fences, failed envelopes, and manifest mismatches', () => {
+test('recovers one bounded wrapped JSON object but rejects ambiguity and manifest mismatches', () => {
   const value = bundle();
-  assert.throws(() => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: 'Here is the result: ' + JSON.stringify(value) }), manifest), /final response must be raw JSON/);
+  const prose = parseAgentBundle(
+    JSON.stringify({ ok: true, status: 'ok', final: 'Here is the result:\n' + JSON.stringify(value) + '\nDone.' }),
+    manifest,
+  );
+  assert.deepEqual(prose.bundle, value);
+
   const fenced = String.fromCharCode(96,96,96) + 'json\n' + JSON.stringify(value) + '\n' + String.fromCharCode(96,96,96);
-  assert.throws(() => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: fenced }), manifest), /final response must be raw JSON/);
+  const fencedParsed = parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: fenced }), manifest);
+  assert.deepEqual(fencedParsed.bundle, value);
+
+  const ambiguous = JSON.stringify(value) + '\n' + JSON.stringify(value);
+  assert.throws(
+    () => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: ambiguous }), manifest),
+    /must contain one valid JSON object/,
+  );
   assert.throws(() => parseAgentBundle(JSON.stringify({ ok: false, status: 'error', final: '' }), manifest), /agent exec did not complete successfully/);
   value.case_revision = 8;
   assert.throws(() => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }), manifest), /bundle manifest mismatch/);
