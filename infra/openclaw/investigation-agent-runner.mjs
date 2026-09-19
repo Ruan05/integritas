@@ -269,8 +269,8 @@ function ibanChecksum(candidate) {
 }
 
 function imoChecksum(candidate) {
-  const compact = String(candidate ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const match = compact.match(/(?:IMO)?([0-9]{7})/);
+  const raw = String(candidate ?? '');
+  const match = raw.match(/\\bIMO\\s*[:#-]?\\s*([0-9]{7})\\b/i);
   if (!match) return null;
   const value = match[1];
   const digits = [...value].map(Number);
