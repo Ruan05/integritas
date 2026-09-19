@@ -98,14 +98,14 @@ def find_pdf_value(data, key):
 
 def embedded_image_stream_hashes(data):
     hashes = []
-    for match in re.finditer(rb'(?s)\\b\\d+\\s+\\d+\\s+obj\\b(.*?)endobj', data):
+    for match in re.finditer(rb'(?s)\b\d+\s+\d+\s+obj\b(.*?)endobj', data):
         body = match.group(1)
-        if not re.search(rb'/Subtype\\s*/Image\\b', body):
+        if not re.search(rb'/Subtype\s*/Image\b', body):
             continue
-        stream = re.search(rb'(?s)stream(?:\\r\\n|\\n|\\r)(.*?)endstream', body)
+        stream = re.search(rb'(?s)stream(?:\r\n|\n|\r)(.*?)endstream', body)
         if stream is None:
             continue
-        payload = stream.group(1).rstrip(b'\\r\\n')
+        payload = stream.group(1).rstrip(b'\r\n')
         if not payload:
             continue
         hashes.append(hashlib.sha256(payload).hexdigest())
