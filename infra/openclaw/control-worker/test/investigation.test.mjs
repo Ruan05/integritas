@@ -71,7 +71,7 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     if (args[0] !== 'start' || args[1] !== '--no-block') throw new Error('unexpected systemctl action');
     const jobDir = path.join(spoolRoot, JOB_ID);
     const expectedGroup = (await stat(spoolRoot)).gid;
-    for (const relative of ['manifest.json', 'task.md', 'bundle-template.json', `documents/${DOC_ID}.pdf`, 'skills/integritas-investigation-v1/SKILL.md', 'tools/dd/quality_v1.py', 'contracts/investigation-bundle-v1.schema.json']) {
+    for (const relative of ['manifest.json', 'task.md', 'bundle-template.json', 'forensics.json', `documents/${DOC_ID}.pdf`, 'skills/integritas-investigation-v1/SKILL.md', 'tools/dd/quality_v1.py', 'tools/dd/forensics_v1.py', 'contracts/investigation-bundle-v1.schema.json']) {
       const info = await stat(path.join(jobDir, relative));
       assert.equal(info.mode & 0o777, 0o640, `${relative} must remain group-readable under umask 077`);
       assert.equal(info.gid, expectedGroup, `${relative} must use the shared workspace group`);
@@ -115,6 +115,12 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     await access(path.join(spoolRoot, JOB_ID, 'documents', `${DOC_ID}.pdf`));
     await access(path.join(spoolRoot, JOB_ID, 'skills', 'integritas-investigation-v1', 'SKILL.md'));
     await access(path.join(spoolRoot, JOB_ID, 'tools', 'dd', 'quality_v1.py'));
+    await access(path.join(spoolRoot, JOB_ID, 'tools', 'dd', 'forensics_v1.py'));
+    const forensics = JSON.parse(await readFile(path.join(spoolRoot, JOB_ID, 'forensics.json'), 'utf8'));
+    assert.equal(forensics.tool, 'integritas_forensics_v1');
+    assert.equal(forensics.reports.length, 1);
+    assert.equal(forensics.reports[0].document_id, DOC_ID);
+    assert.equal(forensics.reports[0].sha256, sha256);
     await access(path.join(spoolRoot, JOB_ID, 'contracts', 'investigation-bundle-v1.schema.json'));
     await assert.rejects(access(path.join(spoolRoot, JOB_ID, 'skills', 'integritas-dd', 'SKILL.md')));
     await assert.rejects(access(path.join(spoolRoot, JOB_ID, 'tools', 'dd', 'quality.py')));
@@ -131,6 +137,8 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     const task = await readFile(path.join(spoolRoot, JOB_ID, 'task.md'), 'utf8');
     assert.match(task, /integritas-investigation-v1/);
     assert.match(task, /bundle-template\.json/);
+    assert.match(task, /forensics\.json/);
+    assert.match(task, /trusted deterministic metadata/i);
     assert.match(task, /final response must be exactly one raw JSON object/i);
     assert.match(task, /workspace is read-only/i);
     assert.match(task, /trusted runner will validate/i);
@@ -140,6 +148,8 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     const template = JSON.parse(await readFile(path.join(spoolRoot, JOB_ID, 'bundle-template.json'), 'utf8'));
     assert.equal(template.schema_version, 1);
     assert.equal(template.case_job_id, JOB_ID);
+    assert.equal(template.execution.tool_results[0].tool, 'integritas_forensics_v1');
+    assert.equal(template.execution.tool_results[0].status, 'completed');
     assert.deepEqual(Object.keys(template).sort(), ['case_id','case_job_id','case_revision','checks','contradictions','depth','entities','execution','findings','generated_at','limitations','relationships','report','schema_version','sources','unresolved_checks'].sort());
     assert.ok(checkpoints.every((entry) => entry[4] >= 80));
     assert.ok(!checkpoints.some((entry) => entry[3] === 'extracting'));
