@@ -166,7 +166,7 @@ function normalizeRetainedTerminalOutcome(bundle) {
   };
 }
 
-function buildBundleTemplate(manifest) {
+function buildBundleTemplate(manifest, forensics = null) {
   const now = new Date().toISOString();
   return {
     schema_version: 1,
@@ -177,7 +177,18 @@ function buildBundleTemplate(manifest) {
     generated_at: now,
     entities: [], relationships: [], sources: [], findings: [], checks: [], contradictions: [], unresolved_checks: [], limitations: [],
     report: { summary: '', markdown: '', status: 'draft' },
-    execution: { started_at: now, completed_at: now, stages: [], tool_results: [], warnings: [], terminal_outcome: 'incomplete' },
+    execution: {
+      started_at: now,
+      completed_at: now,
+      stages: [],
+      tool_results: forensics ? [{
+        tool: 'integritas_forensics_v1',
+        status: 'completed',
+        summary: `Trusted metadata/signature pre-pass completed for ${forensics.reports.length} submitted document(s).`,
+      }] : [],
+      warnings: [],
+      terminal_outcome: 'incomplete',
+    },
   };
 }
 
@@ -319,7 +330,13 @@ async function readObservedResearchSummary(jobDir) {
 
 async function defaultQaRunner({ jobDir, bundlePath, manifestPath, reportPath, currentRevision }) {
   const qaPath = path.join(jobDir, 'tools', 'dd', 'quality_v1.py');
-  const args = [qaPath, bundlePath, '--manifest', manifestPath, '--report', reportPath, '--current-revision', String(currentRevision)];
+  const args = [
+    qaPath, bundlePath,
+    '--manifest', manifestPath,
+    '--report', reportPath,
+    '--forensics', path.join(jobDir, 'forensics.json'),
+    '--current-revision', String(currentRevision),
+  ];
   let stdout = '';
   try {
     ({ stdout } = await execFileAsync('/usr/bin/python3', args, { cwd: jobDir, env: SAFE_EXEC_ENV, timeout: 60_000, maxBuffer: 1024 * 1024 }));
@@ -405,9 +422,9 @@ export async function executeInvestigation(command, {
       await chown(manifestPath, -1, process.getgid());
       await chmod(manifestPath, SHARED_FILE_MODE);
       await copySupport(repoRoot, jobDir);
-      await runTrustedForensics(jobDir, localDocuments);
+      const trustedForensics = await runTrustedForensics(jobDir, localDocuments);
       const templatePath = path.join(jobDir, 'bundle-template.json');
-      await writeFile(templatePath, JSON.stringify(buildBundleTemplate(safeManifest), null, 2), { mode: SHARED_FILE_MODE });
+      await writeFile(templatePath, JSON.stringify(buildBundleTemplate(safeManifest, trustedForensics), null, 2), { mode: SHARED_FILE_MODE });
       await chown(templatePath, -1, process.getgid());
       await chmod(templatePath, SHARED_FILE_MODE);
       const taskPath = path.join(jobDir, 'task.md');
