@@ -267,6 +267,71 @@ async function readUnitState(systemctlRunner, unit) {
   return state;
 }
 
+const MILESTONE_STATUSES = new Set(['waiting', 'active', 'complete', 'blocked', 'manual']);
+const MILESTONE_PRIORITIES = new Set(['low', 'medium', 'high', 'critical']);
+const CORE_MILESTONE_DEFS = Object.freeze([
+  ['core.evidence', 'Evidence securely staged'],
+  ['core.forensics', 'Trusted document forensics'],
+  ['core.classification', 'Documents classified and claims extracted'],
+  ['core.plan', 'Case-specific research plan built'],
+  ['core.research', 'External and browser research'],
+  ['core.crosscheck', 'Evidence cross-checked and contradictions tested'],
+  ['core.review', 'Independent critic review and synthesis'],
+  ['core.qa', 'Deterministic quality checks'],
+  ['core.persist', 'Findings and report safely saved'],
+]);
+
+function safeMilestone(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+  const id = typeof row.id === 'string' ? row.id : '';
+  const label = typeof row.label === 'string' ? row.label : '';
+  const status = typeof row.status === 'string' ? row.status : '';
+  const priority = typeof row.priority === 'string' ? row.priority : '';
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id)
+    || label.length < 1 || label.length > 160
+    || !MILESTONE_STATUSES.has(status)
+    || !MILESTONE_PRIORITIES.has(priority)) {
+    return null;
+  }
+  return { id, label, status, priority };
+}
+
+function sanitizeMilestones(value) {
+  if (!Array.isArray(value) || value.length > 64) return [];
+  const seen = new Set();
+  const rows = [];
+  for (const candidate of value) {
+    const row = safeMilestone(candidate);
+    if (!row || seen.has(row.id)) continue;
+    seen.add(row.id);
+    rows.push(row);
+  }
+  return rows;
+}
+
+function initialMilestones(phase) {
+  const status = new Map(CORE_MILESTONE_DEFS.map(([id]) => [id, 'waiting']));
+  if (phase === 'extracting') status.set('core.evidence', 'active');
+  if (phase === 'analyzing_documents') {
+    status.set('core.evidence', 'complete');
+    status.set('core.forensics', 'complete');
+    status.set('core.classification', 'active');
+  }
+  return CORE_MILESTONE_DEFS.map(([id, label]) => ({
+    id, label, status: status.get(id), priority: 'high',
+  }));
+}
+
+function advanceMilestones(value, updates) {
+  const rows = sanitizeMilestones(value);
+  const map = new Map(rows.map((row) => [row.id, { ...row }]));
+  for (const [id, nextStatus] of Object.entries(updates)) {
+    const current = map.get(id);
+    if (current && MILESTONE_STATUSES.has(nextStatus)) current.status = nextStatus;
+  }
+  return [...map.values()];
+}
+
 async function readAgentProgress(jobDir) {
   try {
     const raw = await readFile(path.join(jobDir, 'agent-progress.json'), 'utf8');
@@ -276,7 +341,11 @@ async function readAgentProgress(jobDir) {
       || !Number.isInteger(progress.progress) || progress.progress < 15 || progress.progress > 89) {
       return null;
     }
-    return { stage: progress.stage, progress: progress.progress };
+    return {
+      stage: progress.stage,
+      progress: progress.progress,
+      milestones: sanitizeMilestones(progress.milestones),
+    };
   } catch {
     return null;
   }
@@ -307,9 +376,11 @@ async function runAgentWithRecovery({
     }
     if (jobDir && typeof onProgress === 'function') {
       const agentProgress = await readAgentProgress(jobDir);
-      const key = agentProgress ? `${agentProgress.stage}:${agentProgress.progress}` : '';
+      const key = agentProgress
+        ? `${agentProgress.stage}:${agentProgress.progress}:${JSON.stringify(agentProgress.milestones.map((row) => [row.id, row.status]))}`
+        : '';
       if (agentProgress && key !== lastAgentProgress) {
-        await onProgress(agentProgress.stage, agentProgress.progress, {});
+        await onProgress(agentProgress.stage, agentProgress.progress, { milestones: agentProgress.milestones });
         lastAgentProgress = key;
       }
     }
@@ -425,7 +496,10 @@ export async function executeInvestigation(command, {
       await mkdir(jobDir, { recursive: true, mode: SHARED_DIR_MODE });
       await chown(jobDir, -1, process.getgid());
       await chmod(jobDir, SHARED_DIR_MODE);
-      await checkpoint('extracting', 5, { document_count: manifest.documents.length });
+      await checkpoint('extracting', 5, {
+        document_count: manifest.documents.length,
+        milestones: initialMilestones('extracting'),
+      });
       const documentsDir = path.join(jobDir, 'documents');
       await ensureSharedDirectory(jobDir, documentsDir);
       for (const document of localDocuments) {
@@ -446,7 +520,10 @@ export async function executeInvestigation(command, {
       await writeFile(taskPath, buildTask(safeManifest, localDocuments), { mode: SHARED_FILE_MODE });
       await chown(taskPath, -1, process.getgid());
       await chmod(taskPath, SHARED_FILE_MODE);
-      await checkpoint('analyzing_documents', 15, { document_count: localDocuments.length });
+      await checkpoint('analyzing_documents', 15, {
+        document_count: localDocuments.length,
+        milestones: initialMilestones('analyzing_documents'),
+      });
     }
 
     const bundlePath = path.join(jobDir, 'bundle.json');
@@ -520,7 +597,20 @@ export async function executeInvestigation(command, {
     const bundleJson = JSON.parse(bundle.toString('utf8'));
     validateInvestigationBundle(bundleJson, safeManifest, report.toString('utf8'));
     if (bundle.includes('/storage/v1/object/sign/') || report.includes('/storage/v1/object/sign/')) throw new Error('signed URL leaked into investigation output');
-    await checkpoint('verifying', 80, {});
+    const latestAgentProgress = await readAgentProgress(jobDir);
+    let finalMilestones = sanitizeMilestones(latestAgentProgress?.milestones);
+    if (finalMilestones.length === 0) finalMilestones = initialMilestones('analyzing_documents');
+    finalMilestones = advanceMilestones(finalMilestones, {
+      'core.evidence': 'complete',
+      'core.forensics': 'complete',
+      'core.classification': 'complete',
+      'core.plan': 'complete',
+      'core.research': 'complete',
+      'core.crosscheck': 'complete',
+      'core.review': 'complete',
+      'core.qa': 'active',
+    });
+    await checkpoint('verifying', 80, { milestones: finalMilestones });
     const qa = await qaRunner({
       jobDir,
       bundlePath,
@@ -529,7 +619,11 @@ export async function executeInvestigation(command, {
       currentRevision: revision,
     });
     if (qa?.valid !== true) throw new Error('deterministic QA failed: validator did not approve bundle');
-    await checkpoint('drafting_report', 90, {});
+    finalMilestones = advanceMilestones(finalMilestones, {
+      'core.qa': 'complete',
+      'core.persist': 'active',
+    });
+    await checkpoint('drafting_report', 90, { milestones: finalMilestones });
     const bundleSha = createHash('sha256').update(bundle).digest('hex');
     const reportSha = createHash('sha256').update(report).digest('hex');
     const externalSources = bundleJson.sources.filter((source) => source.evidence_origin === 'external_research');
@@ -544,9 +638,11 @@ export async function executeInvestigation(command, {
     const committed = await client.commitBundle(command.id, jobId, revision, bundleSha, reportSha, bundleJson);
     const commitSummary = committed?.commit_summary ?? {};
     const terminalOutcome = bundleJson.execution.terminal_outcome;
+    finalMilestones = advanceMilestones(finalMilestones, { 'core.persist': 'complete' });
     await checkpoint(terminalOutcome, 100, {
       bundle_sha256: bundleSha, report_sha256: reportSha,
       qa_summary: qa.summary ?? {}, commit_summary: commitSummary,
+      milestones: finalMilestones,
     });
     completedSuccessfully = true;
     return {
