@@ -157,6 +157,9 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     assert.ok(terminalCheckpoint);
     assert.deepEqual(terminalCheckpoint[5].qa_summary, { checks: 1 });
     assert.deepEqual(terminalCheckpoint[5].commit_summary, { findings: 0, sources: 0 });
+    assert.ok(Array.isArray(terminalCheckpoint[5].milestones));
+    assert.equal(terminalCheckpoint[5].milestones.find((row) => row.id === 'core.qa')?.status, 'complete');
+    assert.equal(terminalCheckpoint[5].milestones.find((row) => row.id === 'core.persist')?.status, 'complete');
     assert.ok(!checkpoints.some((entry) => entry[3] === 'completed'));
   } finally {
     process.umask(previousUmask);
