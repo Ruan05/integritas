@@ -66,13 +66,13 @@ async function runQa(bundle) {
 }
 
 test('v1 deterministic QA accepts a structurally valid bundle', async () => {
-  const result = await runQa(baseBundle('# Synthetic report'));
+  const result = await runQa(baseBundle('# MASTER SUMMARY — READ THIS FIRST\nSynthetic case summary.\n\n# DIRECT NEXT STEPS — WHAT TO DO NOW\nVerify the synthetic claim.'));
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const body = JSON.parse(result.stdout);
   assert.equal(body.valid, true);
 });
 test('v1 deterministic QA rejects verified findings without source evidence', async () => {
-  const bundle = baseBundle('# Synthetic report');
+  const bundle = baseBundle('# MASTER SUMMARY — READ THIS FIRST\nSynthetic case summary.\n\n# DIRECT NEXT STEPS — WHAT TO DO NOW\nVerify the synthetic claim.');
   bundle.entities.push({
     entity_key: 'entity-1', entity_type: 'company', display_name: 'Example',
     aliases: [], identifiers: {}, match_status: 'verified', confidence: 90,
