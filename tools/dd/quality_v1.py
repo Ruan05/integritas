@@ -135,6 +135,7 @@ def validate_sources(bundle, manifest, errors):
     fields = {'source_key', 'source_type', 'title', 'url', 'document_id', 'page_reference', 'excerpt', 'reliability_note', 'evidence_origin', 'retrieved_at'}
     sources = keyed(bundle.get('sources'), 'source_key', 'sources', errors)
     document_ids = {row.get('id') for row in manifest.get('documents', []) if isinstance(row, dict)}
+    submitted_ids = set()
     for key, row in sources.items():
         exact_fields(row, fields, f'source {key}', errors)
         if row.get('source_type') not in {'document', 'official', 'primary', 'secondary', 'other'}:
@@ -148,10 +149,26 @@ def validate_sources(bundle, manifest, errors):
         excerpt = row.get('excerpt')
         if not isinstance(excerpt, str) or len(excerpt) > 8000:
             errors.append(f'source {key}: invalid excerpt')
-        if row.get('evidence_origin') not in {'submitted_document', 'external_research'}:
+        origin = row.get('evidence_origin')
+        if origin not in {'submitted_document', 'external_research'}:
             errors.append(f'source {key}: invalid evidence_origin')
+        elif origin == 'submitted_document':
+            if row.get('source_type') != 'document':
+                errors.append(f'source {key}: submitted document must use source_type document')
+            if not isinstance(document_id, str) or document_id not in document_ids:
+                errors.append(f'source {key}: submitted document requires manifest document_id')
+            else:
+                submitted_ids.add(document_id)
+        elif origin == 'external_research':
+            if document_id is not None:
+                errors.append(f'source {key}: external research cannot use document_id')
+            if not isinstance(row.get('url'), str) or not safe_https_url(row.get('url')):
+                errors.append(f'source {key}: external research requires public HTTPS URL')
         if not timestamp(row.get('retrieved_at')):
             errors.append(f'source {key}: invalid retrieved_at')
+    missing_documents = sorted(document_ids - submitted_ids)
+    if missing_documents:
+        errors.append('sources: every manifest document must be represented as submitted_document evidence: ' + ','.join(missing_documents))
     return sources
 def validate_findings(bundle, entities, sources, errors):
     fields = {'finding_key', 'entity_key', 'finding_type', 'claim', 'evidence_status', 'materiality', 'reliability', 'evidence_excerpt', 'source_keys'}
