@@ -172,9 +172,10 @@ select public.integritas_register_case_job_output(
   repeat('f',64),100,'{}'::jsonb
 );
 
-do $$ declare v_command uuid; v_job uuid; begin
-  v_command := :'rep_control_command_id'::uuid;
-  v_job := :'rep_case_job_id'::uuid;
+do $ declare v_command uuid; v_job uuid; begin
+  select control_command_id,id into v_command,v_job
+  from public.integritas_case_jobs
+  where case_id='bbbbbbbb-1111-4111-8111-111111111111'::uuid;
   perform public.integritas_commit_investigation_bundle(
     v_command,'oracle-primary',v_job,1,repeat('e',64),repeat('f',64),
     (select bundle from replacement_bundles where version=2)
@@ -182,7 +183,7 @@ do $$ declare v_command uuid; v_job uuid; begin
   raise exception 'expected finalized replacement rejection';
 exception when others then
   if sqlerrm <> 'investigation report is no longer draft' then raise; end if;
-end $$;
+end $;
 
 select pg_temp.assert_true(
   (select bundle_sha256=repeat('c',64) and report_sha256=repeat('d',64)
