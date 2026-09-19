@@ -100,6 +100,9 @@ done
 (
   cd "${NEW}"
   /usr/bin/node --test infra/openclaw/control-worker/test/agent-runner-contract.test.mjs
+  /usr/bin/node --test infra/openclaw/control-worker/test/transaction-checks.test.mjs
+  /usr/bin/python3 -m py_compile tools/dd/quality_v1.py tools/dd/forensics_v1.py
+  /usr/bin/python3 tools/dd/test_forensics_v1.py
   /usr/bin/node scripts/verify-control-bridge-policy.mjs
   /usr/bin/node scripts/verify-oracle-openclaw-infra.mjs
   /usr/bin/git diff --no-index /dev/null /dev/null >/dev/null
