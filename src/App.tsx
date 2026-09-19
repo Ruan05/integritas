@@ -38,6 +38,8 @@ const investigationStages = [
   ['verifying', 'Verifying'], ['cross_checking', 'Cross-checking'],
   ['independent_review', 'Independent review'], ['drafting_report', 'Drafting report'],
 ] as const;
+const retryableInvestigationStages = new Set(['failed', 'incomplete', 'cancelled']);
+const terminalInvestigationStages = new Set(['completed', 'incomplete', 'failed', 'cancelled', 'research_limit_reached']);
 
 const openClawPreflight = [
   'Fresh Oracle runtime heartbeat and verified bounded-worker release',
@@ -92,6 +94,8 @@ export function App() {
     busy,
     hasCurrentRevisionJob: !!(job && selectedCase && job.case_revision === selectedCase.revision),
   });
+  const retryAllowed = !!token && !!browserClient && !!job && retryableInvestigationStages.has(job.stage) && !busy;
+  const cancelAllowed = !!token && !!browserClient && !!job && !terminalInvestigationStages.has(job.stage) && !busy;
 
   useEffect(() => {
     if (!supabase) return;
@@ -289,6 +293,29 @@ export function App() {
     finally { setBusy(false); }
   };
 
+  const retryInvestigation = async () => {
+    if (!token || !browserClient || !job || !retryAllowed) return;
+    setBusy(true); setNotice('Retrying investigation from the latest durable checkpoint…');
+    try {
+      await browserClient.retryInvestigation(token, job.id);
+      setCommandStatus('queued');
+      await refreshSelectedCase();
+      setNotice('Investigation retry queued from the latest durable checkpoint.');
+    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
+
+  const cancelInvestigation = async () => {
+    if (!token || !browserClient || !job || !cancelAllowed) return;
+    setBusy(true); setNotice('Requesting investigation cancellation…');
+    try {
+      await browserClient.cancelInvestigation(token, job.id);
+      await refreshSelectedCase();
+      setNotice('Cancellation requested. The Oracle worker will stop at the next safe checkpoint.');
+    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
+
   const activeStageIndex = investigationStages.findIndex(([key]) => key === job?.stage);
   const stageIndex = activeStageIndex < 0 && job ? investigationStages.length : Math.max(0, activeStageIndex);
 
@@ -379,6 +406,12 @@ export function App() {
               })}
             </ol>
             {job && <p className="muted job-summary">Command status: {commandStatus || 'queued'} · provider: {job.runtime_provider}</p>}
+            {job && (
+              <div className="actions">
+                {retryAllowed && <button type="button" className="secondary" onClick={retryInvestigation}>Retry from checkpoint</button>}
+                {cancelAllowed && <button type="button" className="secondary" onClick={cancelInvestigation}>Cancel investigation</button>}
+              </div>
+            )}
           </article>
 
           {results && selectedCase && job ? (
