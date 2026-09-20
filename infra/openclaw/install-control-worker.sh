@@ -67,7 +67,7 @@ validate_provider_env_file() {
         ;;
     esac
   done < "$file"
-  for name in OPENROUTER_API_KEY NVIDIA_API_KEY GROQ_API_KEY; do
+  for name in OPENROUTER_API_KEY NVIDIA_API_KEY; do
     grep -Eq "^${name}=.+" "$file" || {
       echo "Provider secret file is missing required variable $name." >&2
       return 1
