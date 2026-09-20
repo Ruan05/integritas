@@ -38,6 +38,8 @@ jobs:
           node scripts/test-integritas-document-limit-contract.mjs
           node scripts/test-integritas-external-research-provenance.mjs
           node scripts/verify-control-bridge-policy.mjs
+          node --check infra/openclaw/investigation-agent-runner.mjs
+          node --check infra/openclaw/control-worker/src/investigation.mjs
       - run: npm run build
       - run: npm run verify:secrets
       - run: npm run verify:secrets -- dist
