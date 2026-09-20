@@ -7,6 +7,8 @@ import { parsePlannerJsonObject, filterSyntheticExternalResearchLanes } from './
 import { isTrustedSyntheticValidationManifest } from './synthetic-validation.mjs';
 import { reconcilePlanChecks } from './plan-checks.mjs';
 import { buildDeterministicChecks } from './transaction-checks.mjs';
+import { shouldUseLargeInvestigation } from './large-investigation.mjs';
+import { runLargeInvestigationV2 } from './large-investigation-agent-runner.mjs';
 
 const execFileAsync = promisify(execFile);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -529,6 +531,20 @@ await writeSharedAtomic('investigation-plan.json', `${JSON.stringify(plan, null,
 await writeProgress('planning_research', 25, 'research_plan_ready', milestoneSnapshot('research_plan_ready', plan));
 const deterministicChecks = buildDeterministicChecks(plan);
 await writeSharedAtomic('deterministic-checks.json', `${JSON.stringify(deterministicChecks, null, 2)}\n`);
+
+if (shouldUseLargeInvestigation(manifest)) {
+  await runLargeInvestigationV2({
+    jobId,
+    jobDir,
+    manifest,
+    plan,
+    plannerEnvelope,
+    plannerReused,
+    trustedForensics,
+    deterministicChecks,
+  });
+  process.exit(0);
+}
 
 await writeSharedAtomic('research-task.md', researchTask());
 await writeProgress('researching', 30, 'primary_research', milestoneSnapshot('primary_research', plan));
