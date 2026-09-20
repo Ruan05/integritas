@@ -64,8 +64,8 @@ if (!errors.length) {
     [unit, 'EnvironmentFile=-/etc/integritas/provider-secrets.env', 'provider secret environment'],
     [unit, 'OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-gateway.json', 'provider-aware Gateway config path'],
     [gatewayOverlay, '$include: "./openclaw.json"', 'Gateway base-config include'],
-    [gatewayOverlay, 'primary: "nvidia/nemotron-3-ultra-550b-a55b"', 'Gateway NVIDIA primary'],
-    [gatewayOverlay, '"nvidia/nemotron-3-ultra-550b-a55b"', 'Gateway NVIDIA fallback'],
+    [gatewayOverlay, 'primary: "nvidia/nvidia/nemotron-3-ultra-550b-a55b"', 'Gateway canonical NVIDIA primary'],
+    [gatewayOverlay, '"integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"', 'Gateway fixed free Nemotron fallback'],
     [gatewayOverlay, '"integritas-openrouter/openrouter/free"', 'Gateway dynamic free fallback'],
     [installer, 'OPENCLAW_VERSION="2026.9.4"', 'pinned OpenClaw stable version'],
     [installer, 'chmod 0755 "${PREFIX}/bin/openclaw"', 'readable executable OpenClaw CLI'],
@@ -118,6 +118,8 @@ if (!errors.length) {
   if (/\blatest\b/.test(installer)) errors.push('mutable latest release reference is forbidden');
   if (config.includes('/var/run/docker.sock')) errors.push('model config must not expose the Docker socket');
   if (/gsk_[A-Za-z0-9_-]+|sk-or-v1-[A-Za-z0-9_-]+|nvapi-[A-Za-z0-9_-]+/.test(gatewayOverlay)) errors.push('Gateway overlay must not contain provider secret values');
+  if (gatewayOverlay.includes('opencode-go/')) errors.push('Gateway production routing must not depend on unfunded OpenCode Go models');
+  if (gatewayOverlay.includes('primary: "nvidia/nemotron-3-ultra-550b-a55b"')) errors.push('Gateway must not use the stale short NVIDIA model reference');
 }
 
 if (errors.length) {
