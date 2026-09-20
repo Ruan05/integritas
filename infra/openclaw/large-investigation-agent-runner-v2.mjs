@@ -28,7 +28,6 @@ const MAX_AGENT_ENVELOPE_BYTES = 8 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
 const NVIDIA_LIGHTNING = 'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b';
 const NVIDIA_ULTRA = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
-const GROQ_GPT_OSS = 'integritas-groq/openai/gpt-oss-120b';
 const OPENROUTER_ULTRA = 'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free';
 const OPENROUTER_FREE = 'integritas-openrouter/openrouter/free';
 const MAX_OPENROUTER_FREE_USES = 4;
@@ -83,15 +82,14 @@ function toolResult(tool, status, summary) { return { tool, status, summary: Str
 
 function candidates(role, synthetic) {
   const nvidia = !!process.env.NVIDIA_API_KEY;
-  const groq = !!process.env.GROQ_API_KEY;
   const openrouter = !!process.env.OPENROUTER_API_KEY;
   const rows = {
-    shard: [nvidia && NVIDIA_LIGHTNING, nvidia && NVIDIA_ULTRA, groq && GROQ_GPT_OSS],
-    plan: [groq && GROQ_GPT_OSS, nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_LIGHTNING],
-    analysis: [groq && GROQ_GPT_OSS, nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_LIGHTNING],
-    lane: [nvidia && NVIDIA_ULTRA, groq && GROQ_GPT_OSS, nvidia && NVIDIA_LIGHTNING],
-    critic: [groq && GROQ_GPT_OSS, nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_LIGHTNING],
-    report: [nvidia && NVIDIA_LIGHTNING, groq && GROQ_GPT_OSS, nvidia && NVIDIA_ULTRA],
+    shard: [nvidia && NVIDIA_LIGHTNING, nvidia && NVIDIA_ULTRA],
+    plan: [nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_LIGHTNING],
+    analysis: [nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_LIGHTNING],
+    lane: [nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_LIGHTNING],
+    critic: [nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_LIGHTNING],
+    report: [nvidia && NVIDIA_LIGHTNING, nvidia && NVIDIA_ULTRA],
   }[role] ?? [];
   if (synthetic && openrouter) rows.push(OPENROUTER_ULTRA, OPENROUTER_FREE);
   return uniq(rows);
@@ -106,7 +104,7 @@ function agentEnv() {
     OPENCLAW_STATE_DIR: '/var/lib/openclaw',
     PATH: '/opt/openclaw/bin:/usr/bin:/bin',
     LANG: 'C',
-    ...Object.fromEntries(['NVIDIA_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY']
+    ...Object.fromEntries(['NVIDIA_API_KEY', 'OPENROUTER_API_KEY']
       .filter((name) => process.env[name]).map((name) => [name, process.env[name]])),
   };
 }
