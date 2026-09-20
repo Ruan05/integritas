@@ -32,6 +32,7 @@ FILES=(
   /etc/systemd/system/integritas-control-worker.service
   /etc/systemd/system/openclaw-gateway.service
   /etc/systemd/system/integritas-openclaw-investigation@.service
+  /etc/systemd/system/integritas-release-deploy@.service
   /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
   /opt/integritas/deployed-release
   /home/opc/.integritas-provider-secrets.env
