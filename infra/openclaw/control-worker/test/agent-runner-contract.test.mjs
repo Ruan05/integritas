@@ -30,6 +30,10 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.match(source, /plan\.research_lanes\.length < 1 && !allowZeroResearchLanes/, 'real investigations must still require at least one research lane');
   assert.match(source, /filterSyntheticExternalResearchLanes/, 'trusted synthetic plans must remove external research lanes');
   assert.match(source, /synthetic validation research must not perform external research/, 'synthetic external tool use must fail closed');
+  const retainedPlannerRead = source.indexOf("readFile(path.join(jobDir, 'planner-agent-exec.json'), 'utf8')");
+  const plannerRun = source.indexOf("runAgent('planner-task.md', route.planner)");
+  assert.ok(retainedPlannerRead >= 0 && plannerRun > retainedPlannerRead, 'runner must try retained planner output before calling the planner model');
+  assert.match(source, /integritas_planner_recovery_v1/, 'planner reuse must be recorded in execution provenance');
   assert.match(source, /plannerTask/);
   assert.match(source, /researchTask/);
   assert.match(source, /investigation-plan\.json/);
