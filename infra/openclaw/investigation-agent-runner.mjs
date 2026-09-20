@@ -3,6 +3,17 @@ import { chmod, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { parseAgentBundle, parseSingleJsonObject } from './agent-result.mjs';
+import { validateInvestigationBundle } from './control-worker/src/bundle.mjs';
+import {
+  buildScalePlan,
+  buildLaneGroups,
+  mapLimit,
+  mergeCanonicalBundles,
+  validateEvidenceDelta,
+  applyEvidenceDelta,
+  reportSectionsForDepth,
+  summarizeReport,
+} from './scale-orchestration.mjs';
 import { parsePlannerJsonObject, filterSyntheticExternalResearchLanes } from './planner-output.mjs';
 import { isTrustedSyntheticValidationManifest } from './synthetic-validation.mjs';
 import { reconcilePlanChecks } from './plan-checks.mjs';
@@ -14,31 +25,35 @@ const MAX_AGENT_ENVELOPE_BYTES = 5 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
 
 const NVIDIA_PRIMARY = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
-const FREE_FALLBACKS = [
-  'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
-  'integritas-openrouter/openrouter/free',
-];
+const OPENROUTER_NEMOTRON = 'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free';
+const OPENROUTER_FREE = 'integritas-openrouter/openrouter/free';
+const OPENROUTER_MODELS = new Set([OPENROUTER_NEMOTRON, OPENROUTER_FREE]);
+const MAX_OPENROUTER_ATTEMPTS_PER_JOB = 6;
+let openRouterAttempts = 0;
+
+function candidates(timeoutSeconds) {
+  return {
+    timeoutSeconds,
+    models: [NVIDIA_PRIMARY, OPENROUTER_NEMOTRON, OPENROUTER_FREE],
+  };
+}
 
 const MODEL_ROUTES = Object.freeze({
   fast: {
-    planner: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 240 },
-    research: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 600 },
+    planner: candidates(240), shard: candidates(300), consolidation: candidates(240),
+    lane: candidates(360), critic: candidates(240), repair: candidates(240), report: candidates(240),
   },
   standard: {
-    planner: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 300 },
-    research: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 900 },
+    planner: candidates(300), shard: candidates(420), consolidation: candidates(300),
+    lane: candidates(480), critic: candidates(300), repair: candidates(300), report: candidates(300),
   },
   deep: {
-    planner: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 360 },
-    research: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 1200 },
-    critic: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 420 },
-    synthesis: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 600 },
+    planner: candidates(360), shard: candidates(600), consolidation: candidates(420),
+    lane: candidates(720), critic: candidates(360), repair: candidates(360), report: candidates(360),
   },
   maximum: {
-    planner: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 420 },
-    research: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 2400 },
-    critic: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 480 },
-    synthesis: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 720 },
+    planner: candidates(420), shard: candidates(720), consolidation: candidates(480),
+    lane: candidates(900), critic: candidates(420), repair: candidates(420), report: candidates(420),
   },
 });
 
@@ -155,29 +170,55 @@ function milestoneSnapshot(phase, plan = null, bundle = null) {
   ];
 }
 
-function buildArgs(messageFile, phaseRoute) {
-  const args = [
+function buildArgs(messageFile, model, timeoutSeconds) {
+  return [
     'agent', 'exec',
     '--config', '/etc/openclaw/integritas-investigation.json',
     '--cwd', jobDir,
     '--message-file', path.join(jobDir, messageFile),
     '--json',
     '--code-mode', 'direct',
-    '--model', phaseRoute.model,
+    '--model', model,
+    '--timeout', String(timeoutSeconds),
   ];
-  for (const fallback of phaseRoute.fallbacks ?? []) args.push('--fallback', fallback);
-  args.push('--timeout', String(phaseRoute.timeoutSeconds));
-  return args;
 }
 
-async function runAgent(messageFile, phaseRoute) {
-  const result = await execFileAsync('/opt/openclaw/bin/openclaw', buildArgs(messageFile, phaseRoute), {
+async function runAgent(messageFile, model, timeoutSeconds) {
+  const result = await execFileAsync('/opt/openclaw/bin/openclaw', buildArgs(messageFile, model, timeoutSeconds), {
     cwd: jobDir,
     env,
-    timeout: (phaseRoute.timeoutSeconds + 60) * 1000,
+    timeout: (timeoutSeconds + 60) * 1000,
     maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
   });
   return result.stdout;
+}
+
+function isTruncatedFinal(envelope) {
+  const final = String(envelope?.final ?? '').toLowerCase();
+  return final.includes('reply truncated at the model') || final.includes('output token limit');
+}
+
+async function runValidatedAgent(messageFile, phaseRoute, label, validator) {
+  const errors = [];
+  for (const model of phaseRoute.models) {
+    if (OPENROUTER_MODELS.has(model)) {
+      if (openRouterAttempts >= MAX_OPENROUTER_ATTEMPTS_PER_JOB) {
+        errors.push(`${model}: skipped because the per-job OpenRouter fallback budget is exhausted`);
+        continue;
+      }
+      openRouterAttempts += 1;
+    }
+    try {
+      const stdout = await runAgent(messageFile, model, phaseRoute.timeoutSeconds);
+      const envelope = parseEnvelope(stdout, label);
+      if (isTruncatedFinal(envelope)) throw new Error(`${label} response was truncated by the provider`);
+      const value = await validator(stdout, envelope, model);
+      return { stdout, envelope, value, model };
+    } catch (error) {
+      errors.push(`${model}: ${String(error?.message ?? error).slice(0, 500)}`);
+    }
+  }
+  throw new Error(`${label} failed all model candidates: ${errors.join(' | ').slice(0, 3000)}`);
 }
 
 function parseEnvelope(stdout, label) {
