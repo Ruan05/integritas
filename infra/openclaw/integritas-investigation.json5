@@ -49,7 +49,7 @@
         "opencode-go/glm-5.3-flash": {},
         "opencode-go/kimi-k3": {},
         "opencode-go/glm-5.2": {},
-        "nvidia/nemotron-3-ultra-550b-a55b": {
+        "nvidia/nvidia/nemotron-3-ultra-550b-a55b": {
           params: {
             chat_template_kwargs: {
               enable_thinking: false,

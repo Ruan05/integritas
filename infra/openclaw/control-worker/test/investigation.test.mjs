@@ -86,10 +86,20 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     const report = '# Synthetic DD report\n\nDraft evidence summary.';
     const bundle = {
       schema_version: 1, case_id: CASE_ID, case_job_id: JOB_ID, case_revision: 7, depth: 'deep',
-      generated_at: '2026-09-17T12:00:00Z', entities: [], relationships: [], sources: [], findings: [], checks: [],
-      contradictions: [], unresolved_checks: [], limitations: [],
+      generated_at: '2026-09-17T12:00:00Z', entities: [], relationships: [], sources: [], findings: [],
+      checks: [{
+        check_key: 'fresh-registry-check', check_type: 'registry_verification', description: 'Verify registry directly.',
+        priority: 'high', required_source: 'Official registry', status: 'blocked', outcome: 'Unavailable.',
+      }],
+      contradictions: [],
+      unresolved_checks: [{
+        unresolved_key: 'fresh-registry-unresolved', description: 'Registry verification remains outstanding.',
+        reason: 'Registry unavailable.', attempted_methods: ['Public lookup'], blocker: 'Direct access unavailable.',
+        next_manual_action: 'Verify with the official registry.',
+      }],
+      limitations: ['Registry verification remains outstanding.'],
       report: { summary: 'Synthetic summary', markdown: report, status: 'draft' },
-      execution: { started_at: '2026-09-17T11:50:00Z', completed_at: '2026-09-17T12:00:00Z', stages: [], tool_results: [], warnings: [], terminal_outcome: 'incomplete' },
+      execution: { started_at: '2026-09-17T11:50:00Z', completed_at: '2026-09-17T12:00:00Z', stages: [], tool_results: [], warnings: [], terminal_outcome: 'completed' },
     };
     await writeFile(path.join(jobDir, 'bundle.json'), JSON.stringify(bundle));
     await writeFile(path.join(jobDir, 'report.md'), report);
