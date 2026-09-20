@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { chmod, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { filterSyntheticExternalResearchLanes } from './planner-output.mjs';
@@ -326,6 +326,7 @@ function mergeToolSummary(envelopes) {
 
 export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trustedForensics }) {
   const synthetic = isTrustedSyntheticValidationManifest(manifest);
+  await mkdir(jobDir, { recursive: true, mode: 0o750 });
   const startedAt = new Date().toISOString();
   const phases = [];
   const executionTools = [
