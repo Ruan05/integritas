@@ -27,12 +27,14 @@ test('accepts one bounded fenced planner JSON object wrapped in prose', () => {
 
 test('rejects ambiguous or structurally unsafe fenced planner wrappers', () => {
   const value = JSON.stringify({ ok: true });
+  const fence = String.fromCharCode(96, 96, 96);
   assert.throws(
-    () => parsePlannerJsonObject(````json\n${value}\n```\n```json\n${value}\n````),
+    () => parsePlannerJsonObject(fence + 'json\n' + value + '\n' + fence + '\n'
+      + fence + 'json\n' + value + '\n' + fence),
     /must contain one valid JSON object/,
   );
   assert.throws(
-    () => parsePlannerJsonObject(`Unsafe {brace} wrapper\n```json\n${value}\n````),
+    () => parsePlannerJsonObject('Unsafe {brace} wrapper\n' + fence + 'json\n' + value + '\n' + fence),
     /must contain one valid JSON object/,
   );
 });
