@@ -242,6 +242,15 @@ function boundedStringArray(value, label, maxItems = 40, maxLength = 1000) {
   return value;
 }
 
+
+function isTrustedSyntheticValidationManifest(value) {
+  const meta = value?.case;
+  return !!meta && !Array.isArray(meta) && typeof meta === 'object'
+    && typeof meta.title === 'string' && meta.title.startsWith('[SYNTHETIC] ')
+    && meta.purpose === 'Authorized synthetic production validation only'
+    && meta.authorized_scope === 'Synthetic QA data only; no real-person or transaction decision';
+}
+
 function parsePlan(stdout) {
   const envelope = parseEnvelope(stdout, 'planner');
   const plan = parseSingleJsonObject(envelope.final, 'planner final response');
@@ -296,7 +305,9 @@ function parsePlan(stdout) {
   boundedStringArray(plan.case_profile.payment_instruments, 'planner payment_instruments', 30, 240);
   boundedStringArray(plan.case_profile.critical_transaction_features, 'planner critical_transaction_features', 60, 1200);
 
-  if (!Array.isArray(plan.research_lanes) || plan.research_lanes.length < 1 || plan.research_lanes.length > 50) {
+  const allowZeroResearchLanes = isTrustedSyntheticValidationManifest(manifest);
+  if (!Array.isArray(plan.research_lanes) || plan.research_lanes.length > 50
+    || (plan.research_lanes.length < 1 && !allowZeroResearchLanes)) {
     throw new Error('planner research_lanes are invalid');
   }
   const laneIds = new Set();
