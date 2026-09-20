@@ -105,6 +105,7 @@ assert.match(investigationConfig, /workspaceAccess:\s*["']ro["']/, 'investigatio
 assert.match(investigationConfig, /profile:\s*["']minimal["']/, 'investigation agent must start from the minimal tool profile');
 assert.ok(!investigationConfig.includes('integritas-groq'), 'Groq must not be configured in the production investigation profile');
 assert.ok(!investigationConfig.includes('GROQ_API_KEY'), 'Groq secret must not be referenced by the production investigation profile');
+assert.ok(!investigationConfig.includes('opencode-go/'), 'production investigation profile must not expose unfunded OpenCode Go models');
 assert.ok(!installer.match(/for name in[^;]*GROQ_API_KEY/), 'Groq must not be a required production provider secret');
 assert.match(investigationConfig, /"integritas-openrouter"/, 'investigation config must define a fixed OpenRouter provider');
 assert.match(investigationConfig, /apiKey:\s*\{\s*source:\s*["']env["'],\s*provider:\s*["']default["'],\s*id:\s*["']OPENROUTER_API_KEY["']\s*\}/, 'OpenRouter key must be an environment SecretRef');
