@@ -17,10 +17,10 @@ test('OpenClaw runner materializes only validated structured final output', asyn
 test('OpenClaw runner uses evidence-first planning, bounded research and an independent critic for deep work', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
   assert.match(source, /const NVIDIA_PRIMARY = 'nvidia\/nvidia\/nemotron-3-ultra-550b-a55b'/);
-  assert.match(source, /planner: \{ model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS/);
-  assert.match(source, /research: \{ model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS/);
-  assert.match(source, /critic: \{ model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS/);
-  assert.match(source, /synthesis: \{ model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS/);
+  assert.match(source, /const NVIDIA_LIGHTNING = 'nvidia\/nvidia\/nemotron-3\.5-lightning-30b-a3b'/);
+  assert.match(source, /SYNTHETIC_MODEL_ROUTES = routes\(NVIDIA_PRIMARY, \[NVIDIA_LIGHTNING, \.\.\.FREE_FALLBACKS\]\)/);
+  assert.match(source, /REAL_MODEL_ROUTES = routes\(NVIDIA_PRIMARY, \[NVIDIA_LIGHTNING\]\)/);
+  assert.match(source, /real investigations must use only direct NVIDIA production routes/);
   assert.doesNotMatch(source, /model: 'opencode-go\//);
   assert.match(source, /integritas-openrouter\/nvidia\/nemotron-3-ultra-550b-a55b:free/);
   assert.match(source, /trustedForensics/);
@@ -50,6 +50,8 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.match(source, /integritas_research_recovery_v1/, 'research reuse must be recorded in provenance');
   assert.match(source, /integritas_critic_recovery_v1/, 'critic reuse must be recorded in provenance');
   assert.match(source, /integritas_synthesis_recovery_v1/, 'synthesis reuse must be recorded in provenance');
+  assert.match(source, /shouldUseLargeInvestigation\(manifest\)/, 'maximum/large investigations must take the sharded v2 path');
+  assert.match(source, /runLargeInvestigationV2/, 'large investigations must use the bounded v2 execution engine');
   assert.match(source, /plannerTask/);
   assert.match(source, /researchTask/);
   assert.match(source, /investigation-plan\.json/);
@@ -73,20 +75,51 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.doesNotMatch(source, /opencode-go\/deepseek-v4-pro/);
 });
 
+
+test('large investigations shard before legacy planning and assemble the canonical bundle deterministically', async () => {
+  const parent = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
+  const large = await readFile(new URL('../../large-investigation-agent-runner-v2.mjs', import.meta.url), 'utf8');
+  const guard = parent.indexOf('if (shouldUseLargeInvestigation(manifest))');
+  const legacyPlanner = parent.indexOf("await writeSharedAtomic('planner-task.md', plannerTask())");
+  assert.ok(guard >= 0 && legacyPlanner > guard, 'large-case dispatch must happen before the legacy all-document planner');
+  assert.match(parent, /large-investigation-agent-runner-v2\.mjs/);
+  assert.match(large, /buildDocumentShards\(manifest, 4\)/, 'document shards must remain bounded to four documents');
+  assert.match(large, /mapLimit\(shards, 2/, 'document shard concurrency must remain rate-safe');
+  assert.match(large, /mapLimit\(plan\.research_lanes, 2/, 'research lane concurrency must remain rate-safe');
+  assert.match(large, /parseLargePlanFinal/, 'large plan must use a bounded contract');
+  assert.match(large, /parseDocumentShardFinal/, 'document shards must validate exact coverage');
+  assert.match(large, /parseLaneFinal/, 'research lanes must use a bounded schema');
+  assert.match(large, /validateInvestigationBundle\(finalBundle, manifest, reportMarkdown\)/, 'deterministic assembly must pass the canonical bundle validator');
+  assert.match(large, /provider: 'integritas', model: 'deterministic-large-assembly-v2'/, 'final canonical bundle must be assembled deterministically rather than by a model');
+  assert.match(large, /failed every validated model route/, 'schema-invalid model output must trigger application-level model failover');
+  assert.match(large, /readFile\(path\.join\(jobDir, execName\)/, 'validated phase artifacts must be reused on retry');
+  assert.match(large, /MAX_OPENROUTER_FREE_USES = 4/, 'OpenRouter free fallback must have a per-investigation budget');
+  assert.match(large, /external lane sources require observed research-tool use in the same phase/, 'external source provenance must be phase-local');
+  assert.match(large, /# MASTER SUMMARY — READ THIS FIRST/);
+  assert.match(large, /## DIRECT NEXT STEPS — WHAT TO DO NOW/);
+  assert.match(large, /## Master Issue Dashboard/);
+  assert.match(large, /## Source Ledger/);
+  assert.doesNotMatch(large, /synthesis-task/, 'large-case final assembly must not depend on a giant synthesis completion');
+});
+
 test('investigation profile uses only required provider SecretRefs and keeps the evidence workspace read-only', async () => {
   const config = await readFile(new URL('../../integritas-investigation.json5', import.meta.url), 'utf8');
   assert.match(config, /workspaceAccess: "ro"/);
   assert.match(config, /profile: "minimal"/);
-  assert.doesNotMatch(config, /integritas-groq/);
+  assert.doesNotMatch(config, /"integritas-groq"/);
   assert.doesNotMatch(config, /GROQ_API_KEY/);
   assert.match(config, /"integritas-openrouter"/);
   assert.match(config, /apiKey: \{ source: "env", provider: "default", id: "OPENROUTER_API_KEY" \}/);
   assert.match(config, /id: "nvidia\/nemotron-3-ultra-550b-a55b:free"/);
+  assert.match(config, /id: "nvidia\/nemotron-3-ultra-550b-a55b:free"[\s\S]*maxTokens: 65536/, 'Nemotron free fallback must expose its verified completion budget');
   assert.match(config, /id: "openrouter\/free"/);
+  assert.match(config, /"nvidia\/nvidia\/nemotron-3-ultra-550b-a55b"[\s\S]*maxTokens: 32768/, 'direct Ultra must have explicit 32K output headroom');
+  assert.match(config, /"nvidia\/nvidia\/nemotron-3\.5-lightning-30b-a3b"[\s\S]*maxTokens: 16384/, 'Lightning must be configured as the bounded high-throughput worker');
   for (const model of [
     'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
     'integritas-openrouter/openrouter/free',
     'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
+    'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b',
   ]) {
     assert.ok(config.includes(`"${model}"`), `missing routed model allowlist entry: ${model}`);
   }

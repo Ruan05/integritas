@@ -7,6 +7,8 @@ import { parsePlannerJsonObject, filterSyntheticExternalResearchLanes } from './
 import { isTrustedSyntheticValidationManifest } from './synthetic-validation.mjs';
 import { reconcilePlanChecks } from './plan-checks.mjs';
 import { buildDeterministicChecks } from './transaction-checks.mjs';
+import { shouldUseLargeInvestigation } from './large-investigation.mjs';
+import { runLargeInvestigationV2 } from './large-investigation-agent-runner-v2.mjs';
 
 const execFileAsync = promisify(execFile);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -14,33 +16,39 @@ const MAX_AGENT_ENVELOPE_BYTES = 5 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
 
 const NVIDIA_PRIMARY = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
+const NVIDIA_LIGHTNING = 'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b';
 const FREE_FALLBACKS = [
   'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
   'integritas-openrouter/openrouter/free',
 ];
 
-const MODEL_ROUTES = Object.freeze({
-  fast: {
-    planner: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 240 },
-    research: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 600 },
-  },
-  standard: {
-    planner: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 300 },
-    research: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 900 },
-  },
-  deep: {
-    planner: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 360 },
-    research: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 1200 },
-    critic: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 420 },
-    synthesis: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 600 },
-  },
-  maximum: {
-    planner: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 420 },
-    research: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 2400 },
-    critic: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 480 },
-    synthesis: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 720 },
-  },
-});
+function routes(primary, fallbacks) {
+  return Object.freeze({
+    fast: {
+      planner: { model: primary, fallbacks, timeoutSeconds: 240 },
+      research: { model: primary, fallbacks, timeoutSeconds: 600 },
+    },
+    standard: {
+      planner: { model: primary, fallbacks, timeoutSeconds: 300 },
+      research: { model: primary, fallbacks, timeoutSeconds: 900 },
+    },
+    deep: {
+      planner: { model: primary, fallbacks, timeoutSeconds: 360 },
+      research: { model: primary, fallbacks, timeoutSeconds: 1200 },
+      critic: { model: primary, fallbacks, timeoutSeconds: 420 },
+      synthesis: { model: primary, fallbacks, timeoutSeconds: 600 },
+    },
+    maximum: {
+      planner: { model: primary, fallbacks, timeoutSeconds: 420 },
+      research: { model: primary, fallbacks, timeoutSeconds: 2400 },
+      critic: { model: primary, fallbacks, timeoutSeconds: 480 },
+      synthesis: { model: primary, fallbacks, timeoutSeconds: 720 },
+    },
+  });
+}
+
+const SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, [NVIDIA_LIGHTNING, ...FREE_FALLBACKS]);
+const REAL_MODEL_ROUTES = routes(NVIDIA_PRIMARY, [NVIDIA_LIGHTNING]);
 
 const jobId = process.argv[2] ?? '';
 if (!UUID.test(jobId)) throw new Error('invalid investigation job id');
@@ -53,8 +61,13 @@ if (trustedForensics?.schema_version !== 1 || trustedForensics?.tool !== 'integr
   || !Array.isArray(trustedForensics?.reports)) {
   throw new Error('trusted forensic pre-pass is unavailable or invalid');
 }
-const route = MODEL_ROUTES[manifest.depth];
+const trustedSynthetic = isTrustedSyntheticValidationManifest(manifest);
+const route = (trustedSynthetic ? SYNTHETIC_MODEL_ROUTES : REAL_MODEL_ROUTES)[manifest.depth];
 if (!route) throw new Error('invalid investigation depth');
+if (!trustedSynthetic && (route.planner.model !== NVIDIA_PRIMARY
+  || route.planner.fallbacks.some((model) => !model.startsWith('nvidia/nvidia/')))) {
+  throw new Error('real investigations must use only direct NVIDIA production routes');
+}
 
 const env = {
   HOME: '/var/lib/openclaw',
@@ -508,6 +521,16 @@ Produce the final canonical investigation-bundle-v1 JSON. Resolve every critic i
 
 Your final response must be exactly one raw JSON object conforming to /agent/contracts/investigation-bundle-v1.schema.json with no Markdown fence and no prose before or after it.
 `;
+}
+
+if (shouldUseLargeInvestigation(manifest)) {
+  await runLargeInvestigationV2({
+    jobId,
+    jobDir,
+    manifest,
+    trustedForensics,
+  });
+  process.exit(0);
 }
 
 await writeSharedAtomic('planner-task.md', plannerTask());
