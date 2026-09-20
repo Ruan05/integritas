@@ -7,6 +7,8 @@ import {
   mergeCanonicalBundles,
   validateRepairPatch,
   applyRepairPatch,
+  validateEvidenceDelta,
+  applyEvidenceDelta,
 } from '../../scale-orchestration.mjs';
 
 const CASE_ID = '73bef14a-2f8a-44a4-ab73-f09eb1f0efd6';
@@ -192,4 +194,60 @@ test('repair patch may downgrade or clarify but cannot invent verification', () 
   assert.equal(repaired.checks[0].status, 'blocked');
   assert.equal(repaired.unresolved_checks.length, 1);
   assert.equal(repaired.execution.terminal_outcome, 'incomplete');
+});
+
+
+test('evidence delta adds bounded cross-shard artifacts and still blocks evidence-free verification upgrades', () => {
+  const base = bundle();
+  const delta = validateEvidenceDelta({
+    source_additions: [{
+      source_key: 'ext.registry',
+      source_type: 'official',
+      title: 'Official registry',
+      url: 'https://registry.example.test/company',
+      document_id: null,
+      page_reference: null,
+      excerpt: 'Registry record unavailable in synthetic fixture.',
+      reliability_note: 'Synthetic external-source placeholder.',
+      evidence_origin: 'external_research',
+      retrieved_at: '2026-09-20T12:02:00Z',
+    }],
+    finding_additions: [{
+      finding_key: 'cross.conflict',
+      entity_key: 'target-company',
+      finding_type: 'cross_shard_conflict',
+      claim: 'Cross-shard review identified a material identifier conflict.',
+      evidence_status: 'conflicting',
+      materiality: 'critical',
+      reliability: 'high',
+      evidence_excerpt: 'Conflicting registration identifiers appear across submitted evidence.',
+      source_keys: ['src'],
+    }],
+    contradiction_additions: [{
+      contradiction_key: 'cross.identifier',
+      finding_keys: ['fnd', 'cross.conflict'],
+      description: 'Identity claims conflict across shards.',
+    }],
+    unresolved_additions: [{
+      unresolved_key: 'manual.cross',
+      description: 'Cross-shard identity conflict remains unresolved.',
+      reason: 'Authoritative confirmation unavailable.',
+      attempted_methods: ['Cross-shard evidence comparison'],
+      blocker: 'No authoritative source.',
+      next_manual_action: 'Obtain official registry extract.',
+    }],
+    warnings: ['Cross-shard conflict requires manual resolution.'],
+  }, base);
+  const result = applyEvidenceDelta(base, delta);
+  assert.equal(result.sources.length, 2);
+  assert.equal(result.findings.length, 2);
+  assert.equal(result.contradictions.length, 1);
+  assert.equal(result.unresolved_checks.length, 1);
+
+  assert.throws(
+    () => validateEvidenceDelta({
+      entity_updates: [{ entity_key: 'target-company', match_status: 'verified' }],
+    }, base),
+    /cannot upgrade entity verification/,
+  );
 });
