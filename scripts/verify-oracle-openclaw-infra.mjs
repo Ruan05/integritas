@@ -77,8 +77,10 @@ if (!errors.length) {
     [releaseDeploy, 'deploy-integritas-controlled.sh', 'bounded deployment wrapper presence gate'],
     [releaseUnit, 'ExecStartPre=/usr/bin/sleep 8', 'release command acknowledgement delay'],
     [releaseUnit, 'ExecStart=/usr/bin/bash /opt/integritas/current/infra/oracle/deploy-integritas-controlled.sh %i', 'fixed bounded release wrapper'],
-    [controlledDeploy, 'SOURCE_REPO=/home/opc/integritas-e2e-investigation', 'fixed approved release repository'],
+    [controlledDeploy, 'SOURCE_URL=https://github.com/Ruan05/integritas.git', 'fixed approved release repository'],
     [controlledDeploy, 'APPROVED_BRANCH=integritas-command-center-foundation', 'fixed approved release branch'],
+    [controlledDeploy, 'git init --quiet', 'isolated root-owned release checkout'],
+    [controlledDeploy, '--depth=512', 'bounded approved branch history fetch'],
     [controlledDeploy, 'REMOTE_HEAD=', 'approved branch-head resolution'],
     [controlledDeploy, 'merge-base --is-ancestor', 'automated forward-only release guard'],
     [controlledDeploy, 'deploy-integritas-release.sh', 'existing rollback-tested release executor'],
@@ -112,6 +114,7 @@ if (!errors.length) {
   if (/\b(curl|wget|eval)\b/.test(controlledDeploy)) errors.push('controlled deploy must not download or evaluate executable content');
   if (!/\[\[ "\$\{SHA\}" == "\$\{REMOTE_HEAD\}" \]\]/.test(controlledDeploy)) errors.push('controlled deploy must require exact approved branch head');
   if (!/\^\[0-9a-f\]\{40\}\$/.test(controlledDeploy)) errors.push('controlled deploy must validate an exact lowercase Git SHA');
+  if (controlledDeploy.includes('/home/opc') || controlledDeploy.includes('runuser')) errors.push('controlled deploy must not trust an operator-owned checkout');
   if (/\blatest\b/.test(installer)) errors.push('mutable latest release reference is forbidden');
   if (config.includes('/var/run/docker.sock')) errors.push('model config must not expose the Docker socket');
   if (/gsk_[A-Za-z0-9_-]+|sk-or-v1-[A-Za-z0-9_-]+|nvapi-[A-Za-z0-9_-]+/.test(gatewayOverlay)) errors.push('Gateway overlay must not contain provider secret values');
