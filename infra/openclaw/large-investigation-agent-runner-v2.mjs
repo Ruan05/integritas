@@ -111,9 +111,21 @@ function agentEnv() {
 async function writeAtomic(jobDir, name, content) {
   const target = path.join(jobDir, name);
   const temporary = `${target}.tmp-${process.pid}`;
-  await writeFile(temporary, content, { mode: 0o640 });
-  await chmod(temporary, 0o640);
-  await rename(temporary, target);
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await mkdir(jobDir, { recursive: true, mode: 0o770 });
+      await writeFile(temporary, content, { mode: 0o640 });
+      await chmod(temporary, 0o640);
+      await rename(temporary, target);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (error?.code !== 'ENOENT' || attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+  throw lastError;
 }
 async function progress(jobDir, stage, pct, phase, detail = '') {
   await writeAtomic(jobDir, 'agent-progress.json', `${JSON.stringify({
