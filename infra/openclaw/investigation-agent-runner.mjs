@@ -3,6 +3,7 @@ import { chmod, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { parseAgentBundle, parseSingleJsonObject } from './agent-result.mjs';
+import { isTrustedSyntheticValidationManifest } from './synthetic-validation.mjs';
 import { reconcilePlanChecks } from './plan-checks.mjs';
 import { buildDeterministicChecks } from './transaction-checks.mjs';
 
@@ -242,6 +243,7 @@ function boundedStringArray(value, label, maxItems = 40, maxLength = 1000) {
   return value;
 }
 
+
 function parsePlan(stdout) {
   const envelope = parseEnvelope(stdout, 'planner');
   const plan = parseSingleJsonObject(envelope.final, 'planner final response');
@@ -296,7 +298,9 @@ function parsePlan(stdout) {
   boundedStringArray(plan.case_profile.payment_instruments, 'planner payment_instruments', 30, 240);
   boundedStringArray(plan.case_profile.critical_transaction_features, 'planner critical_transaction_features', 60, 1200);
 
-  if (!Array.isArray(plan.research_lanes) || plan.research_lanes.length < 1 || plan.research_lanes.length > 50) {
+  const allowZeroResearchLanes = isTrustedSyntheticValidationManifest(manifest);
+  if (!Array.isArray(plan.research_lanes) || plan.research_lanes.length > 50
+    || (plan.research_lanes.length < 1 && !allowZeroResearchLanes)) {
     throw new Error('planner research_lanes are invalid');
   }
   const laneIds = new Set();
