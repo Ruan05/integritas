@@ -4,6 +4,7 @@ import { chmod, chown, copyFile, mkdir, readFile, rm, stat, writeFile } from 'no
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { validateInvestigationBundle } from './bundle.mjs';
+import { parseAgentBundle } from '../../agent-result.mjs';
 
 const execFileAsync = promisify(execFile);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -568,6 +569,31 @@ export async function executeInvestigation(command, {
           break;
         } catch {
           // Try the next safe retained representation before launching a new agent run.
+        }
+      }
+      if (!reusable && (manifest.depth === 'fast' || manifest.depth === 'standard')) {
+        try {
+          const provenance = await readBounded(path.join(jobDir, 'research-agent-exec.json'));
+          const parsed = parseAgentBundle(provenance.toString('utf8'), safeManifest);
+          const existingJson = normalizeTerminalOutcome(parsed.bundle);
+          const existingReport = Buffer.from(parsed.reportMarkdown, 'utf8');
+          validateInvestigationBundle(existingJson, safeManifest, existingReport.toString('utf8'));
+          const normalizedBundle = Buffer.from(`${JSON.stringify(existingJson, null, 2)}\n`);
+          if (normalizedBundle.includes('/storage/v1/object/sign/') || existingReport.includes('/storage/v1/object/sign/')) {
+            throw new Error('signed URL leaked into retained output');
+          }
+          await writeFile(bundlePath, normalizedBundle, { mode: SHARED_FILE_MODE });
+          await chown(bundlePath, -1, process.getgid());
+          await chmod(bundlePath, SHARED_FILE_MODE);
+          await writeFile(reportPath, existingReport, { mode: SHARED_FILE_MODE });
+          await chown(reportPath, -1, process.getgid());
+          await chmod(reportPath, SHARED_FILE_MODE);
+          await writeFile(agentExecPath, provenance, { mode: SHARED_FILE_MODE });
+          await chown(agentExecPath, -1, process.getgid());
+          await chmod(agentExecPath, SHARED_FILE_MODE);
+          reusable = true;
+        } catch {
+          // Retained raw agent output must pass the same strict parser and manifest validator.
         }
       }
       if (!reusable) {
