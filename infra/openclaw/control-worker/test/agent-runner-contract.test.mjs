@@ -50,6 +50,8 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.match(source, /integritas_research_recovery_v1/, 'research reuse must be recorded in provenance');
   assert.match(source, /integritas_critic_recovery_v1/, 'critic reuse must be recorded in provenance');
   assert.match(source, /integritas_synthesis_recovery_v1/, 'synthesis reuse must be recorded in provenance');
+  assert.match(source, /shouldUseLargeInvestigation\(manifest\)/, 'maximum/large investigations must take the sharded v2 path');
+  assert.match(source, /runLargeInvestigationV2/, 'large investigations must use the bounded v2 execution engine');
   assert.match(source, /plannerTask/);
   assert.match(source, /researchTask/);
   assert.match(source, /investigation-plan\.json/);
@@ -82,6 +84,7 @@ test('investigation profile uses only required provider SecretRefs and keeps the
   assert.match(config, /"integritas-openrouter"/);
   assert.match(config, /apiKey: \{ source: "env", provider: "default", id: "OPENROUTER_API_KEY" \}/);
   assert.match(config, /id: "nvidia\/nemotron-3-ultra-550b-a55b:free"/);
+  assert.match(config, /id: "nvidia\/nemotron-3-ultra-550b-a55b:free"[\s\S]*maxTokens: 65536/, 'Nemotron free fallback must expose its verified completion budget');
   assert.match(config, /id: "openrouter\/free"/);
   for (const model of [
     'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
