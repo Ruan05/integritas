@@ -494,9 +494,19 @@ Your final response must be exactly one raw JSON object conforming to /agent/con
 
 await writeSharedAtomic('planner-task.md', plannerTask());
 await writeProgress('mapping_entities', 20, 'adaptive_planning', milestoneSnapshot('adaptive_planning'));
-const plannerStdout = await runAgent('planner-task.md', route.planner);
-await writeSharedAtomic('planner-agent-exec.json', plannerStdout);
-const { envelope: plannerEnvelope, plan } = parsePlan(plannerStdout);
+let plannerStdout;
+let plannerEnvelope;
+let plan;
+let plannerReused = false;
+try {
+  plannerStdout = await readFile(path.join(jobDir, 'planner-agent-exec.json'), 'utf8');
+  ({ envelope: plannerEnvelope, plan } = parsePlan(plannerStdout));
+  plannerReused = true;
+} catch {
+  plannerStdout = await runAgent('planner-task.md', route.planner);
+  await writeSharedAtomic('planner-agent-exec.json', plannerStdout);
+  ({ envelope: plannerEnvelope, plan } = parsePlan(plannerStdout));
+}
 await writeSharedAtomic('investigation-plan.json', `${JSON.stringify(plan, null, 2)}\n`);
 await writeProgress('planning_research', 25, 'research_plan_ready', milestoneSnapshot('research_plan_ready', plan));
 const deterministicChecks = buildDeterministicChecks(plan);
@@ -572,6 +582,13 @@ if (!existingTools.some((row) => row?.tool === 'integritas_adaptive_planner_v1')
     tool: 'integritas_adaptive_planner_v1',
     status: 'completed',
     summary: `Evidence-first plan classified ${plan.document_profiles.length} document(s) and ${plan.research_lanes.length} research lane(s).`,
+  });
+}
+if (plannerReused && !existingTools.some((row) => row?.tool === 'integritas_planner_recovery_v1')) {
+  existingTools.unshift({
+    tool: 'integritas_planner_recovery_v1',
+    status: 'completed',
+    summary: 'Validated and reused retained planner output for this same case job and manifest.',
   });
 }
 if (!existingTools.some((row) => row?.tool === 'integritas_transaction_checks_v1')) {
