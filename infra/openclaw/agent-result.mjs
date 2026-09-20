@@ -41,6 +41,14 @@ export function parseSingleJsonObject(text, label = 'agent final response') {
   throw new Error(`${label} must contain one valid JSON object`);
 }
 
+
+function repairSingleMissingFindingKey(text) {
+  const pattern = /(\{\s*)"([A-Za-z0-9][A-Za-z0-9._:-]{0,127})"\s*,(\s*"finding_type"\s*:)/g;
+  const matches = [...text.matchAll(pattern)];
+  if (matches.length !== 1) return null;
+  return text.replace(pattern, '$1"finding_key":"$2",$3');
+}
+
 function canonicalizeAgentBundle(bundle, manifest) {
   if (!bundle || Array.isArray(bundle) || typeof bundle !== 'object') return bundle;
 
@@ -98,7 +106,14 @@ export function parseAgentBundle(stdout, manifest) {
     throw new Error('agent exec did not complete successfully');
   }
   const finalText = envelope.final.trim();
-  let bundle = parseSingleJsonObject(finalText);
+  let bundle;
+  try {
+    bundle = parseSingleJsonObject(finalText);
+  } catch (error) {
+    const repaired = repairSingleMissingFindingKey(finalText);
+    if (!repaired) throw error;
+    bundle = parseSingleJsonObject(repaired, 'repaired agent final response');
+  }
   if (!bundle || Array.isArray(bundle) || typeof bundle !== 'object') {
     throw new Error('agent final response must be a JSON object');
   }
