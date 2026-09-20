@@ -71,6 +71,16 @@
         "integritas-openrouter/openrouter/free": {},
         "nvidia/nvidia/nemotron-3-ultra-550b-a55b": {
           params: {
+            maxTokens: 32768,
+            chat_template_kwargs: {
+              enable_thinking: false,
+              force_nonempty_content: true,
+            },
+          },
+        },
+        "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b": {
+          params: {
+            maxTokens: 16384,
             chat_template_kwargs: {
               enable_thinking: false,
               force_nonempty_content: true,
