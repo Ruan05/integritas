@@ -64,9 +64,14 @@ assert.match(releaseUnit, /^User=root$/m, 'bounded release unit must run the fix
 assert.match(releaseUnit, /^ExecStartPre=\/usr\/bin\/sleep 8$/m, 'bounded release unit must delay long enough for command acknowledgement');
 assert.match(releaseUnit, /^ExecStart=\/usr\/bin\/bash \/opt\/integritas\/current\/infra\/oracle\/deploy-integritas-controlled\.sh %i$/m, 'bounded release unit must execute only the fixed SHA wrapper');
 assert.match(releaseUnit, /^NoNewPrivileges=true$/m, 'bounded release unit must retain no-new-privileges');
+assert.match(releaseUnit, /^ProtectHome=true$/m, 'bounded release unit must not read operator home directories');
 assert.ok(!releaseUnit.includes('EnvironmentFile='), 'bounded release unit must not accept caller-controlled environment files');
-assert.match(controlledDeploy, /^SOURCE_REPO=\/home\/opc\/integritas-e2e-investigation$/m, 'controlled deployment must pin the approved local source repository');
+assert.match(controlledDeploy, /^SOURCE_URL=https:\/\/github\.com\/Ruan05\/integritas\.git$/m, 'controlled deployment must pin the approved GitHub repository');
 assert.match(controlledDeploy, /^APPROVED_BRANCH=integritas-command-center-foundation$/m, 'controlled deployment must pin the approved feature branch');
+assert.match(controlledDeploy, /git init --quiet "\$\{SOURCE_REPO\}"/, 'controlled deployment must use an isolated root-owned checkout');
+assert.match(controlledDeploy, /--depth=512/, 'controlled deployment must fetch bounded approved branch history');
+assert.ok(!controlledDeploy.includes('/home/opc'), 'controlled deployment must not trust the mutable operator checkout');
+assert.ok(!controlledDeploy.includes('runuser'), 'controlled deployment must not cross into an operator-owned Git workspace');
 assert.match(controlledDeploy, /\^\[0-9a-f\]\{40\}\$/, 'controlled deployment must validate one exact lowercase Git SHA');
 assert.match(controlledDeploy, /REMOTE_HEAD=/, 'controlled deployment must resolve the current approved remote branch head');
 assert.match(controlledDeploy, /\[\[ "\$\{SHA\}" == "\$\{REMOTE_HEAD\}" \]\]/, 'controlled deployment must require the requested SHA to equal the approved branch head');
