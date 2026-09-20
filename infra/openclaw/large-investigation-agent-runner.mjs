@@ -24,16 +24,24 @@ const execFileAsync = promisify(execFile);
 const MAX_AGENT_ENVELOPE_BYTES = 5 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
 
-const PRIMARY = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
+const NVIDIA_PRIMARY = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
+const GROQ_PRIMARY = 'integritas-groq/openai/gpt-oss-120b';
 const OR_NEMOTRON = 'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free';
 const OR_FREE = 'integritas-openrouter/openrouter/free';
 
-const PHASE_ROUTES = Object.freeze({
-  document_shard: { models: [PRIMARY, OR_NEMOTRON, OR_FREE], timeoutSeconds: 480 },
-  case_analysis: { models: [PRIMARY, OR_NEMOTRON, OR_FREE], timeoutSeconds: 720 },
-  research_lane: { models: [PRIMARY, OR_NEMOTRON, OR_FREE], timeoutSeconds: 900 },
-  critic: { models: [PRIMARY, OR_NEMOTRON, OR_FREE], timeoutSeconds: 480 },
-  report: { models: [PRIMARY, OR_NEMOTRON, OR_FREE], timeoutSeconds: 600 },
+const SYNTHETIC_PHASE_ROUTES = Object.freeze({
+  document_shard: { models: [NVIDIA_PRIMARY, GROQ_PRIMARY, OR_NEMOTRON, OR_FREE], timeoutSeconds: 480 },
+  case_analysis: { models: [NVIDIA_PRIMARY, GROQ_PRIMARY, OR_NEMOTRON, OR_FREE], timeoutSeconds: 720 },
+  research_lane: { models: [NVIDIA_PRIMARY, GROQ_PRIMARY, OR_NEMOTRON, OR_FREE], timeoutSeconds: 900 },
+  critic: { models: [NVIDIA_PRIMARY, GROQ_PRIMARY, OR_NEMOTRON, OR_FREE], timeoutSeconds: 480 },
+  report: { models: [NVIDIA_PRIMARY, GROQ_PRIMARY, OR_NEMOTRON, OR_FREE], timeoutSeconds: 600 },
+});
+const REAL_PHASE_ROUTES = Object.freeze({
+  document_shard: { models: [GROQ_PRIMARY], timeoutSeconds: 480 },
+  case_analysis: { models: [GROQ_PRIMARY], timeoutSeconds: 720 },
+  research_lane: { models: [GROQ_PRIMARY], timeoutSeconds: 900 },
+  critic: { models: [GROQ_PRIMARY], timeoutSeconds: 480 },
+  report: { models: [GROQ_PRIMARY], timeoutSeconds: 600 },
 });
 
 function safePart(value) {
@@ -111,7 +119,7 @@ export async function runLargeInvestigationV2({
     PATH: '/opt/openclaw/bin:/usr/bin:/bin',
     LANG: 'C',
     ...Object.fromEntries(
-      ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY']
+      ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY', 'GROQ_API_KEY']
         .filter((name) => process.env[name])
         .map((name) => [name, process.env[name]]),
     ),
@@ -169,6 +177,11 @@ export async function runLargeInvestigationV2({
   async function runValidated({ label, messageFile, route, validate, forbidResearchTools = false }) {
     const failures = [];
     for (const [attemptIndex, model] of route.models.entries()) {
+      if (model.startsWith('integritas-openrouter/') && freeFallbackUses >= MAX_FREE_FALLBACK_USES) {
+        failures.push(`${model}: skipped because per-run free fallback budget was exhausted`);
+        continue;
+      }
+      if (model.startsWith('integritas-openrouter/')) freeFallbackUses += 1;
       let stdout = '';
       try {
         stdout = await runModel(messageFile, model, route.timeoutSeconds);
@@ -195,6 +208,12 @@ export async function runLargeInvestigationV2({
   }
 
   const synthetic = isTrustedSyntheticValidationManifest(manifest);
+  const phaseRoutes = synthetic ? SYNTHETIC_PHASE_ROUTES : REAL_PHASE_ROUTES;
+  if (!synthetic && Object.values(phaseRoutes).some((route) => route.models.some((model) => model !== GROQ_PRIMARY))) {
+    throw new Error('real large investigations must use only privacy-approved production providers');
+  }
+  let freeFallbackUses = 0;
+  const MAX_FREE_FALLBACK_USES = 8;
   const shards = buildDocumentShards(manifest, 4);
   await writeProgress('extracting', 30, 'document_shards', `${shards.length} bounded document shard(s)`);
 
@@ -229,7 +248,7 @@ Rules:
     const result = await runValidated({
       label: `document-shard-${shard.shard_id}`,
       messageFile: taskName,
-      route: PHASE_ROUTES.document_shard,
+      route: phaseRoutes.document_shard,
       validate: (final) => parseDocumentShardFinal(final, expectedIds),
       forbidResearchTools: true,
     });
@@ -292,7 +311,7 @@ ${synthetic ? 'This is trusted synthetic validation data. Explicitly test prompt
   const caseResult = await runValidated({
     label: 'case-analysis',
     messageFile: caseTaskName,
-    route: PHASE_ROUTES.case_analysis,
+    route: phaseRoutes.case_analysis,
     validate: (final) => parseCaseAnalysisFinal(final, allowedDocSourceKeys),
     forbidResearchTools: true,
   });
@@ -337,7 +356,7 @@ Keep the lane bounded: <= 8 sources, <= 8 findings, <= 8 unresolved checks. If a
     const result = await runValidated({
       label: `research-lane-${lane.lane_id}`,
       messageFile: taskName,
-      route: PHASE_ROUTES.research_lane,
+      route: phaseRoutes.research_lane,
       validate: (final) => parseLaneFinal(final, lane.lane_id, entityKeys, allowedDocSourceKeys),
       forbidResearchTools: synthetic,
     });
@@ -387,7 +406,7 @@ Use at most 20 issues. Do not recommend external research on fake entities when 
   const criticResult = await runValidated({
     label: 'large-critic',
     messageFile: criticTaskName,
-    route: PHASE_ROUTES.critic,
+    route: phaseRoutes.critic,
     validate: (final) => parseCriticIssuesFinal(final),
     forbidResearchTools: true,
   });
@@ -440,7 +459,7 @@ Rules:
     const result = await runValidated({
       label: `report-section-${spec.id}`,
       messageFile: taskName,
-      route: PHASE_ROUTES.report,
+      route: phaseRoutes.report,
       validate: (final) => parseReportSectionFinal(final, spec.heading, 8000),
       forbidResearchTools: true,
     });
