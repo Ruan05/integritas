@@ -12,7 +12,7 @@ test('worker release attests investigation capabilities from the packaged releas
   assert.match(source, /readPackagedWorkerVersion/);
   assert.match(source, /new URL\('\.\.\/package\.json', import\.meta\.url\)/);
   assert.doesNotMatch(source, /INTEGRITAS_CONTROL_WORKER_VERSION/);
-  for (const capability of ['case_investigation', 'signed_manifests', 'durable_checkpoints', 'deterministic_qa', 'atomic_bundle_commit', 'bounded_release_deploy']) {
+  for (const capability of ['case_investigation', 'signed_manifests', 'durable_checkpoints', 'deterministic_qa', 'atomic_bundle_commit', 'bounded_release_deploy', 'large_case_orchestration_v2']) {
     assert.match(source, new RegExp(`${capability}: true`));
   }
   assert.match(source, /arbitrary_shell: false/);
