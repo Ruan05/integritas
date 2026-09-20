@@ -57,8 +57,11 @@ begin
   -- A resumed worker may replay early progress calls before it reaches its
   -- retained phase. Return the current durable checkpoint without regressing
   -- stage or progress.
-  if p_progress < v_job.progress
-    or (
+  if p_progress < v_job.progress then
+    raise exception 'investigation progress cannot move backwards';
+  end if;
+
+  if (
       not (p_stage = any(v_terminal))
       and not (v_job.stage = any(v_terminal))
       and array_position(v_order, p_stage) < array_position(v_order, v_job.stage)
