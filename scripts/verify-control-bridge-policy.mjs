@@ -56,11 +56,12 @@ assert.match(investigationRunner, /execFileAsync\('\/opt\/openclaw\/bin\/opencla
 assert.match(investigationRunner, /--config/, 'runner must pin the dedicated exec config');
 assert.ok(!investigationRunner.includes("'--state-dir'"), 'runner must use OpenClaw isolated temporary exec state while the Gateway owns persistent state');
 assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/, 'runner may discover existing provider credentials only through the bounded OpenClaw environment');
-assert.ok(investigationRunner.includes("research: { model: 'opencode-go/glm-5.3-flash'"), 'GLM 5.3 Flash must be the bounded primary research route');
+assert.ok(investigationRunner.includes("const NVIDIA_PRIMARY = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b'"), 'canonical NVIDIA Nemotron 3 Ultra must be the bounded primary investigation route');
+assert.ok(investigationRunner.includes("research: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS"), 'NVIDIA Nemotron must be the bounded primary research route');
+assert.ok(investigationRunner.includes("critic: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS"), 'NVIDIA Nemotron must be the bounded independent critic while paid OpenCode Go routes are unavailable');
 assert.ok(!investigationRunner.includes("model: 'integritas-groq/"), 'Groq must not be a primary OpenClaw investigation route because free-tier TPM is below the OpenClaw prompt baseline');
-assert.ok(investigationRunner.includes("'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'"), 'OpenRouter must use a fixed free model through the deterministic custom provider');
-assert.ok(investigationRunner.includes("'opencode-go/glm-5.3-flash'"), 'GLM 5.3 Flash must remain available for research and final synthesis');
-assert.ok(investigationRunner.includes("critic: { model: 'opencode-go/kimi-k3'"), 'Kimi K3 may be used only as the bounded independent deep/maximum critic');
+assert.ok(investigationRunner.includes("'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'"), 'OpenRouter must retain a fixed free Nemotron fallback through the deterministic custom provider');
+assert.ok(!investigationRunner.includes("model: 'opencode-go/"), 'unfunded OpenCode Go routes must not remain primary investigation phases');
 assert.ok(investigationRunner.includes("'--model', phaseRoute.model"), 'runner must explicitly pin each bounded phase model');
 assert.ok(investigationRunner.includes("args.push('--fallback', fallback)"), 'runner must use only its explicit bounded fallback chain');
 assert.ok(investigationRunner.includes("'integritas-openrouter/openrouter/free'"), 'dynamic OpenRouter free routing may be used only as an emergency fallback');
