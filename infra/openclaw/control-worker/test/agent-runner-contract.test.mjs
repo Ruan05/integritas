@@ -39,7 +39,7 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.match(source, /synthesis pass must not perform external research/);
   assert.match(source, /mergeToolSummaries/);
   assert.match(source, /milestoneSnapshot/);
-  assert.match(source, /assertPlanCheckCoverage/);
+  assert.match(source, /reconcilePlanChecks/);
   assert.ok(source.includes('lane.${lane.lane_id}'), 'planner lane check keys must remain stable');
   assert.match(source, /planning_research/);
   assert.match(source, /agent-progress\.json/);
