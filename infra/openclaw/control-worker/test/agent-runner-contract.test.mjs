@@ -62,13 +62,11 @@ test('investigation profile uses only required provider SecretRefs and keeps the
   for (const model of [
     'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
     'integritas-openrouter/openrouter/free',
-    'opencode-go/glm-5.3-flash',
-    'opencode-go/kimi-k3',
-    'opencode-go/glm-5.2',
     'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
   ]) {
     assert.ok(config.includes(`"${model}"`), `missing routed model allowlist entry: ${model}`);
   }
+  assert.doesNotMatch(config, /opencode-go\//, 'production investigation profile must not expose unfunded OpenCode Go models');
   assert.doesNotMatch(config, /gsk_[A-Za-z0-9_-]+/);
   assert.doesNotMatch(config, /sk-or-v1-[A-Za-z0-9_-]+/);
   assert.doesNotMatch(config, /nvapi-[A-Za-z0-9_-]+/);
