@@ -169,7 +169,7 @@ async function runTrustedForensics(jobDir, localDocuments) {
   return safe;
 }
 
-function normalizeRetainedTerminalOutcome(bundle) {
+function normalizeTerminalOutcome(bundle) {
   if (!bundle || Array.isArray(bundle) || typeof bundle !== 'object') return bundle;
   const hasUnresolvedChecks = Array.isArray(bundle.unresolved_checks) && bundle.unresolved_checks.length > 0;
   const hasIncompleteChecks = Array.isArray(bundle.checks)
@@ -545,7 +545,7 @@ export async function executeInvestigation(command, {
       for (const candidate of retainedCandidates) {
         try {
           let existingJson = JSON.parse((await readBounded(candidate.bundle)).toString('utf8'));
-          existingJson = normalizeRetainedTerminalOutcome(existingJson);
+          existingJson = normalizeTerminalOutcome(existingJson);
           const existingReport = await readBounded(candidate.report);
           validateInvestigationBundle(existingJson, safeManifest, existingReport.toString('utf8'));
           const normalizedBundle = Buffer.from(`${JSON.stringify(existingJson, null, 2)}\n`);
@@ -592,9 +592,17 @@ export async function executeInvestigation(command, {
       return { ok: true, cancelled: true, case_job_id: jobId, case_revision: revision };
     }
 
-    const bundle = await readBounded(bundlePath);
+    let bundle = await readBounded(bundlePath);
     const report = await readBounded(reportPath);
-    const bundleJson = JSON.parse(bundle.toString('utf8'));
+    let bundleJson = JSON.parse(bundle.toString('utf8'));
+    const normalizedBundleJson = normalizeTerminalOutcome(bundleJson);
+    if (normalizedBundleJson !== bundleJson) {
+      bundleJson = normalizedBundleJson;
+      bundle = Buffer.from(`${JSON.stringify(bundleJson, null, 2)}\n`);
+      await writeFile(bundlePath, bundle, { mode: SHARED_FILE_MODE });
+      await chown(bundlePath, -1, process.getgid());
+      await chmod(bundlePath, SHARED_FILE_MODE);
+    }
     validateInvestigationBundle(bundleJson, safeManifest, report.toString('utf8'));
     if (bundle.includes('/storage/v1/object/sign/') || report.includes('/storage/v1/object/sign/')) throw new Error('signed URL leaked into investigation output');
     const latestAgentProgress = await readAgentProgress(jobDir);
