@@ -15,6 +15,7 @@ const investigationUnit = read('infra/openclaw/integritas-openclaw-investigation
 const releaseUnit = read('infra/openclaw/integritas-release-deploy@.service');
 const controlledDeploy = read('infra/oracle/deploy-integritas-controlled.sh');
 const investigationRunner = read('infra/openclaw/investigation-agent-runner.mjs');
+const largeInvestigationRunner = read('infra/openclaw/large-investigation-agent-runner-v2.mjs');
 const investigationConfig = read('infra/openclaw/integritas-investigation.json5');
 const installer = read('infra/openclaw/install-control-worker.sh');
 const nativeInstaller = read('infra/openclaw/install-native.sh');
@@ -85,10 +86,10 @@ assert.match(investigationRunner, /--config/, 'runner must pin the dedicated exe
 assert.ok(!investigationRunner.includes("'--state-dir'"), 'runner must use OpenClaw isolated temporary exec state while the Gateway owns persistent state');
 assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/, 'runner may discover existing provider credentials only through the bounded OpenClaw environment');
 assert.ok(investigationRunner.includes("const NVIDIA_PRIMARY = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b'"), 'NVIDIA Nemotron remains available only for trusted synthetic validation');
-assert.ok(investigationRunner.includes("const GROQ_PRIMARY = 'integritas-groq/openai/gpt-oss-120b'"), 'Groq GPT-OSS 120B must be the privacy-approved production route');
-assert.ok(investigationRunner.includes("SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, [GROQ_PRIMARY, ...FREE_FALLBACKS])"), 'synthetic validation may use NVIDIA plus bounded fallbacks');
-assert.ok(investigationRunner.includes("REAL_MODEL_ROUTES = routes(GROQ_PRIMARY, [])"), 'real investigations must use Groq without free/trial fallbacks');
-assert.ok(investigationRunner.includes("real investigations must use only privacy-approved production providers"), 'real-data provider policy must fail closed');
+assert.ok(investigationRunner.includes("const NVIDIA_LIGHTNING = 'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b'"), 'Nemotron Lightning must be available as the direct high-throughput fallback');
+assert.ok(investigationRunner.includes("SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, [NVIDIA_LIGHTNING, ...FREE_FALLBACKS])"), 'synthetic validation may use direct NVIDIA plus bounded free fallbacks');
+assert.ok(investigationRunner.includes("REAL_MODEL_ROUTES = routes(NVIDIA_PRIMARY, [NVIDIA_LIGHTNING])"), 'real investigations must stay on direct NVIDIA production routes');
+assert.ok(investigationRunner.includes("real investigations must use only direct NVIDIA production routes"), 'real-data provider policy must fail closed to direct production routes');
 assert.ok(investigationRunner.includes("'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'"), 'OpenRouter free Nemotron may remain only in the synthetic fallback chain');
 assert.ok(!investigationRunner.includes("model: 'opencode-go/"), 'unfunded OpenCode Go routes must not remain primary investigation phases');
 assert.ok(investigationRunner.includes("'--model', phaseRoute.model"), 'runner must explicitly pin each bounded phase model');
@@ -103,16 +104,25 @@ assert.ok(!investigationRunner.includes('shell: true'), 'runner must never execu
 assert.match(investigationConfig, /\$include:\s*["']\.\/openclaw\.json["']/, 'investigation config must inherit the pinned OpenClaw config');
 assert.match(investigationConfig, /workspaceAccess:\s*["']ro["']/, 'investigation evidence workspace must remain read-only');
 assert.match(investigationConfig, /profile:\s*["']minimal["']/, 'investigation agent must start from the minimal tool profile');
-assert.ok(investigationConfig.includes('integritas-groq'), 'Groq must be configured in the production investigation profile');
-assert.ok(investigationConfig.includes('GROQ_API_KEY'), 'Groq must use an environment SecretRef');
-assert.ok(investigationConfig.includes('openai/gpt-oss-120b'), 'Groq GPT-OSS 120B must be registered');
+assert.ok(!investigationConfig.includes('integritas-groq'), 'unprovisioned Groq must not make production config validation fail');
+assert.ok(!investigationConfig.includes('GROQ_API_KEY'), 'unprovisioned Groq SecretRef must not be required by the production overlay');
 assert.ok(!investigationConfig.includes('opencode-go/'), 'production investigation profile must not expose unfunded OpenCode Go models');
-assert.match(installer, /for name in OPENROUTER_API_KEY NVIDIA_API_KEY GROQ_API_KEY/, 'Groq must be a required production provider secret');
+assert.match(installer, /for name in OPENROUTER_API_KEY NVIDIA_API_KEY; do/, 'only provisioned NVIDIA/OpenRouter secrets may be mandatory');
+assert.ok(installer.includes('OPENROUTER_API_KEY|NVIDIA_API_KEY|GROQ_API_KEY'), 'Groq may remain an approved optional staged variable for future activation');
 assert.match(investigationConfig, /"integritas-openrouter"/, 'investigation config must define a fixed OpenRouter provider');
 assert.match(investigationConfig, /apiKey:\s*\{\s*source:\s*["']env["'],\s*provider:\s*["']default["'],\s*id:\s*["']OPENROUTER_API_KEY["']\s*\}/, 'OpenRouter key must be an environment SecretRef');
 assert.match(investigationConfig, /id:\s*["']openrouter\/free["']/, 'investigation config may register the dynamic free router only for emergency fallback');
 assert.match(investigationConfig, /deny:\s*\[[^\]]*["']write["'][^\]]*["']edit["'][^\]]*["']exec["'][^\]]*["']apply_patch["']/s, 'investigation agent must not mutate files or invoke execution tools');
 assert.match(investigationRunner, /'--code-mode', 'direct'/, 'investigation agent must use direct tool mode');
+assert.ok(largeInvestigationRunner.includes("const NVIDIA_LIGHTNING = 'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b'"), 'large-case runner must use Lightning for bounded high-throughput phases');
+assert.ok(largeInvestigationRunner.includes("const MAX_OPENROUTER_FREE_USES = 4"), 'large-case free-router usage must be globally bounded per investigation');
+assert.match(largeInvestigationRunner, /buildDocumentShards\(manifest, 4\)/, 'large-case runner must shard documents into bounded groups');
+assert.match(largeInvestigationRunner, /mapLimit\(shards, 2/, 'document shard concurrency must remain bounded');
+assert.match(largeInvestigationRunner, /mapLimit\(plan\.research_lanes, 2/, 'research lane concurrency must remain bounded');
+assert.match(largeInvestigationRunner, /failed every validated model route/, 'large-case runner must fail over on validation failure, not only transport failure');
+assert.match(largeInvestigationRunner, /validateInvestigationBundle\(finalBundle, manifest, reportMarkdown\)/, 'large-case deterministic assembly must pass canonical validation');
+assert.ok(!largeInvestigationRunner.includes('synthesis-task'), 'large-case final canonical bundle must not depend on giant model synthesis');
+assert.ok(!largeInvestigationRunner.includes('shell: true'), 'large-case runner must never execute through a shell');
 assert.match(investigationRunner, /parseAgentBundle\(researchStdout, manifest\)/, 'trusted runner must validate the primary research bundle');
 assert.match(investigationRunner, /parseAgentBundle\(finalStdout, manifest\)/, 'trusted runner must validate the final synthesis bundle');
 assert.match(investigationRunner, /writeSharedAtomic\('bundle\.json'/, 'trusted runner must atomically materialize the canonical bundle');
@@ -159,7 +169,7 @@ assert.match(verifyHost, /\/usr\/sbin\/ss -ltnp/, 'runtime verifier must use an 
 assert.ok(!verifyHost.includes('docker info'), 'runtime verifier must not require Docker daemon socket access');
 assert.ok(!verifyHost.match(/docker ps\b/), 'runtime verifier must not enumerate containers through the Docker socket');
 
-for (const file of [commands, worker, client, service, edge, investigationRunner, investigationConfig, installer, investigationUnit, releaseUnit, controlledDeploy]) {
+for (const file of [commands, worker, client, service, edge, investigationRunner, largeInvestigationRunner, investigationConfig, installer, investigationUnit, releaseUnit, controlledDeploy]) {
   assert.ok(!file.match(/sb_service_role_[A-Za-z0-9_-]+/), 'service-role credential literal must not be committed');
   assert.ok(!file.match(/sk-[A-Za-z0-9_-]{16,}/), 'provider/API key literal must not be committed');
   assert.ok(!file.match(/gsk_[A-Za-z0-9_-]{16,}/), 'Groq key literal must not be committed');
