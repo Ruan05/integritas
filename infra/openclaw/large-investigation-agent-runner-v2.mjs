@@ -35,7 +35,7 @@ const MAX_OPENROUTER_FREE_USES = 4;
 let openRouterFallbackUses = 0;
 
 const SECTION_HEADINGS = Object.freeze({
-  '01': ['# MASTER SUMMARY — READ THIS FIRST', '## DIRECT NEXT STEPS — WHAT TO DO NOW'],
+  '01': ['# MASTER SUMMARY — READ THIS FIRST', '## DIRECT NEXT STEPS — WHAT TO DO NOW', '## Master Issue Dashboard'],
   '02': [
     '# DOCUMENT, FORENSIC & ENTITY REVIEW',
     '## Investigation Completion Statement',
@@ -298,6 +298,7 @@ ${headings}
 Focus: ${spec.focus}
 
 Return raw Markdown only, no code fence. Use all required headings exactly. Keep between ${SECTION_MIN[spec.id]} and 9000 characters. Preserve verified/conflicting/uncertain distinctions, include adverse and risk-reducing evidence, and do not invent facts/sources.
+${spec.id === '01' ? 'In the prose immediately below MASTER SUMMARY, include the exact phrase "Executive Decision Summary" before DIRECT NEXT STEPS. Do not place another heading between MASTER SUMMARY and DIRECT NEXT STEPS.' : ''}
 `;
 }
 function reportValidator(spec) {
@@ -305,6 +306,7 @@ function reportValidator(spec) {
     const text = parseReportSectionFinal(final, SECTION_HEADINGS[spec.id][0], 9000);
     if (text.length < SECTION_MIN[spec.id]) throw new Error('report section too short');
     for (const heading of SECTION_HEADINGS[spec.id]) if (!text.includes(heading)) throw new Error(`missing required heading ${heading}`);
+    if (spec.id === '01' && !text.includes('Executive Decision Summary')) throw new Error('MASTER SUMMARY must include Executive Decision Summary');
     if (spec.id === '01') {
       const a = text.indexOf(SECTION_HEADINGS['01'][0]);
       const b = text.indexOf(SECTION_HEADINGS['01'][1]);
