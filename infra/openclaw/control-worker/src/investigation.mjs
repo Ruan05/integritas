@@ -458,6 +458,11 @@ export async function executeInvestigation(command, {
   if (!UUID.test(jobId)) throw new Error('invalid investigation job id');
   const jobDir = path.join(spoolRoot, jobId);
   const unit = `integritas-openclaw-investigation@${jobId}.service`;
+  // Recovery may rejoin an active unit after cleanup removed its local workspace.
+  // Recreate it before systemd admission/WorkingDirectory resolution and restore its mode.
+  await mkdir(jobDir, { recursive: true, mode: SHARED_DIR_MODE });
+  await chown(jobDir, -1, process.getgid());
+  await chmod(jobDir, SHARED_DIR_MODE);
   let completedSuccessfully = false;
 
   try {
