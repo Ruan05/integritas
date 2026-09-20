@@ -16,11 +16,12 @@ test('OpenClaw runner materializes only validated structured final output', asyn
 
 test('OpenClaw runner uses evidence-first planning, bounded research and an independent critic for deep work', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
-  assert.match(source, /planner: \{ model: 'opencode-go\/glm-5\.3-flash'/);
-  assert.match(source, /research: \{ model: 'opencode-go\/glm-5\.3-flash'/);
-  assert.match(source, /critic: \{ model: 'opencode-go\/kimi-k3'/);
-  assert.match(source, /synthesis: \{ model: 'opencode-go\/glm-5\.3-flash'/);
-  assert.match(source, /nvidia\/nemotron-3-ultra-550b-a55b/);
+  assert.match(source, /const NVIDIA_PRIMARY = 'nvidia\/nvidia\/nemotron-3-ultra-550b-a55b'/);
+  assert.match(source, /planner: \{ model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS/);
+  assert.match(source, /research: \{ model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS/);
+  assert.match(source, /critic: \{ model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS/);
+  assert.match(source, /synthesis: \{ model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS/);
+  assert.doesNotMatch(source, /model: 'opencode-go\//);
   assert.match(source, /integritas-openrouter\/nvidia\/nemotron-3-ultra-550b-a55b:free/);
   assert.match(source, /trustedForensics/);
   assert.match(source, /integritas_forensics_v1/);
@@ -64,7 +65,7 @@ test('investigation profile uses only required provider SecretRefs and keeps the
     'opencode-go/glm-5.3-flash',
     'opencode-go/kimi-k3',
     'opencode-go/glm-5.2',
-    'nvidia/nemotron-3-ultra-550b-a55b',
+    'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
   ]) {
     assert.ok(config.includes(`"${model}"`), `missing routed model allowlist entry: ${model}`);
   }
