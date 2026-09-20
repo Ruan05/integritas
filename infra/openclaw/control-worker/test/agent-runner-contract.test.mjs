@@ -28,6 +28,8 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.match(source, /parsePlan/);
   assert.match(source, /isTrustedSyntheticValidationManifest\(manifest\)/, 'zero-lane exception must depend on trusted manifest metadata');
   assert.match(source, /plan\.research_lanes\.length < 1 && !allowZeroResearchLanes/, 'real investigations must still require at least one research lane');
+  assert.match(source, /filterSyntheticExternalResearchLanes/, 'trusted synthetic plans must remove external research lanes');
+  assert.match(source, /synthetic validation research must not perform external research/, 'synthetic external tool use must fail closed');
   assert.match(source, /plannerTask/);
   assert.match(source, /researchTask/);
   assert.match(source, /investigation-plan\.json/);
