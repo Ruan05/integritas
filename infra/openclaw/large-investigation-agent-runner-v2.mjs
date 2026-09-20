@@ -31,6 +31,8 @@ const NVIDIA_ULTRA = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
 const GROQ_GPT_OSS = 'integritas-groq/openai/gpt-oss-120b';
 const OPENROUTER_ULTRA = 'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free';
 const OPENROUTER_FREE = 'integritas-openrouter/openrouter/free';
+const MAX_OPENROUTER_FREE_USES = 4;
+let openRouterFallbackUses = 0;
 
 const SECTION_HEADINGS = Object.freeze({
   '01': ['# MASTER SUMMARY — READ THIS FIRST', '## DIRECT NEXT STEPS — WHAT TO DO NOW'],
@@ -166,13 +168,12 @@ async function validated({
   }
   const models = candidates(role, synthetic);
   if (!models.length) throw new Error(`${id}: no configured provider candidate available`);
-  let openRouterUses = 0;
   for (const [index, model] of models.entries()) {
-    if (model.startsWith('integritas-openrouter/') && openRouterUses >= 1) {
-      failures.push({ model, error: 'skipped to preserve per-run free-router quota' });
+    if (model.startsWith('integritas-openrouter/') && openRouterFallbackUses >= MAX_OPENROUTER_FREE_USES) {
+      failures.push({ model, error: 'skipped because per-investigation OpenRouter free fallback budget is exhausted' });
       continue;
     }
-    if (model.startsWith('integritas-openrouter/')) openRouterUses += 1;
+    if (model.startsWith('integritas-openrouter/')) openRouterFallbackUses += 1;
     try {
       const raw = await invoke(jobDir, taskName, model, timeoutFor(role));
       await writeAtomic(jobDir, `large-v2-attempt-${safePart(id)}-${index + 1}.json`, raw);
@@ -384,7 +385,13 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
       jobDir, id: `lane-${lane.lane_id}`, role: 'lane', task: laneTask(lane, synthetic),
       execName: `large-v2-lane-${safePart(lane.lane_id)}-exec.json`, synthetic,
       allowExternal: !synthetic,
-      validator: (final) => parseLaneFinal(final, lane.lane_id, entityKeys, docSourceKeys),
+      validator: (final, envelope) => {
+        const parsed = parseLaneFinal(final, lane.lane_id, entityKeys, docSourceKeys);
+        if (!synthetic && parsed.sources.length > 0 && externalTools(envelope).length < 1) {
+          throw new Error('external lane sources require observed research-tool use in the same phase');
+        }
+        return parsed;
+      },
     });
     if (synthetic && externalTools(result.envelope).length) throw new Error('synthetic lane performed external research');
     phases.push({ phase: `lane-${lane.lane_id}`, ...result });
