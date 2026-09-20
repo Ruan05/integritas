@@ -3,6 +3,24 @@
   models: {
     mode: "merge",
     providers: {
+      "integritas-groq": {
+        baseUrl: "https://api.groq.com/openai/v1",
+        apiKey: { source: "env", provider: "default", id: "GROQ_API_KEY" },
+        api: "openai-completions",
+        authHeader: true,
+        timeoutSeconds: 90,
+        models: [
+          {
+            id: "openai/gpt-oss-120b",
+            name: "Integritas Groq GPT-OSS 120B",
+            reasoning: true,
+            input: ["text"],
+            contextWindow: 131072,
+            contextTokens: 120000,
+            maxTokens: 65536,
+          },
+        ],
+      },
       "integritas-openrouter": {
         baseUrl: "https://openrouter.ai/api/v1",
         apiKey: { source: "env", provider: "default", id: "OPENROUTER_API_KEY" },
@@ -44,6 +62,11 @@
         workspaceAccess: "ro",
       },
       models: {
+        "integritas-groq/openai/gpt-oss-120b": {
+          params: {
+            reasoning_effort: "medium",
+          },
+        },
         "integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free": {},
         "integritas-openrouter/openrouter/free": {},
         "nvidia/nvidia/nemotron-3-ultra-550b-a55b": {
