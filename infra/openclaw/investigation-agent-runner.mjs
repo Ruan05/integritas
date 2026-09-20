@@ -11,32 +11,32 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const MAX_AGENT_ENVELOPE_BYTES = 5 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
 
-const RESEARCH_FALLBACKS = [
-  'nvidia/nemotron-3-ultra-550b-a55b',
+const NVIDIA_PRIMARY = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
+const FREE_FALLBACKS = [
   'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
   'integritas-openrouter/openrouter/free',
 ];
 
 const MODEL_ROUTES = Object.freeze({
   fast: {
-    planner: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 240 },
-    research: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 600 },
+    planner: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 240 },
+    research: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 600 },
   },
   standard: {
-    planner: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 300 },
-    research: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 900 },
+    planner: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 300 },
+    research: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 900 },
   },
   deep: {
-    planner: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 360 },
-    research: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 1200 },
-    critic: { model: 'opencode-go/kimi-k3', fallbacks: ['opencode-go/glm-5.3-flash'], timeoutSeconds: 420 },
-    synthesis: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 600 },
+    planner: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 360 },
+    research: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 1200 },
+    critic: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 420 },
+    synthesis: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 600 },
   },
   maximum: {
-    planner: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 420 },
-    research: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 2400 },
-    critic: { model: 'opencode-go/kimi-k3', fallbacks: ['opencode-go/glm-5.3-flash'], timeoutSeconds: 480 },
-    synthesis: { model: 'opencode-go/glm-5.3-flash', fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 720 },
+    planner: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 420 },
+    research: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 2400 },
+    critic: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 480 },
+    synthesis: { model: NVIDIA_PRIMARY, fallbacks: FREE_FALLBACKS, timeoutSeconds: 720 },
   },
 });
 
