@@ -54,37 +54,44 @@ async function probeOpenClaw() {
   return { service, version };
 }
 
+let heartbeatInFlight = null;
+
 async function sendHeartbeat() {
-  try {
-    const openclaw = await probeOpenClaw();
-    await client.heartbeat({
-      runtime_version: process.version,
-      openclaw_version: openclaw.version,
-      openclaw_status: openclaw.service,
-      worker_version: workerVersion,
-      capability_flags: {
-        bounded_control: true, arbitrary_shell: false, docker_socket: false,
-        case_investigation: true, signed_manifests: true, durable_checkpoints: true,
-        deterministic_qa: true, atomic_bundle_commit: true,
-        bounded_release_deploy: true,
-        large_case_orchestration_v2: true,
-        deployed_release: readDeployedRelease(),
-      },
-    });
-  } catch (error) {
-    console.error(`heartbeat failed: ${error.message}`);
-  }
+  if (heartbeatInFlight) return heartbeatInFlight;
+  heartbeatInFlight = (async () => {
+    try {
+      const openclaw = await probeOpenClaw();
+      await client.heartbeat({
+        runtime_version: process.version,
+        openclaw_version: openclaw.version,
+        openclaw_status: openclaw.service,
+        worker_version: workerVersion,
+        capability_flags: {
+          bounded_control: true, arbitrary_shell: false, docker_socket: false,
+          case_investigation: true, signed_manifests: true, durable_checkpoints: true,
+          deterministic_qa: true, atomic_bundle_commit: true,
+          bounded_release_deploy: true,
+          large_case_orchestration_v2: true,
+          deployed_release: readDeployedRelease(),
+        },
+      });
+    } catch (error) {
+      console.error(`heartbeat failed: ${error.message}`);
+    } finally {
+      heartbeatInFlight = null;
+    }
+  })();
+  return heartbeatInFlight;
 }
 
 await sendHeartbeat();
-let lastHeartbeat = Date.now();
+const heartbeatInterval = setInterval(() => {
+  sendHeartbeat().catch((error) => console.error(`heartbeat loop failed: ${error.message}`));
+}, 30_000);
+heartbeatInterval.unref();
 
 while (!stopping) {
   try {
-    if (Date.now() - lastHeartbeat > 30_000) {
-      await sendHeartbeat();
-      lastHeartbeat = Date.now();
-    }
 
     const leased = await client.lease();
     const command = leased.command ?? null;
@@ -118,3 +125,4 @@ while (!stopping) {
     await sleep(Math.min(pollMs * 2, 30_000));
   }
 }
+clearInterval(heartbeatInterval);
