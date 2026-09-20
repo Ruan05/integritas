@@ -66,6 +66,41 @@ test('recovers one bounded wrapped JSON object but rejects ambiguity and manifes
   assert.throws(() => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }), manifest), /bundle manifest mismatch/);
 });
 
+
+test('repairs exactly one omitted finding_key label but still validates the bundle strictly', () => {
+  const value = bundle();
+  value.findings = [{
+    finding_key: 'fnd.synthetic',
+    finding_type: 'entity_status',
+    claim: 'Synthetic finding.',
+    evidence_status: 'verified',
+    materiality: 'informational',
+    reliability: 'high',
+    evidence_excerpt: 'Synthetic evidence.',
+    source_keys: [],
+  }];
+  const malformed = JSON.stringify(value, null, 2)
+    .replace('"finding_key": "fnd.synthetic",', '"fnd.synthetic",');
+  const parsed = parseAgentBundle(
+    JSON.stringify({ ok: true, status: 'ok', final: malformed }),
+    manifest,
+  );
+  assert.equal(parsed.bundle.findings[0].finding_key, 'fnd.synthetic');
+
+  const two = bundle();
+  two.findings = [
+    { ...value.findings[0], finding_key: 'fnd.one' },
+    { ...value.findings[0], finding_key: 'fnd.two' },
+  ];
+  const doublyMalformed = JSON.stringify(two, null, 2)
+    .replace('"finding_key": "fnd.one",', '"fnd.one",')
+    .replace('"finding_key": "fnd.two",', '"fnd.two",');
+  assert.throws(
+    () => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: doublyMalformed }), manifest),
+    /must contain one valid JSON object/,
+  );
+});
+
 test('normalizes a completed model outcome to incomplete when unresolved work remains', () => {
   const value = bundle();
   value.execution.terminal_outcome = 'completed';
