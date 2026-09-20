@@ -73,7 +73,7 @@ test('repairs exactly one omitted finding_key label but still validates the bund
     finding_key: 'fnd.synthetic',
     finding_type: 'entity_status',
     claim: 'Synthetic finding.',
-    evidence_status: 'verified',
+    evidence_status: 'uncertain',
     materiality: 'informational',
     reliability: 'high',
     evidence_excerpt: 'Synthetic evidence.',
