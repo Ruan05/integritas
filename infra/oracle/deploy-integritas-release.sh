@@ -85,6 +85,7 @@ for required in \
   infra/openclaw/investigation-agent-runner.mjs \
   infra/openclaw/agent-result.mjs \
   infra/openclaw/transaction-checks.mjs \
+  infra/openclaw/plan-checks.mjs \
   infra/openclaw/skills/integritas-investigation-v1/SKILL.md \
   infra/openclaw/contracts/investigation-bundle-v1.schema.json \
   infra/openclaw/integritas-gateway.json5 \
