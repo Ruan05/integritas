@@ -118,6 +118,7 @@ jobs:
           psql -f supabase/migrations/0012_integritas_checkpoint_browser_read.sql
           psql -f supabase/migrations/0014_integritas_external_research_provenance.sql
           psql -f supabase/migrations/0015_integritas_draft_bundle_replacement.sql
+          psql -f supabase/migrations/0016_integritas_monotonic_checkpoint_retry.sql
       - name: Verify control bridge contract
         run: |
           psql -f supabase/tests/0005_integritas_control_bridge.sql
