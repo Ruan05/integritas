@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { validateInvestigationBundle } from '../src/bundle.mjs';
 import {
   LARGE_REPORT_SECTIONS,
   assembleLargeBundle,
@@ -114,4 +115,5 @@ test('critic/report parsing and deterministic final assembly stay bounded', () =
   assert.equal(bundle.unresolved_checks.length,1);
   assert.equal(bundle.execution.terminal_outcome,'incomplete');
   assert.match(bundle.report.markdown,/MASTER SUMMARY/);
+  assert.doesNotThrow(() => validateInvestigationBundle(bundle,m,report));
 });
