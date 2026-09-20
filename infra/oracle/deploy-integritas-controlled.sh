@@ -19,8 +19,9 @@ DEPLOYED_RELEASE=/opt/integritas/deployed-release
   echo "Requested release commit is unavailable." >&2
   exit 5
 }
-/usr/sbin/runuser -u opc -- /usr/bin/git -C "${SOURCE_REPO}" merge-base --is-ancestor   "${SHA}" "refs/remotes/origin/${APPROVED_BRANCH}" || {
-  echo "Requested release is not part of the approved Integritas feature branch." >&2
+REMOTE_HEAD="$(/usr/sbin/runuser -u opc -- /usr/bin/git -C "${SOURCE_REPO}" rev-parse "refs/remotes/origin/${APPROVED_BRANCH}")"
+[[ "${SHA}" == "${REMOTE_HEAD}" ]] || {
+  echo "Requested release must equal the current approved Integritas feature-branch head." >&2
   exit 6
 }
 
