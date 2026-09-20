@@ -3,6 +3,7 @@ import { chmod, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { parseAgentBundle, parseSingleJsonObject } from './agent-result.mjs';
+import { reconcilePlanChecks } from './plan-checks.mjs';
 import { buildDeterministicChecks } from './transaction-checks.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -150,16 +151,6 @@ function milestoneSnapshot(phase, plan = null, bundle = null) {
     ...coreMilestones(states),
     ...researchLaneMilestones(plan, laneState, bundle),
   ];
-}
-
-function assertPlanCheckCoverage(bundle, plan, label) {
-  const keys = new Set((bundle?.checks ?? []).map((row) => row?.check_key));
-  const missing = (plan?.research_lanes ?? [])
-    .filter((lane) => !keys.has(`lane.${lane.lane_id}`))
-    .map((lane) => lane.lane_id);
-  if (missing.length) {
-    throw new Error(`${label} is missing planner research-lane checks: ${missing.slice(0, 10).join(', ')}`);
-  }
 }
 
 function buildArgs(messageFile, phaseRoute) {
@@ -505,7 +496,7 @@ const researchStdout = await runAgent('research-task.md', route.research);
 await writeSharedAtomic('research-agent-exec.json', researchStdout);
 const researchEnvelope = parseEnvelope(researchStdout, 'research');
 const researchParsed = parseAgentBundle(researchStdout, manifest);
-assertPlanCheckCoverage(researchParsed.bundle, plan, 'research bundle');
+const researchCheckReconcile = reconcilePlanChecks(researchParsed.bundle, plan);
 await writeSharedAtomic('research-bundle.json', `${JSON.stringify(researchParsed.bundle, null, 2)}\n`);
 await writeSharedAtomic('research-report.md', researchParsed.reportMarkdown);
 
@@ -537,7 +528,7 @@ if (route.critic && route.synthesis) {
   if (synthesisResearchTools.length) throw new Error('synthesis pass must not perform external research');
   phaseRecords.push({ phase: 'synthesis', envelope: finalEnvelope });
   finalParsed = parseAgentBundle(finalStdout, manifest);
-  assertPlanCheckCoverage(finalParsed.bundle, plan, 'synthesis bundle');
+  reconcilePlanChecks(finalParsed.bundle, plan, researchParsed.bundle);
 }
 
 const finalEnvelope = parseEnvelope(finalStdout, 'final');
@@ -549,6 +540,13 @@ if (!existingTools.some((row) => row?.tool === 'integritas_forensics_v1')) {
     tool: 'integritas_forensics_v1',
     status: 'completed',
     summary: `Trusted evidence metadata/signature pre-pass covered ${trustedForensics.reports.length} submitted document(s).`,
+  });
+}
+if (!existingTools.some((row) => row?.tool === 'integritas_plan_check_reconciler_v1')) {
+  existingTools.unshift({
+    tool: 'integritas_plan_check_reconciler_v1',
+    status: 'completed',
+    summary: `Planner lane reconciliation: ${researchCheckReconcile.inserted} omitted lane check(s) retained as open/manual during primary research.`,
   });
 }
 if (!existingTools.some((row) => row?.tool === 'integritas_adaptive_planner_v1')) {
