@@ -426,7 +426,7 @@ Execute the case-specific research plan using the strongest available sources an
 
 For critical claims, prefer at least one Grade A/B source and independent corroboration when available. Do not waste calls on repeated snippets or low-value biography while critical legal identity, authority, banking, product/title, terminal/vessel, licence, issuer-authenticity or payment gates remain open.
 
-For **every** research lane in /agent/investigation-plan.json, create exactly one corresponding structured check in the bundle with `check_key` equal to `lane.<lane_id>`. Use the lane question as the check description, preserve its priority, name the strongest required source, and set status to `complete`, `blocked`, `open`, or `in_progress` based only on what was actually achieved. A manual-only lane should remain open/blocked unless authoritative manual confirmation was genuinely obtained. This check coverage is mandatory and drives the live admin milestone display.
+For **every** research lane in /agent/investigation-plan.json, create exactly one corresponding structured check in the bundle with field check_key equal to lane.<lane_id>. Use the lane question as the check description, preserve its priority, name the strongest required source, and set status to complete, blocked, open, or in_progress based only on what was actually achieved. A manual-only lane should remain open/blocked unless authoritative manual confirmation was genuinely obtained. This check coverage is mandatory and drives the live admin milestone display.
 
 The report inside report.markdown must begin with:
 1. MASTER SUMMARY — READ THIS FIRST
