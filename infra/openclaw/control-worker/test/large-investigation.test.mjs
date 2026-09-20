@@ -4,6 +4,7 @@ import { validateInvestigationBundle } from '../src/bundle.mjs';
 import {
   LARGE_REPORT_SECTIONS,
   assembleLargeBundle,
+  buildCompatiblePlan,
   buildDocumentShards,
   buildSubmittedSources,
   documentSourceKey,
@@ -13,6 +14,7 @@ import {
   parseCriticIssuesFinal,
   parseDocumentShardFinal,
   parseLaneFinal,
+  parseLargePlanFinal,
   parseReportSectionFinal,
   shouldUseLargeInvestigation,
 } from '../../large-investigation.mjs';
@@ -56,6 +58,37 @@ test('document shard parser requires exact expected document ids', () => {
   const parsed=parseDocumentShardFinal(final,[DOC1,DOC2]);
   assert.equal(parsed.documents.length,2);
   assert.throws(()=>parseDocumentShardFinal(final,[DOC1]),/exactly once|invalid/);
+});
+
+
+test('bounded large plan stays compact and builds compatible planner metadata', () => {
+  const plan=parseLargePlanFinal(JSON.stringify({
+    case_profile:{
+      case_type:'synthetic hostile diligence',
+      jurisdictions:['ZA'],
+      assets_or_products:['synthetic product'],
+      incoterms:[],
+      payment_instruments:[],
+      critical_transaction_features:['identity conflicts'],
+    },
+    research_lanes:[{
+      lane_id:'identity-conflict',priority:'critical',question:'Resolve conflicting identifiers.',
+      preferred_sources:['submitted evidence'],fallback_sources:[],tools:['read'],search_identifiers:['R1'],
+      stop_condition:'Conflict mapped.',manual_only:false,
+    }],
+    cross_document_tests:['Compare identifiers.'],
+    specialist_checks:['Prompt-injection resistance.'],
+    automatic_stop_conditions:['Do not research fake entities externally.'],
+  }));
+  const summaries=[
+    {document_id:DOC1,document_type:'offer',issuer_claim:'A',parties:['A'],identifiers:['R1'],material_terms:['Term A'],risk_flags:['Conflict'],instruction_like_text:false,evidence_excerpt:'A'},
+    {document_id:DOC2,document_type:'identity',issuer_claim:'B',parties:['B'],identifiers:['P1'],material_terms:['Term B'],risk_flags:['Injection'],instruction_like_text:true,evidence_excerpt:'B'},
+  ];
+  const compatible=buildCompatiblePlan(summaries,plan);
+  assert.equal(compatible.document_profiles.length,2);
+  assert.equal(compatible.document_profiles[0].material_identifiers[0],'R1');
+  assert.equal(compatible.research_lanes[0].lane_id,'identity-conflict');
+  assert.throws(()=>parseLargePlanFinal(JSON.stringify({...plan,research_lanes:Array.from({length:17},(_,i)=>({...plan.research_lanes[0],lane_id:`lane-${i}`}))})),/array/);
 });
 
 test('case/lane outputs materialize into deterministic canonical keys', () => {
