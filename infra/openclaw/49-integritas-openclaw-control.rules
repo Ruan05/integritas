@@ -1,5 +1,5 @@
 // Allow only bounded systemd actions for the dedicated Integritas control worker:
-// restart the Gateway, or start/stop a UUID-scoped investigation oneshot.
+// restart the Gateway, start/stop a UUID-scoped investigation oneshot, or start an exact-SHA release oneshot.
 polkit.addRule(function(action, subject) {
   if (action.id === "org.freedesktop.systemd1.manage-units" &&
       subject.user === "integritas-control") {
@@ -10,6 +10,10 @@ polkit.addRule(function(action, subject) {
     }
     if ((verb === "start" || verb === "stop") &&
         /^integritas-openclaw-investigation@[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.service$/.test(unit)) {
+      return polkit.Result.YES;
+    }
+    if (verb === "start" &&
+        /^integritas-release-deploy@[0-9a-f]{40}\.service$/.test(unit)) {
       return polkit.Result.YES;
     }
   }
