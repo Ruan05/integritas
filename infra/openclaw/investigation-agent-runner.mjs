@@ -16,7 +16,7 @@ const MAX_AGENT_ENVELOPE_BYTES = 5 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
 
 const NVIDIA_PRIMARY = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
-const GROQ_PRIMARY = 'integritas-groq/openai/gpt-oss-120b';
+const NVIDIA_LIGHTNING = 'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b';
 const FREE_FALLBACKS = [
   'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
   'integritas-openrouter/openrouter/free',
@@ -47,8 +47,8 @@ function routes(primary, fallbacks) {
   });
 }
 
-const SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, [GROQ_PRIMARY, ...FREE_FALLBACKS]);
-const REAL_MODEL_ROUTES = routes(GROQ_PRIMARY, []);
+const SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, [NVIDIA_LIGHTNING, ...FREE_FALLBACKS]);
+const REAL_MODEL_ROUTES = routes(NVIDIA_PRIMARY, [NVIDIA_LIGHTNING]);
 
 const jobId = process.argv[2] ?? '';
 if (!UUID.test(jobId)) throw new Error('invalid investigation job id');
@@ -64,8 +64,9 @@ if (trustedForensics?.schema_version !== 1 || trustedForensics?.tool !== 'integr
 const trustedSynthetic = isTrustedSyntheticValidationManifest(manifest);
 const route = (trustedSynthetic ? SYNTHETIC_MODEL_ROUTES : REAL_MODEL_ROUTES)[manifest.depth];
 if (!route) throw new Error('invalid investigation depth');
-if (!trustedSynthetic && (route.planner.model !== GROQ_PRIMARY || route.planner.fallbacks.length !== 0)) {
-  throw new Error('real investigations must use only privacy-approved production providers');
+if (!trustedSynthetic && (route.planner.model !== NVIDIA_PRIMARY
+  || route.planner.fallbacks.some((model) => !model.startsWith('nvidia/nvidia/')))) {
+  throw new Error('real investigations must use only direct NVIDIA production routes');
 }
 
 const env = {
@@ -75,7 +76,7 @@ const env = {
   PATH: '/opt/openclaw/bin:/usr/bin:/bin',
   LANG: 'C',
   ...Object.fromEntries(
-    ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY', 'GROQ_API_KEY']
+    ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY']
       .filter((name) => process.env[name])
       .map((name) => [name, process.env[name]]),
   ),
