@@ -77,6 +77,18 @@ select pg_temp.assert_true(
   'resumed incomplete investigation leases the same durable command'
 );
 
+-- A resumed large runner may replay an earlier phase before reaching
+-- the retained researching/drafting checkpoint. This must not regress state.
+select public.integritas_checkpoint_case_investigation(
+  :'retry_control_command_id'::uuid,'oracle-primary',:'retry_case_job_id'::uuid,
+  1,'analyzing_documents',90,'{}'::jsonb
+);
+select pg_temp.assert_true(
+  (select stage='drafting_report' and progress=90
+   from public.integritas_case_jobs where id=:'retry_case_job_id'::uuid),
+  'stale recovery checkpoint is an idempotent no-op'
+);
+
 select public.integritas_checkpoint_case_investigation(
   :'retry_control_command_id'::uuid,'oracle-primary',:'retry_case_job_id'::uuid,
   1,'completed',100,'{}'::jsonb
