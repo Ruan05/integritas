@@ -617,6 +617,9 @@ Deno.serve(async (req) => {
     if (action === 'enqueue') {
       const commandType = typeof body.command_type === 'string' ? body.command_type : '';
       if (!CONNECTOR_COMMANDS.has(commandType)) return json({ error: 'command_not_allowed' }, 400, origin);
+      if (commandType === 'deploy_verified_update' && principal.kind !== 'connector') {
+        return json({ error: 'action_not_allowed' }, 403, origin);
+      }
       const payload = isObject(body.payload) ? body.payload : {};
       if (commandType === 'deploy_verified_update') {
         const keys = Object.keys(payload);
