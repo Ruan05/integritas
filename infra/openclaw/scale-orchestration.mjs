@@ -325,6 +325,145 @@ export function applyRepairPatch(bundle, patch) {
   return result;
 }
 
+
+const DELTA_FIELDS = new Set([
+  'entity_updates', 'source_additions', 'finding_additions', 'finding_updates',
+  'relationship_additions', 'relationship_updates', 'check_additions', 'check_updates',
+  'contradiction_additions', 'unresolved_additions', 'limitations', 'warnings',
+]);
+
+function boundedRows(value, label, max) {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.length > max) throw new Error(`${label} is invalid`);
+  return value;
+}
+
+function uniqueAdditionKeys(rows, field, existing, label) {
+  const seen = new Set();
+  for (const row of rows) {
+    if (!row || Array.isArray(row) || typeof row !== 'object') throw new Error(`${label} row is invalid`);
+    const key = row[field];
+    if (!KEY.test(String(key ?? '')) || existing.has(key) || seen.has(key)) throw new Error(`${label} key is invalid or duplicate`);
+    seen.add(key);
+  }
+}
+
+export function validateEvidenceDelta(value, bundle) {
+  if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('evidence delta must be an object');
+  if (Object.keys(value).some((key) => !DELTA_FIELDS.has(key))) throw new Error('evidence delta contains unknown fields');
+
+  const entityKeys = new Set((bundle.entities ?? []).map((row) => row.entity_key));
+  const sourceKeys = new Set((bundle.sources ?? []).map((row) => row.source_key));
+  const findingKeys = new Set((bundle.findings ?? []).map((row) => row.finding_key));
+  const relationshipKeys = new Set((bundle.relationships ?? []).map((row) => row.relationship_key));
+  const checkKeys = new Set((bundle.checks ?? []).map((row) => row.check_key));
+  const contradictionKeys = new Set((bundle.contradictions ?? []).map((row) => row.contradiction_key));
+  const unresolvedKeys = new Set((bundle.unresolved_checks ?? []).map((row) => row.unresolved_key));
+
+  const out = {
+    entity_updates: boundedRows(value.entity_updates, 'entity_updates', 80),
+    source_additions: boundedRows(value.source_additions, 'source_additions', 120),
+    finding_additions: boundedRows(value.finding_additions, 'finding_additions', 120),
+    finding_updates: boundedRows(value.finding_updates, 'finding_updates', 120),
+    relationship_additions: boundedRows(value.relationship_additions, 'relationship_additions', 80),
+    relationship_updates: boundedRows(value.relationship_updates, 'relationship_updates', 80),
+    check_additions: boundedRows(value.check_additions, 'check_additions', 120),
+    check_updates: boundedRows(value.check_updates, 'check_updates', 120),
+    contradiction_additions: boundedRows(value.contradiction_additions, 'contradiction_additions', 80),
+    unresolved_additions: boundedRows(value.unresolved_additions, 'unresolved_additions', 120),
+    limitations: boundedRows(value.limitations, 'limitations', 80),
+    warnings: boundedRows(value.warnings, 'warnings', 80),
+  };
+
+  for (const row of out.entity_updates) {
+    if (!row || typeof row !== 'object' || Array.isArray(row) || !entityKeys.has(row.entity_key)) throw new Error('entity update key is invalid');
+    const allowed = new Set(['entity_key', 'aliases', 'identifiers', 'match_status', 'confidence']);
+    if (Object.keys(row).some((key) => !allowed.has(key))) throw new Error('entity update contains unknown fields');
+    if (row.match_status === 'verified') {
+      const original = bundle.entities.find((item) => item.entity_key === row.entity_key);
+      if (original?.match_status !== 'verified') throw new Error('evidence delta cannot upgrade entity verification without pre-existing verified evidence');
+    }
+  }
+
+  uniqueAdditionKeys(out.source_additions, 'source_key', sourceKeys, 'source addition');
+  uniqueAdditionKeys(out.finding_additions, 'finding_key', findingKeys, 'finding addition');
+  uniqueAdditionKeys(out.relationship_additions, 'relationship_key', relationshipKeys, 'relationship addition');
+  uniqueAdditionKeys(out.check_additions, 'check_key', checkKeys, 'check addition');
+  uniqueAdditionKeys(out.contradiction_additions, 'contradiction_key', contradictionKeys, 'contradiction addition');
+  uniqueAdditionKeys(out.unresolved_additions, 'unresolved_key', unresolvedKeys, 'unresolved addition');
+
+  for (const row of out.finding_updates) {
+    if (!row || typeof row !== 'object' || Array.isArray(row) || !findingKeys.has(row.finding_key)) throw new Error('finding update key is invalid');
+    const allowed = new Set(['finding_key', 'claim', 'evidence_status', 'materiality', 'reliability', 'evidence_excerpt']);
+    if (Object.keys(row).some((key) => !allowed.has(key))) throw new Error('finding update contains unknown fields');
+    if (row.evidence_status === 'verified') {
+      const original = bundle.findings.find((item) => item.finding_key === row.finding_key);
+      if (original?.evidence_status !== 'verified') throw new Error('evidence delta cannot upgrade a finding to verified without pre-existing verified evidence');
+    }
+  }
+
+  for (const row of out.relationship_updates) {
+    if (!row || typeof row !== 'object' || Array.isArray(row) || !relationshipKeys.has(row.relationship_key)) throw new Error('relationship update key is invalid');
+    const allowed = new Set(['relationship_key', 'claim', 'evidence_status', 'confidence']);
+    if (Object.keys(row).some((key) => !allowed.has(key))) throw new Error('relationship update contains unknown fields');
+    if (row.evidence_status === 'verified') {
+      const original = bundle.relationships.find((item) => item.relationship_key === row.relationship_key);
+      if (original?.evidence_status !== 'verified') throw new Error('evidence delta cannot upgrade a relationship to verified without pre-existing verified evidence');
+    }
+  }
+
+  for (const row of out.check_updates) {
+    if (!row || typeof row !== 'object' || Array.isArray(row) || !checkKeys.has(row.check_key)) throw new Error('check update key is invalid');
+    const allowed = new Set(['check_key', 'status', 'outcome']);
+    if (Object.keys(row).some((key) => !allowed.has(key))) throw new Error('check update contains unknown fields');
+  }
+
+  for (const row of [...out.limitations, ...out.warnings]) {
+    if (typeof row !== 'string' || row.length > 4000) throw new Error('evidence delta text item is invalid');
+  }
+  return clone(out);
+}
+
+export function applyEvidenceDelta(bundle, value) {
+  const delta = validateEvidenceDelta(value, bundle);
+  const result = clone(bundle);
+
+  const entities = new Map(result.entities.map((row) => [row.entity_key, row]));
+  for (const update of delta.entity_updates) {
+    const current = entities.get(update.entity_key);
+    if (update.aliases) current.aliases = uniq([...(current.aliases ?? []), ...update.aliases], 100);
+    if (update.identifiers && typeof update.identifiers === 'object' && !Array.isArray(update.identifiers)) {
+      current.identifiers = { ...(current.identifiers ?? {}) };
+      for (const [key, next] of Object.entries(update.identifiers)) {
+        current.identifiers[key] = mergeIdentifierValues(current.identifiers[key], next);
+      }
+    }
+    for (const key of ['match_status', 'confidence']) if (update[key] !== undefined) current[key] = clone(update[key]);
+  }
+
+  const sources = new Set(result.sources.map((row) => row.source_key));
+  for (const row of delta.source_additions) { result.sources.push(clone(row)); sources.add(row.source_key); }
+
+  const findings = new Map(result.findings.map((row) => [row.finding_key, row]));
+  for (const row of delta.finding_additions) { result.findings.push(clone(row)); findings.set(row.finding_key, result.findings.at(-1)); }
+  for (const update of delta.finding_updates) Object.assign(findings.get(update.finding_key), clone(update));
+
+  const relationships = new Map(result.relationships.map((row) => [row.relationship_key, row]));
+  for (const row of delta.relationship_additions) { result.relationships.push(clone(row)); relationships.set(row.relationship_key, result.relationships.at(-1)); }
+  for (const update of delta.relationship_updates) Object.assign(relationships.get(update.relationship_key), clone(update));
+
+  const checks = new Map(result.checks.map((row) => [row.check_key, row]));
+  for (const row of delta.check_additions) { result.checks.push(clone(row)); checks.set(row.check_key, result.checks.at(-1)); }
+  for (const update of delta.check_updates) Object.assign(checks.get(update.check_key), clone(update));
+
+  for (const row of delta.contradiction_additions) result.contradictions.push(clone(row));
+  for (const row of delta.unresolved_additions) result.unresolved_checks.push(clone(row));
+  result.limitations = uniq([...(result.limitations ?? []), ...delta.limitations], 100);
+  result.execution.warnings = uniq([...(result.execution?.warnings ?? []), ...delta.warnings], 100);
+  if (result.unresolved_checks.length || result.checks.some((row) => row.status !== 'complete')) result.execution.terminal_outcome = 'incomplete';
+  return result;
+}
+
 export function reportSectionsForDepth(depth) {
   const profile = DEPTH_SCALE[depth];
   if (!profile) throw new Error('invalid report depth');
