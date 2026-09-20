@@ -9,8 +9,7 @@ export const ALLOWED_COMMANDS = new Set([
   'openclaw_status',
   'restart_openclaw',
   'verify_runtime',
-  'deploy_release',
-  'release_status',
+  'deploy_verified_update',
   'run_case_investigation',
 ]);
 
@@ -31,7 +30,7 @@ export function validateCommand(command) {
   }
   if (JSON.stringify(payload).length > 32768) throw new Error('payload too large');
 
-  if (command.command_type === 'deploy_release') {
+  if (command.command_type === 'deploy_verified_update') {
     const allowed = new Set(['release_sha']);
     for (const key of Object.keys(payload)) {
       if (!allowed.has(key)) throw new Error(`unexpected payload key: ${key}`);
@@ -39,10 +38,6 @@ export function validateCommand(command) {
     if (typeof payload.release_sha !== 'string' || !/^[0-9a-f]{40}$/.test(payload.release_sha)) {
       throw new Error('invalid release_sha');
     }
-  }
-
-  if (command.command_type === 'release_status' && Object.keys(payload).length > 0) {
-    throw new Error('release_status payload must be empty');
   }
 
   if (command.command_type === 'run_case_investigation') {
@@ -107,28 +102,11 @@ export async function executeCommand(command, {
       return { ok: true, summary: result.stdout.slice(-4000) };
     }
 
-    case 'deploy_release': {
+    case 'deploy_verified_update': {
       const releaseSha = validated.payload.release_sha;
       const unit = `integritas-release-deploy@${releaseSha}.service`;
       await runner('/usr/bin/systemctl', ['start', '--no-block', unit]);
       return { ok: true, accepted: true, release_sha: releaseSha, unit };
-    }
-
-    case 'release_status': {
-      const [release, current, gateway, worker] = await Promise.all([
-        runner('/usr/bin/cat', ['/opt/integritas/deployed-release']).catch(() => ({ stdout: 'unknown', stderr: '' })),
-        runner('/usr/bin/readlink', ['-f', '/opt/integritas/current']).catch(() => ({ stdout: 'unknown', stderr: '' })),
-        runner('/usr/bin/systemctl', ['is-active', 'openclaw-gateway.service']).catch(() => ({ stdout: 'inactive', stderr: '' })),
-        runner('/usr/bin/systemctl', ['is-active', 'integritas-control-worker.service']).catch(() => ({ stdout: 'inactive', stderr: '' })),
-      ]);
-      const deployed = release.stdout.trim();
-      return {
-        ok: /^[0-9a-f]{40}$/.test(deployed),
-        deployed_release: deployed.slice(0, 80),
-        current_release_path: current.stdout.trim().slice(0, 300),
-        gateway_status: gateway.stdout.trim().slice(0, 80),
-        worker_status: worker.stdout.trim().slice(0, 80),
-      };
     }
 
     case 'run_case_investigation':
