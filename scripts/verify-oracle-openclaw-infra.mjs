@@ -9,9 +9,11 @@ const required = [
   'infra/oracle/provision-always-free-a1.sh',
   'infra/oracle/run-command.sh',
   'infra/oracle/deploy-integritas-release.sh',
+  'infra/oracle/deploy-integritas-controlled.sh',
   'infra/oracle/test-release-rollback.sh',
   'infra/openclaw/install-native.sh',
   'infra/openclaw/openclaw-gateway.service',
+  'infra/openclaw/integritas-release-deploy@.service',
   'infra/openclaw/openclaw.json5',
   'infra/openclaw/integritas-gateway.json5',
   'infra/openclaw/ROLLBACK.md',
@@ -39,6 +41,8 @@ if (!errors.length) {
   const cloudInit = read('infra/oracle/cloud-init-oracle-linux.yaml.tpl');
   const runCommand = read('infra/oracle/run-command.sh');
   const releaseDeploy = read('infra/oracle/deploy-integritas-release.sh');
+  const controlledDeploy = read('infra/oracle/deploy-integritas-controlled.sh');
+  const releaseUnit = read('infra/openclaw/integritas-release-deploy@.service');
   const rollbackTest = read('infra/oracle/test-release-rollback.sh');
   const rollback = read('infra/openclaw/ROLLBACK.md');
   const provision = read('infra/oracle/provision-always-free-a1.sh');
@@ -69,6 +73,15 @@ if (!errors.length) {
     [cloudInit, 'ocarun', 'OCI Run Command user'],
     [runCommand, 'oci instance-agent command create', 'OCI Run Command create call'],
     [releaseDeploy, '[0-9a-f]{40}', 'exact release SHA validation'],
+    [releaseDeploy, 'integritas-release-deploy@.service', 'release-unit rollback management'],
+    [releaseDeploy, 'deploy-integritas-controlled.sh', 'bounded deployment wrapper presence gate'],
+    [releaseUnit, 'ExecStartPre=/usr/bin/sleep 8', 'release command acknowledgement delay'],
+    [releaseUnit, 'ExecStart=/usr/bin/bash /opt/integritas/current/infra/oracle/deploy-integritas-controlled.sh %i', 'fixed bounded release wrapper'],
+    [controlledDeploy, 'SOURCE_REPO=/home/opc/integritas-e2e-investigation', 'fixed approved release repository'],
+    [controlledDeploy, 'APPROVED_BRANCH=integritas-command-center-foundation', 'fixed approved release branch'],
+    [controlledDeploy, 'REMOTE_HEAD=', 'approved branch-head resolution'],
+    [controlledDeploy, 'merge-base --is-ancestor', 'automated forward-only release guard'],
+    [controlledDeploy, 'deploy-integritas-release.sh', 'existing rollback-tested release executor'],
     [releaseDeploy, 'systemctl stop', 'worker quiesce before release switch'],
     [releaseDeploy, 'integritas-openclaw-investigation@*.service', 'active investigation deployment guard'],
     [releaseDeploy, 'rollback()', 'automatic release rollback handler'],
@@ -96,6 +109,9 @@ if (!errors.length) {
   if (runCommand.includes('commandString')) errors.push('OCI Run Command must use TEXT source only; commandString duplication is forbidden');
   if (releaseDeploy.includes('curl ') || releaseDeploy.includes('wget ')) errors.push('release deploy must not fetch executable content from the network');
   if (releaseDeploy.includes('eval ')) errors.push('release deploy must not use eval');
+  if (/\b(curl|wget|eval)\b/.test(controlledDeploy)) errors.push('controlled deploy must not download or evaluate executable content');
+  if (!/\[\[ "\$\{SHA\}" == "\$\{REMOTE_HEAD\}" \]\]/.test(controlledDeploy)) errors.push('controlled deploy must require exact approved branch head');
+  if (!/\^\[0-9a-f\]\{40\}\$/.test(controlledDeploy)) errors.push('controlled deploy must validate an exact lowercase Git SHA');
   if (/\blatest\b/.test(installer)) errors.push('mutable latest release reference is forbidden');
   if (config.includes('/var/run/docker.sock')) errors.push('model config must not expose the Docker socket');
   if (/gsk_[A-Za-z0-9_-]+|sk-or-v1-[A-Za-z0-9_-]+|nvapi-[A-Za-z0-9_-]+/.test(gatewayOverlay)) errors.push('Gateway overlay must not contain provider secret values');
