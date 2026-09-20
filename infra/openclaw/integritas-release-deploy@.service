@@ -1,0 +1,16 @@
+[Unit]
+Description=Integritas bounded release deployment for %i
+After=network-online.target polkit.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStartPre=/usr/bin/sleep 8
+ExecStart=/usr/bin/bash /opt/integritas/current/infra/oracle/deploy-integritas-controlled.sh %i
+TimeoutStartSec=1800
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+UMask=0077
