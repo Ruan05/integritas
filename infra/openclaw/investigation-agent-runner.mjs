@@ -3,6 +3,7 @@ import { chmod, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { parseAgentBundle, parseSingleJsonObject } from './agent-result.mjs';
+import { isTrustedSyntheticValidationManifest } from './synthetic-validation.mjs';
 import { reconcilePlanChecks } from './plan-checks.mjs';
 import { buildDeterministicChecks } from './transaction-checks.mjs';
 
@@ -242,14 +243,6 @@ function boundedStringArray(value, label, maxItems = 40, maxLength = 1000) {
   return value;
 }
 
-
-function isTrustedSyntheticValidationManifest(value) {
-  const meta = value?.case;
-  return !!meta && !Array.isArray(meta) && typeof meta === 'object'
-    && typeof meta.title === 'string' && meta.title.startsWith('[SYNTHETIC] ')
-    && meta.purpose === 'Authorized synthetic production validation only'
-    && meta.authorized_scope === 'Synthetic QA data only; no real-person or transaction decision';
-}
 
 function parsePlan(stdout) {
   const envelope = parseEnvelope(stdout, 'planner');
