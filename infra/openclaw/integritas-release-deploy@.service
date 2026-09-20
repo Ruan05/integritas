@@ -12,5 +12,4 @@ ExecStart=/usr/bin/bash /opt/integritas/current/infra/oracle/deploy-integritas-c
 TimeoutStartSec=1800
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectHome=true
 UMask=0077
