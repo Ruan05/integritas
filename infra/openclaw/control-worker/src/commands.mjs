@@ -9,6 +9,7 @@ export const ALLOWED_COMMANDS = new Set([
   'openclaw_status',
   'restart_openclaw',
   'verify_runtime',
+  'deploy_verified_update',
   'run_case_investigation',
 ]);
 
@@ -28,6 +29,16 @@ export function validateCommand(command) {
     if (FORBIDDEN_PAYLOAD_KEYS.has(key)) throw new Error(`forbidden payload key: ${key}`);
   }
   if (JSON.stringify(payload).length > 32768) throw new Error('payload too large');
+
+  if (command.command_type === 'deploy_verified_update') {
+    const allowed = new Set(['release_sha']);
+    for (const key of Object.keys(payload)) {
+      if (!allowed.has(key)) throw new Error(`unexpected payload key: ${key}`);
+    }
+    if (typeof payload.release_sha !== 'string' || !/^[0-9a-f]{40}$/.test(payload.release_sha)) {
+      throw new Error('invalid release_sha');
+    }
+  }
 
   if (command.command_type === 'run_case_investigation') {
     const allowed = new Set(['case_id', 'case_job_id', 'case_revision', 'depth']);
@@ -89,6 +100,13 @@ export async function executeCommand(command, {
     case 'verify_runtime': {
       const result = await runner('/usr/bin/bash', [`${repoRoot}/infra/oracle/verify-host.sh`], { cwd: repoRoot });
       return { ok: true, summary: result.stdout.slice(-4000) };
+    }
+
+    case 'deploy_verified_update': {
+      const releaseSha = validated.payload.release_sha;
+      const unit = `integritas-release-deploy@${releaseSha}.service`;
+      await runner('/usr/bin/systemctl', ['start', '--no-block', unit]);
+      return { ok: true, accepted: true, release_sha: releaseSha, unit };
     }
 
     case 'run_case_investigation':

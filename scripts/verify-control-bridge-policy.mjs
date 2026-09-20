@@ -12,6 +12,8 @@ const edge = read('supabase/functions/integritas-control/index.ts');
 const verifyHost = read('infra/oracle/verify-host.sh');
 const investigation = read('infra/openclaw/control-worker/src/investigation.mjs');
 const investigationUnit = read('infra/openclaw/integritas-openclaw-investigation@.service');
+const releaseUnit = read('infra/openclaw/integritas-release-deploy@.service');
+const controlledDeploy = read('infra/oracle/deploy-integritas-controlled.sh');
 const investigationRunner = read('infra/openclaw/investigation-agent-runner.mjs');
 const investigationConfig = read('infra/openclaw/integritas-investigation.json5');
 const installer = read('infra/openclaw/install-control-worker.sh');
@@ -34,6 +36,9 @@ assert.ok(!polkit.includes('polkit.Result.AUTH_ADMIN_KEEP'), 'Polkit rule must n
 assert.match(polkit, /integritas-openclaw-investigation@/, 'Polkit must name only the investigation runner template');
 assert.match(polkit, /verb === "start"/, 'Polkit must allow runner start only');
 assert.match(polkit, /\[0-9a-f\]\{8\}/, 'Polkit runner unit match must constrain UUID instances');
+assert.match(polkit, /integritas-release-deploy@/, 'Polkit must name only the bounded release template');
+assert.match(polkit, /\[0-9a-f\]\{40\}/, 'Polkit release unit match must constrain exact lowercase Git SHAs');
+assert.match(polkit, /verb === "start"[\s\S]*integritas-release-deploy@/, 'Polkit release permission must be start-only');
 
 assert.match(commands, /execFile/, 'bounded worker may use execFile');
 assert.ok(!commands.match(/\bexec\s*\(/), 'generic child_process exec must not be used');
@@ -42,6 +47,10 @@ assert.ok(!commands.includes('/var/run/docker.sock'), 'worker dispatcher must no
 for (const prohibited of ['exec_shell', 'read_environment', 'read_secret', 'plugin_install', 'send_email', 'delete_evidence']) {
   assert.ok(!commands.includes(`'${prohibited}'`), `worker must not implement ${prohibited}`);
 }
+assert.ok(commands.includes("'deploy_verified_update'"), 'worker must expose only the named bounded release command');
+assert.match(commands, /\^\[0-9a-f\]\{40\}\$/, 'worker must validate one exact lowercase release SHA');
+assert.match(commands, /integritas-release-deploy@\$\{releaseSha\}\.service/, 'worker must map release SHA only to the fixed systemd template');
+assert.match(commands, /\['start', '--no-block', unit\]/, 'worker release command must only start the fixed oneshot asynchronously');
 
 assert.match(investigationUnit, /^User=openclaw$/m, 'investigation runner must execute as openclaw');
 assert.match(investigationUnit, /^Group=integritas-openclaw$/m, 'investigation runner must use the shared spool group as its primary group');
@@ -51,6 +60,25 @@ assert.match(investigationUnit, /^WorkingDirectory=\/var\/lib\/integritas-runner
 assert.match(investigationUnit, /^NoNewPrivileges=true$/m, 'investigation runner must retain NoNewPrivileges');
 assert.match(investigationUnit, /^ProtectSystem=strict$/m, 'investigation runner must retain a read-only system view');
 assert.ok(!investigationUnit.includes('/var/run/docker.sock'), 'investigation unit must not mount the Docker socket explicitly');
+assert.match(releaseUnit, /^User=root$/m, 'bounded release unit must run the fixed deployment wrapper as root');
+assert.match(releaseUnit, /^ExecStartPre=\/usr\/bin\/sleep 8$/m, 'bounded release unit must delay long enough for command acknowledgement');
+assert.match(releaseUnit, /^ExecStart=\/usr\/bin\/bash \/opt\/integritas\/current\/infra\/oracle\/deploy-integritas-controlled\.sh %i$/m, 'bounded release unit must execute only the fixed SHA wrapper');
+assert.match(releaseUnit, /^NoNewPrivileges=true$/m, 'bounded release unit must retain no-new-privileges');
+assert.match(releaseUnit, /^ProtectHome=true$/m, 'bounded release unit must not read operator home directories');
+assert.ok(!releaseUnit.includes('EnvironmentFile='), 'bounded release unit must not accept caller-controlled environment files');
+assert.match(controlledDeploy, /^SOURCE_URL=https:\/\/github\.com\/Ruan05\/integritas\.git$/m, 'controlled deployment must pin the approved GitHub repository');
+assert.match(controlledDeploy, /^APPROVED_BRANCH=integritas-command-center-foundation$/m, 'controlled deployment must pin the approved feature branch');
+assert.match(controlledDeploy, /git init --quiet "\$\{SOURCE_REPO\}"/, 'controlled deployment must use an isolated root-owned checkout');
+assert.match(controlledDeploy, /--depth=512/, 'controlled deployment must fetch bounded approved branch history');
+assert.ok(!controlledDeploy.includes('/home/opc'), 'controlled deployment must not trust the mutable operator checkout');
+assert.ok(!controlledDeploy.includes('runuser'), 'controlled deployment must not cross into an operator-owned Git workspace');
+assert.match(controlledDeploy, /\^\[0-9a-f\]\{40\}\$/, 'controlled deployment must validate one exact lowercase Git SHA');
+assert.match(controlledDeploy, /REMOTE_HEAD=/, 'controlled deployment must resolve the current approved remote branch head');
+assert.match(controlledDeploy, /\[\[ "\$\{SHA\}" == "\$\{REMOTE_HEAD\}" \]\]/, 'controlled deployment must require the requested SHA to equal the approved branch head');
+assert.match(controlledDeploy, /merge-base --is-ancestor/, 'controlled deployment must refuse automated non-fast-forward releases');
+assert.match(controlledDeploy, /git -C "\$\{SOURCE_REPO\}" archive "\$\{SHA\}"/, 'controlled deployment must extract the target release script from the exact requested commit');
+assert.ok(!controlledDeploy.match(/\b(eval|curl|wget)\b/), 'controlled deployment must not evaluate strings or download executable content');
+
 assert.match(investigationRunner, /const args = \[\s*'agent', 'exec'/, 'runner arguments must begin with OpenClaw agent exec');
 assert.match(investigationRunner, /execFileAsync\('\/opt\/openclaw\/bin\/openclaw', buildArgs\(messageFile, phaseRoute\)/, 'runner must execute only the fixed OpenClaw binary with bounded phase arguments');
 assert.match(investigationRunner, /--config/, 'runner must pin the dedicated exec config');
@@ -117,6 +145,9 @@ assert.match(edge, /x-integritas-worker-token/, 'Oracle worker requires separate
 assert.ok(!edge.includes("'access-control-allow-origin': '*'"), 'control API must not use wildcard CORS');
 assert.ok(!edge.includes('Deno.Command'), 'Edge Function must not execute host commands');
 assert.ok(!edge.includes('child_process'), 'Edge Function must not execute local processes');
+assert.ok(edge.includes("'deploy_verified_update'"), 'control API must explicitly name the bounded verified-update command');
+assert.match(edge, /commandType === 'deploy_verified_update' && principal\.kind !== 'connector'/, 'verified deployment must be connector-only');
+assert.match(edge, /invalid_release_sha/, 'control API must reject malformed verified-release payloads');
 for (const prohibited of ['exec_shell', 'read_environment', 'read_secret', 'plugin_install', 'send_email', 'delete_evidence']) {
   assert.ok(!edge.includes(`'${prohibited}'`), `control API must not implement ${prohibited}`);
 }
@@ -126,7 +157,7 @@ assert.match(verifyHost, /\/usr\/sbin\/ss -ltnp/, 'runtime verifier must use an 
 assert.ok(!verifyHost.includes('docker info'), 'runtime verifier must not require Docker daemon socket access');
 assert.ok(!verifyHost.match(/docker ps\b/), 'runtime verifier must not enumerate containers through the Docker socket');
 
-for (const file of [commands, worker, client, service, edge, investigationRunner, investigationConfig, installer, investigationUnit]) {
+for (const file of [commands, worker, client, service, edge, investigationRunner, investigationConfig, installer, investigationUnit, releaseUnit, controlledDeploy]) {
   assert.ok(!file.match(/sb_service_role_[A-Za-z0-9_-]+/), 'service-role credential literal must not be committed');
   assert.ok(!file.match(/sk-[A-Za-z0-9_-]{16,}/), 'provider/API key literal must not be committed');
   assert.ok(!file.match(/gsk_[A-Za-z0-9_-]{16,}/), 'Groq key literal must not be committed');

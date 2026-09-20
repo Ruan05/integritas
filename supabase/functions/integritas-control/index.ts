@@ -29,6 +29,7 @@ const CONNECTOR_COMMANDS = new Set([
   'openclaw_status',
   'restart_openclaw',
   'verify_runtime',
+  'deploy_verified_update',
 ]);
 const CASE_INVESTIGATION_COMMANDS = new Set(['run_case_investigation']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -616,7 +617,17 @@ Deno.serve(async (req) => {
     if (action === 'enqueue') {
       const commandType = typeof body.command_type === 'string' ? body.command_type : '';
       if (!CONNECTOR_COMMANDS.has(commandType)) return json({ error: 'command_not_allowed' }, 400, origin);
+      if (commandType === 'deploy_verified_update' && principal.kind !== 'connector') {
+        return json({ error: 'action_not_allowed' }, 403, origin);
+      }
       const payload = isObject(body.payload) ? body.payload : {};
+      if (commandType === 'deploy_verified_update') {
+        const keys = Object.keys(payload);
+        if (keys.length !== 1 || keys[0] !== 'release_sha'
+          || typeof payload.release_sha !== 'string' || !/^[0-9a-f]{40}$/.test(payload.release_sha)) {
+          return json({ error: 'invalid_release_sha' }, 400, origin);
+        }
+      }
       const forbiddenKeys = ['shell', 'command', 'cmd', 'env', 'sudo', 'secret', 'token', 'password', 'dockerSocket', 'docker_socket'];
       if (forbiddenKeys.some((key) => Object.prototype.hasOwnProperty.call(payload, key))) {
         return json({ error: 'forbidden_payload_field' }, 400, origin);

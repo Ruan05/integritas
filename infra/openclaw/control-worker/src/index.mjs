@@ -21,6 +21,15 @@ function readPackagedWorkerVersion() {
 }
 const workerVersion = readPackagedWorkerVersion();
 
+function readDeployedRelease() {
+  try {
+    const value = readFileSync('/opt/integritas/deployed-release', 'utf8').trim();
+    return /^[0-9a-f]{40}$/.test(value) ? value : 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 if (!baseUrl || !workerToken) {
   console.error('INTEGRITAS_CONTROL_URL and a worker-token credential are required');
   process.exit(2);
@@ -57,6 +66,8 @@ async function sendHeartbeat() {
         bounded_control: true, arbitrary_shell: false, docker_socket: false,
         case_investigation: true, signed_manifests: true, durable_checkpoints: true,
         deterministic_qa: true, atomic_bundle_commit: true,
+        bounded_release_deploy: true,
+        deployed_release: readDeployedRelease(),
       },
     });
   } catch (error) {

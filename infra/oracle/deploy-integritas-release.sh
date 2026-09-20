@@ -24,6 +24,7 @@ MANAGED_FILES=(
   /etc/systemd/system/integritas-control-worker.service
   /etc/systemd/system/openclaw-gateway.service
   /etc/systemd/system/integritas-openclaw-investigation@.service
+  /etc/systemd/system/integritas-release-deploy@.service
   /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
   /opt/integritas/deployed-release
 )
@@ -93,6 +94,8 @@ for required in \
   infra/openclaw/integritas-control-worker.service \
   infra/openclaw/openclaw-gateway.service \
   infra/openclaw/integritas-openclaw-investigation@.service \
+  infra/openclaw/integritas-release-deploy@.service \
+  infra/oracle/deploy-integritas-controlled.sh \
   tools/dd/quality_v1.py \
   tools/dd/forensics_v1.py; do
   [[ -f "${NEW}/${required}" ]] || { echo "Release is missing ${required}." >&2; exit 6; }

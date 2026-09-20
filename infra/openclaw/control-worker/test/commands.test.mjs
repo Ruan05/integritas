@@ -46,6 +46,43 @@ test('verify_runtime uses the fixed repository verifier path', async () => {
   assert.deepEqual(calls[0][1], ['/srv/integritas/infra/oracle/verify-host.sh']);
 });
 
+
+test('deploy_verified_update accepts only one exact lowercase Git SHA', () => {
+  const releaseSha = 'a'.repeat(40);
+  const command = validateCommand({
+    command_type: 'deploy_verified_update',
+    payload: { release_sha: releaseSha },
+  });
+  assert.equal(command.payload.release_sha, releaseSha);
+  assert.throws(() => validateCommand({
+    command_type: 'deploy_verified_update',
+    payload: { release_sha: 'A'.repeat(40) },
+  }), /release_sha/);
+  assert.throws(() => validateCommand({
+    command_type: 'deploy_verified_update',
+    payload: { release_sha: releaseSha, branch: 'main' },
+  }), /unexpected payload key/);
+});
+
+test('deploy_verified_update starts only the exact SHA-scoped release unit', async () => {
+  const calls = [];
+  const releaseSha = 'b'.repeat(40);
+  const runner = async (file, args) => {
+    calls.push([file, args]);
+    return { stdout: '', stderr: '' };
+  };
+  const result = await executeCommand({
+    command_type: 'deploy_verified_update',
+    payload: { release_sha: releaseSha },
+  }, { runner });
+  assert.equal(result.accepted, true);
+  assert.equal(result.release_sha, releaseSha);
+  assert.deepEqual(calls, [[
+    '/usr/bin/systemctl',
+    ['start', '--no-block', `integritas-release-deploy@${releaseSha}.service`],
+  ]]);
+});
+
 test('run_case_investigation accepts only bounded UUID payloads', () => {
   const command = validateCommand({
     command_type: 'run_case_investigation',

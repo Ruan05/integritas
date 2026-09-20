@@ -8,15 +8,17 @@ test('worker release attests investigation capabilities from the packaged releas
   const pkg = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
   const source = await readFile(new URL('src/index.mjs', root), 'utf8');
 
-  assert.equal(pkg.version, '0.3.7');
+  assert.equal(pkg.version, '0.3.8');
   assert.match(source, /readPackagedWorkerVersion/);
   assert.match(source, /new URL\('\.\.\/package\.json', import\.meta\.url\)/);
   assert.doesNotMatch(source, /INTEGRITAS_CONTROL_WORKER_VERSION/);
-  for (const capability of ['case_investigation', 'signed_manifests', 'durable_checkpoints', 'deterministic_qa', 'atomic_bundle_commit']) {
+  for (const capability of ['case_investigation', 'signed_manifests', 'durable_checkpoints', 'deterministic_qa', 'atomic_bundle_commit', 'bounded_release_deploy']) {
     assert.match(source, new RegExp(`${capability}: true`));
   }
   assert.match(source, /arbitrary_shell: false/);
   assert.match(source, /docker_socket: false/);
+  assert.match(source, /deployed_release: readDeployedRelease\(\)/);
+  assert.match(source, /\/opt\/integritas\/deployed-release/);
 
   const service = await readFile(new URL('../../integritas-control-worker.service', import.meta.url), 'utf8');
   assert.match(service, /^Group=integritas-openclaw$/m);
