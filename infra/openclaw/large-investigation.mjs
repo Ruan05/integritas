@@ -131,6 +131,70 @@ export function buildSubmittedSources(manifest, documentSummaries, retrievedAt) 
   });
 }
 
+export function parseLargePlanFinal(finalText, { allowZeroLanes = false } = {}) {
+  const parsed = obj(parseSingleJsonObject(finalText, 'large plan final response'), 'large plan');
+  allowedKeys(parsed, new Set([
+    'case_profile', 'research_lanes', 'cross_document_tests', 'specialist_checks', 'automatic_stop_conditions',
+  ]), 'large plan');
+  const profile = obj(parsed.case_profile, 'large plan case_profile');
+  allowedKeys(profile, new Set([
+    'case_type', 'jurisdictions', 'assets_or_products', 'incoterms',
+    'payment_instruments', 'critical_transaction_features',
+  ]), 'large plan case_profile');
+  str(profile.case_type, 'case_type', 240);
+  stringArray(profile.jurisdictions, 'jurisdictions', 30, 240);
+  stringArray(profile.assets_or_products, 'assets_or_products', 30, 500);
+  stringArray(profile.incoterms, 'incoterms', 20, 160);
+  stringArray(profile.payment_instruments, 'payment_instruments', 30, 240);
+  stringArray(profile.critical_transaction_features, 'critical_transaction_features', 60, 1200);
+
+  const lanes = arr(parsed.research_lanes, 'research_lanes', 16);
+  if (!allowZeroLanes && lanes.length < 1) fail('large plan requires at least one research lane');
+  const seen = new Set();
+  for (const row0 of lanes) {
+    const row = obj(row0, 'research lane');
+    allowedKeys(row, new Set([
+      'lane_id', 'priority', 'question', 'preferred_sources', 'fallback_sources',
+      'tools', 'search_identifiers', 'stop_condition', 'manual_only',
+    ]), 'research lane');
+    key(row.lane_id, 'lane_id');
+    if (seen.has(row.lane_id)) fail('duplicate lane_id');
+    seen.add(row.lane_id);
+    enumValue(row.priority, ['critical','high','medium','low'], 'lane priority');
+    str(row.question, 'lane question', 2000);
+    stringArray(row.preferred_sources, 'preferred_sources', 20, 500);
+    stringArray(row.fallback_sources, 'fallback_sources', 20, 500);
+    stringArray(row.tools, 'lane tools', 12, 80);
+    stringArray(row.search_identifiers, 'search_identifiers', 40, 500);
+    str(row.stop_condition, 'stop_condition', 1500);
+    if (typeof row.manual_only !== 'boolean') fail('lane manual_only is invalid');
+  }
+  stringArray(parsed.cross_document_tests, 'cross_document_tests', 80, 1500);
+  stringArray(parsed.specialist_checks, 'specialist_checks', 80, 1500);
+  stringArray(parsed.automatic_stop_conditions, 'automatic_stop_conditions', 60, 1500);
+  return parsed;
+}
+
+export function buildCompatiblePlan(documentSummaries, largePlan) {
+  return {
+    document_profiles: documentSummaries.map((row) => ({
+      document_id: row.document_id,
+      document_type: row.document_type,
+      purpose: row.material_terms.slice(0, 4).join('; ') || 'Submitted evidence requiring due-diligence assessment.',
+      issuer_claim: row.issuer_claim,
+      parties: row.parties,
+      material_identifiers: row.identifiers,
+      material_terms: row.material_terms,
+      priority_questions: row.risk_flags,
+    })),
+    case_profile: largePlan.case_profile,
+    research_lanes: largePlan.research_lanes,
+    cross_document_tests: largePlan.cross_document_tests,
+    specialist_checks: largePlan.specialist_checks,
+    automatic_stop_conditions: largePlan.automatic_stop_conditions,
+  };
+}
+
 export function parseCaseAnalysisFinal(finalText, allowedDocumentSourceKeys) {
   const parsed = obj(parseSingleJsonObject(finalText, 'case analysis final response'), 'case analysis');
   allowedKeys(parsed, new Set([
