@@ -6,6 +6,19 @@
   },
   agents: {
     defaults: {
+      modelPolicy: {
+        allow: [
+          "opencode-go/kimi-k3",
+          "opencode-go/deepseek-v4-pro",
+          "integritas-openrouter/deepseek/deepseek-v4.1-flash",
+          "integritas-openrouter/z-ai/glm-5.3",
+          "integritas-openrouter/z-ai/glm-5.3-flash",
+          "integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+          "integritas-openrouter/openrouter/free",
+          "nvidia/nvidia/nemotron-3-ultra-550b-a55b",
+          "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b",
+        ],
+      },
       sandbox: {
         mode: "all",
         backend: "docker",
