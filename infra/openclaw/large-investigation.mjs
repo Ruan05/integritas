@@ -25,6 +25,29 @@ function stringArray(value, label, maxItems = 40, maxLength = 1000) {
   for (const row of rows) str(row, label, maxLength, true);
   return rows;
 }
+function plannerNarrativeArray(value, label, kind, maxItems = 80, maxLength = 1500) {
+  const rows = arr(value, label, maxItems);
+  return rows.map((row0, index) => {
+    if (typeof row0 === 'string') return str(row0, label, maxLength, true);
+    const row = obj(row0, `${label} ${index}`);
+    if (kind === 'cross_document_test') {
+      allowedKeys(row, new Set(['test_id','description','expected_outcome']), `${label} ${index}`);
+      str(row.test_id, `${label} ${index} test_id`, 160);
+      str(row.description, `${label} ${index} description`, 1000);
+      str(row.expected_outcome, `${label} ${index} expected_outcome`, 1000, true);
+      return str(`[${row.test_id}] ${row.description} Expected outcome: ${row.expected_outcome}`, label, maxLength, true);
+    }
+    if (kind === 'specialist_check') {
+      allowedKeys(row, new Set(['check_id','specialist','required_action','trigger_condition']), `${label} ${index}`);
+      str(row.check_id, `${label} ${index} check_id`, 160);
+      str(row.specialist, `${label} ${index} specialist`, 300);
+      str(row.required_action, `${label} ${index} required_action`, 1000);
+      str(row.trigger_condition, `${label} ${index} trigger_condition`, 1000, true);
+      return str(`[${row.check_id}] ${row.specialist}: ${row.required_action} Trigger: ${row.trigger_condition}`, label, maxLength, true);
+    }
+    fail(`${label} ${index} has unsupported structured shape`);
+  });
+}
 function allowedKeys(value, allowed, label) {
   for (const key of Object.keys(value)) if (!allowed.has(key)) fail(`${label} contains unknown field ${key}`);
 }
@@ -169,8 +192,12 @@ export function parseLargePlanFinal(finalText, { allowZeroLanes = false } = {}) 
     str(row.stop_condition, 'stop_condition', 1500);
     if (typeof row.manual_only !== 'boolean') fail('lane manual_only is invalid');
   }
-  stringArray(parsed.cross_document_tests, 'cross_document_tests', 80, 1500);
-  stringArray(parsed.specialist_checks, 'specialist_checks', 80, 1500);
+  parsed.cross_document_tests = plannerNarrativeArray(
+    parsed.cross_document_tests, 'cross_document_tests', 'cross_document_test', 80, 1500,
+  );
+  parsed.specialist_checks = plannerNarrativeArray(
+    parsed.specialist_checks, 'specialist_checks', 'specialist_check', 80, 1500,
+  );
   stringArray(parsed.automatic_stop_conditions, 'automatic_stop_conditions', 60, 1500);
   return parsed;
 }
