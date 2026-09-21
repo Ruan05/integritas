@@ -104,6 +104,9 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.match(large, /provider: 'integritas', model: 'deterministic-large-assembly-v2'/, 'final canonical bundle must be assembled deterministically rather than by a model');
   assert.match(large, /failed every validated model route/, 'schema-invalid model output must trigger application-level model failover');
   assert.match(large, /readFile\(path\.join\(jobDir, execName\)/, 'validated phase artifacts must be reused on retry');
+  assert.match(large, /timeoutForModel\(role, model\)/, 'provider routes must use bounded per-provider timeouts');
+  assert.match(large, /openRouterPaidCircuitOpen/, 'credit-limited OpenRouter must open a per-investigation circuit');
+  assert.match(large, /looksLikeProviderCapacityFailure/, 'provider capacity failures must fail over without waiting for every route');
   assert.ok(large.includes("const NVIDIA_ULTRA = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b';"), 'large investigations must use the explicit verified NVIDIA Ultra route');
   assert.ok(large.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';"), 'large research lanes must expose DeepSeek V4.1 Flash');
   assert.ok(large.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';"), 'large planning and critic lanes must expose GLM 5.3');

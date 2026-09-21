@@ -60,6 +60,7 @@ const MAX_OPENROUTER_FREE_USES = 4;
 const MAX_ZEN_FREE_USES = 4;
 let openRouterFallbackUses = 0;
 let zenFallbackUses = 0;
+let openRouterPaidCircuitOpen = false;
 
 const SECTION_HEADINGS = Object.freeze({
   '01': ['# MASTER SUMMARY — READ THIS FIRST', '## DIRECT NEXT STEPS — WHAT TO DO NOW', '## Master Issue Dashboard'],
@@ -137,6 +138,25 @@ function candidates(role, synthetic) {
 }
 function timeoutFor(role) {
   return { shard: 300, plan: 420, analysis: 600, lane: 720, critic: 480, report: 480 }[role] ?? 600;
+}
+
+function isPaidOpenRouterModel(model) {
+  return model.startsWith('integritas-openrouter/') && !FREE_OPENROUTER_MODELS.has(model);
+}
+
+function timeoutForModel(role, model) {
+  // Paid OpenRouter is preferred when healthy, but a credit-limited or unavailable
+  // account must not hold an investigation for the full phase timeout. The next
+  // validated route (direct NVIDIA or a bounded free model) is the recovery path.
+  if (isPaidOpenRouterModel(model)) return Math.min(timeoutFor(role), 120);
+  if (FREE_OPENROUTER_MODELS.has(model) || ZEN_FREE_MODELS.has(model)) return Math.min(timeoutFor(role), 240);
+  return timeoutFor(role);
+}
+
+function looksLikeProviderCapacityFailure(error) {
+  return /(?:402|429|credit|balance|insufficient|quota|rate.?limit|payment|required|capacity|temporarily unavailable)/i.test(
+    String(error?.message ?? error),
+  );
 }
 function agentEnv() {
   const providerNames = ['NVIDIA_API_KEY', 'OPENROUTER_API_KEY', 'OPENCODE_ZEN_API_KEY'];
@@ -221,6 +241,10 @@ async function validated({
   const models = candidates(role, synthetic);
   if (!models.length) throw new Error(`${id}: no configured provider candidate available`);
   for (const [index, model] of models.entries()) {
+    if (openRouterPaidCircuitOpen && isPaidOpenRouterModel(model)) {
+      failures.push({ model, error: 'skipped because the paid OpenRouter provider circuit is open for this investigation' });
+      continue;
+    }
     if (ZEN_FREE_MODELS.has(model) && zenFallbackUses >= MAX_ZEN_FREE_USES) {
       failures.push({ model, error: 'skipped because per-investigation OpenCode Zen free fallback budget is exhausted' });
       continue;
@@ -232,7 +256,7 @@ async function validated({
     }
     if (FREE_OPENROUTER_MODELS.has(model)) openRouterFallbackUses += 1;
     try {
-      const raw = await invoke(jobDir, taskName, model, timeoutFor(role), synthetic);
+      const raw = await invoke(jobDir, taskName, model, timeoutForModel(role, model), synthetic);
       await writeAtomic(jobDir, `large-v2-attempt-${safePart(id)}-${index + 1}.json`, raw);
       const envelope = parseEnvelope(raw, id);
       if (!allowExternal && externalTools(envelope).length) throw new Error('phase used forbidden external research');
@@ -240,6 +264,7 @@ async function validated({
       await writeAtomic(jobDir, execName, raw);
       return { envelope, value, reused: false, failures };
     } catch (error) {
+      if (isPaidOpenRouterModel(model) && looksLikeProviderCapacityFailure(error)) openRouterPaidCircuitOpen = true;
       failures.push({ model, error: String(error?.message ?? error).slice(0, 500) });
     }
   }
