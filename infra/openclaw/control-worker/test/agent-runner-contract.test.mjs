@@ -19,9 +19,6 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.match(source, /const NVIDIA_PRIMARY = 'nvidia\/nvidia\/nemotron-3-ultra-550b-a55b'/);
   assert.match(source, /const NVIDIA_LIGHTNING = 'nvidia\/nvidia\/nemotron-3\.5-lightning-30b-a3b'/);
   assert.match(source, /SYNTHETIC_MODEL_ROUTES = routes\(NVIDIA_PRIMARY, \[NVIDIA_LIGHTNING, \.\.\.FREE_FALLBACKS\]\)/);
-  assert.match(source, /REAL_MODEL_ROUTES = routes\(NVIDIA_PRIMARY, \[NVIDIA_LIGHTNING\]\)/);
-  assert.match(source, /real investigations must use only direct NVIDIA production routes/);
-  assert.doesNotMatch(source, /model: 'opencode-go\//);
   assert.match(source, /integritas-openrouter\/nvidia\/nemotron-3-ultra-550b-a55b:free/);
   assert.match(source, /trustedForensics/);
   assert.match(source, /integritas_forensics_v1/);
@@ -125,7 +122,7 @@ test('investigation profile uses only required provider SecretRefs and keeps the
   ]) {
     assert.ok(config.includes(`"${model}"`), `missing routed model allowlist entry: ${model}`);
   }
-  assert.doesNotMatch(config, /opencode-go\//, 'production investigation profile must not expose unfunded OpenCode Go models');
+  assert.ok(config.includes('"opencode-go/kimi-k3": {}'), 'production investigation profile must allow the approved zero-retention real-evidence model');
   assert.doesNotMatch(config, /gsk_[A-Za-z0-9_-]+/);
   assert.doesNotMatch(config, /sk-or-v1-[A-Za-z0-9_-]+/);
   assert.doesNotMatch(config, /nvapi-[A-Za-z0-9_-]+/);
@@ -137,15 +134,14 @@ test('investigation profile uses only required provider SecretRefs and keeps the
   }
 });
 
-test('runner passes only required provider environment names into OpenClaw', async () => {
+test('runner exposes NVIDIA/OpenRouter credentials only to trusted synthetic validation', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
-  for (const name of ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY']) {
-    assert.match(source, new RegExp(`'${name}'`));
-  }
+  assert.ok(source.includes('function agentEnv(trustedSynthetic)'));
+  assert.ok(source.includes("trustedSynthetic ? ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY'] : []"));
+  assert.ok(source.includes('env: agentEnv(trustedSynthetic)'));
   for (const name of ['GROQ_API_KEY', 'GEMINI_API_KEY', 'CEREBRAS_API_KEY', 'EXA_API_KEY', 'HF_TOKEN']) {
     assert.doesNotMatch(source, new RegExp(`'${name}'`));
   }
-  assert.match(source, /filter\(\(name\) => process\.env\[name\]\)/);
   assert.doesNotMatch(source, /process\.env\s*[,}]/);
 });
 
