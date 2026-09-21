@@ -87,7 +87,7 @@ assert.ok(!investigationRunner.includes("'--state-dir'"), 'runner must use OpenC
 assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/, 'runner may discover existing provider credentials only through the bounded OpenClaw environment');
 assert.ok(investigationRunner.includes("const NVIDIA_PRIMARY = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b'"), 'verified explicit NVIDIA Ultra must remain available for bounded fallback');
 assert.ok(investigationRunner.includes("const FREE_FAST = 'integritas-openrouter/nvidia/nemotron-3-super-120b-a12b:free'"), 'verified free Super must remain in the bounded fallback set');
-assert.ok(investigationRunner.includes("SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, FREE_FALLBACKS)"), 'synthetic validation must use only the verified explicit NVIDIA route plus bounded free fallbacks');
+assert.ok(investigationRunner.includes("SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, ACTIVE_FREE_FALLBACKS)"), 'synthetic validation must use the verified explicit NVIDIA route plus conditionally activated bounded free fallbacks');
 assert.ok(!investigationRunner.includes('NVIDIA_LIGHTNING'), 'unhealthy Lightning route must not be auto-selected');
 assert.ok(investigationRunner.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash'"), 'real research must expose DeepSeek V4.1 Flash');
 assert.ok(investigationRunner.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3'"), 'real planning/critic must expose GLM 5.3');
