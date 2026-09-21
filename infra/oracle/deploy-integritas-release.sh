@@ -26,6 +26,7 @@ MANAGED_FILES=(
   /usr/local/sbin/integritas-zen
   /etc/systemd/system/integritas-control-worker.service
   /etc/systemd/system/openclaw-gateway.service
+  /etc/systemd/system/openclaw-browser.service
   /etc/systemd/system/integritas-openclaw-investigation@.service
   /etc/systemd/system/integritas-release-deploy@.service
   /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
@@ -98,6 +99,7 @@ for required in \
   infra/openclaw/integritas-zen.sh \
   infra/openclaw/integritas-control-worker.service \
   infra/openclaw/openclaw-gateway.service \
+  infra/openclaw/openclaw-browser.service \
   infra/openclaw/integritas-openclaw-investigation@.service \
   infra/openclaw/integritas-release-deploy@.service \
   infra/oracle/deploy-integritas-controlled.sh \
@@ -166,6 +168,8 @@ if [[ "${FAULT_INJECT_PHASE}" == "after-install" ]]; then
 fi
 /usr/bin/systemctl restart "${GATEWAY}"
 /usr/bin/systemctl is-active --quiet "${GATEWAY}"
+/usr/bin/systemctl restart openclaw-browser.service
+/usr/bin/systemctl is-active --quiet openclaw-browser.service
 /usr/bin/systemctl restart "${WORKER}"
 worker_stopped=0
 /usr/bin/systemctl is-active --quiet "${WORKER}"
