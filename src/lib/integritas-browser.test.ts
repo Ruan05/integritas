@@ -37,9 +37,9 @@ describe('Integritas browser adapter', () => {
   });
 
   it('rejects oversized or unsupported files before hitting the upload API', () => {
-    expect(MAX_CASE_FILE_BYTES).toBe(5 * 1024 * 1024);
+    expect(MAX_CASE_FILE_BYTES).toBe(50 * 1024 * 1024);
     const oversized = new File([new Uint8Array(MAX_CASE_FILE_BYTES + 1)], 'too-big.pdf', { type: 'application/pdf' });
-    expect(() => validateCaseDocumentSelection(0, [oversized])).toThrow(/5 MB/i);
+    expect(() => validateCaseDocumentSelection(0, [oversized])).toThrow(/50 MB/i);
     const unsupported = new File(['x'], 'payload.exe', { type: 'application/octet-stream' });
     expect(() => validateCaseDocumentSelection(0, [unsupported])).toThrow(/supported evidence file/i);
   });
