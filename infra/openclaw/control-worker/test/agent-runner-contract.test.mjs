@@ -145,6 +145,43 @@ test('investigation profile uses only required provider SecretRefs and keeps the
   ]) {
     assert.ok(config.includes(`"${model}": {}`), `missing optimized real-investigation model: ${model}`);
   }
+  const currentFreeModels = [
+    'integritas-openrouter/cohere/north-mini-code:free',
+    'integritas-openrouter/dots-studio/dots-3-note-preview:free',
+    'integritas-openrouter/google/gemma-4-31b-it:free',
+    'integritas-openrouter/inclusionai/ling-3.0-flash-vl:free',
+    'integritas-openrouter/nex-agi/nex-n2.5-pro:free',
+    'integritas-openrouter/nvidia/nemotron-3-super-120b-a12b:free',
+    'integritas-openrouter/nvidia/nemotron-3.5-lightning:free',
+    'integritas-openrouter/poolside/laguna-s-2.1:free',
+    'integritas-openrouter/qwen/qwen3.8-27b:free',
+    'integritas-openrouter/thinkingmachines/inkling:free',
+    'integritas-openrouter/z-ai/glm-5.2:free',
+    'nvidia/z-ai/glm-5.3',
+    'nvidia/z-ai/glm-5.3-flash',
+    'nvidia/moonshotai/kimi-k3',
+    'nvidia/nvidia/nemotron-3-super-120b-a12b',
+    'nvidia/meta/muse-glimmer-30b',
+    'nvidia/google/gemma-4-31b-it',
+  ];
+  for (const model of currentFreeModels) {
+    assert.ok(config.includes(`"${model}"`), `missing current free model: ${model}`);
+  }
+  const currentGoModels = [
+    'opencode-go/grok-4.7',
+    'opencode-go/glm-5.3-flash',
+    'opencode-go/glm-5.3',
+    'opencode-go/gpt-5.6-luna',
+    'opencode-go/deepseek-v4.1-flash',
+    'opencode-go/qwen3.8-flash',
+    'opencode-go/minimax-m3',
+    'opencode-go/mimo-v2.5',
+    'opencode-go/hy4-preview',
+    'opencode-go/omen-alpha',
+  ];
+  for (const model of currentGoModels) {
+    assert.ok(config.includes(`"${model}"`), `missing current OpenCode Go model: ${model}`);
+  }
   assert.doesNotMatch(config, /gsk_[A-Za-z0-9_-]+/);
   assert.doesNotMatch(config, /sk-or-v1-[A-Za-z0-9_-]+/);
   assert.doesNotMatch(config, /nvapi-[A-Za-z0-9_-]+/);
