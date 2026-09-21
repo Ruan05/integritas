@@ -1,5 +1,3 @@
-\set ON_ERROR_STOP on
-
 alter policy "read own admin identity"
   on public.integritas_admin_users
   using (user_id = auth.uid());
