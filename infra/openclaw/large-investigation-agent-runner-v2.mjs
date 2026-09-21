@@ -26,14 +26,21 @@ import {
 const execFileAsync = promisify(execFile);
 const MAX_AGENT_ENVELOPE_BYTES = 8 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
-const NVIDIA_LIGHTNING = 'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b';
-const NVIDIA_ULTRA = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
+const NVIDIA_ULTRA = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b';
 const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';
 const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';
 const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash';
+const OPENROUTER_SUPER = 'integritas-openrouter/nvidia/nemotron-3-super-120b-a12b:free';
+const OPENROUTER_NEX = 'integritas-openrouter/nex-agi/nex-n2.5-pro:free';
+const OPENROUTER_NORTH = 'integritas-openrouter/cohere/north-mini-code:free';
+const OPENROUTER_LING = 'integritas-openrouter/inclusionai/ling-3.0-flash-fin:free';
+const OPENROUTER_LAGUNA = 'integritas-openrouter/poolside/laguna-xs-2.1:free';
 const OPENROUTER_ULTRA = 'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free';
 const OPENROUTER_FREE = 'integritas-openrouter/openrouter/free';
-const FREE_OPENROUTER_MODELS = new Set([OPENROUTER_ULTRA, OPENROUTER_FREE]);
+const FREE_OPENROUTER_MODELS = new Set([
+  OPENROUTER_SUPER, OPENROUTER_NEX, OPENROUTER_NORTH, OPENROUTER_LING,
+  OPENROUTER_LAGUNA, OPENROUTER_ULTRA, OPENROUTER_FREE,
+]);
 const MAX_OPENROUTER_FREE_USES = 4;
 let openRouterFallbackUses = 0;
 
@@ -88,25 +95,22 @@ function candidates(role, synthetic) {
   const nvidia = !!process.env.NVIDIA_API_KEY;
   const openrouter = !!process.env.OPENROUTER_API_KEY;
   if (!synthetic) {
+    const healthyFree = [OPENROUTER_SUPER, OPENROUTER_NEX, OPENROUTER_NORTH, OPENROUTER_LING, OPENROUTER_LAGUNA, OPENROUTER_ULTRA, OPENROUTER_FREE];
     const rows = {
-      shard: [openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_LIGHTNING, OPENROUTER_ULTRA, OPENROUTER_FREE],
-      plan: [openrouter && GLM_53, openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, OPENROUTER_ULTRA, OPENROUTER_FREE],
-      analysis: [openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, openrouter && GLM_53, nvidia && NVIDIA_ULTRA, OPENROUTER_ULTRA, OPENROUTER_FREE],
-      lane: [openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, openrouter && GLM_53, nvidia && NVIDIA_ULTRA, OPENROUTER_ULTRA, OPENROUTER_FREE],
-      critic: [openrouter && GLM_53, openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, OPENROUTER_ULTRA, OPENROUTER_FREE],
-      report: [openrouter && GLM_53, openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_LIGHTNING, OPENROUTER_ULTRA, OPENROUTER_FREE],
+      shard: [openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, ...healthyFree],
+      plan: [openrouter && GLM_53, openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, ...healthyFree],
+      analysis: [openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, openrouter && GLM_53, nvidia && NVIDIA_ULTRA, ...healthyFree],
+      lane: [openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, openrouter && GLM_53, nvidia && NVIDIA_ULTRA, ...healthyFree],
+      critic: [openrouter && GLM_53, openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, ...healthyFree],
+      report: [openrouter && GLM_53, openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, ...healthyFree],
     }[role] ?? [];
     return uniq(rows);
   }
-  const rows = {
-    shard: [nvidia && NVIDIA_LIGHTNING, nvidia && NVIDIA_ULTRA],
-    plan: [nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_LIGHTNING],
-    analysis: [nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_LIGHTNING],
-    lane: [nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_LIGHTNING],
-    critic: [nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_LIGHTNING],
-    report: [nvidia && NVIDIA_LIGHTNING, nvidia && NVIDIA_ULTRA],
-  }[role] ?? [];
-  if (openrouter) rows.push(OPENROUTER_ULTRA, OPENROUTER_FREE);
+  const rows = [nvidia && NVIDIA_ULTRA];
+  if (openrouter) rows.push(
+    OPENROUTER_SUPER, OPENROUTER_NEX, OPENROUTER_NORTH,
+    OPENROUTER_LING, OPENROUTER_LAGUNA, OPENROUTER_ULTRA, OPENROUTER_FREE,
+  );
   return uniq(rows);
 }
 function timeoutFor(role) {
