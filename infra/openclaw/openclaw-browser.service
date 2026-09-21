@@ -13,10 +13,9 @@ Environment=HOME=/var/lib/openclaw
 Environment=OPENCLAW_HOME=/var/lib/openclaw
 Environment=OPENCLAW_STATE_DIR=/var/lib/openclaw
 Environment=OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-gateway.json
-ExecStart=/opt/openclaw/bin/openclaw browser --browser-profile openclaw start
-ExecStartPost=/opt/openclaw/bin/openclaw browser --browser-profile openclaw doctor
+ExecStart=/usr/local/libexec/integritas-browser-start
 ExecStop=/opt/openclaw/bin/openclaw browser --browser-profile openclaw stop
-TimeoutStartSec=60
+TimeoutStartSec=90
 TimeoutStopSec=30
 NoNewPrivileges=true
 ProtectSystem=strict
