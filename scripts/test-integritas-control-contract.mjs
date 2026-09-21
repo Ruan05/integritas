@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 const source = readFileSync('supabase/functions/integritas-control/index.ts', 'utf8');
 const leaseSource = readFileSync('supabase/functions/integritas-control/lease.ts', 'utf8');
 const runtimeContractSource = readFileSync('supabase/functions/_shared/investigation-runtime-contract.ts', 'utf8');
+const e2eSelftestSource = readFileSync('supabase/functions/integritas-e2e-selftest/index.ts', 'utf8');
 
 assert.match(source, /x-integritas-worker-token/, 'worker token header must be implemented');
 assert.match(source, /x-integritas-worker-id/, 'worker id header must be required for scoped worker authentication');
@@ -64,6 +65,16 @@ assert.match(source, /encoded\.length <= 32768/, 'checkpoint payloads must remai
 assert.match(runtimeContractSource, /'report_markdown'/, 'shared output contract must allow canonical Markdown reports');
 assert.match(runtimeContractSource, /'text\/markdown'/, 'shared content-type contract must allow Markdown output');
 assert.match(source, /integritas-case-files/, 'investigation artifacts must remain in the private case-files bucket');
+
+assert.match(e2eSelftestSource, /phase\s*===\s*["']start["']/, 'E2E self-test must expose a bounded start phase');
+assert.match(e2eSelftestSource, /phase\s*===\s*["']poll["']/, 'E2E self-test must expose a bounded poll phase');
+assert.match(e2eSelftestSource, /cleanup_pending/, 'E2E self-test must persist a cleanup-pending recovery phase');
+assert.match(e2eSelftestSource, /storage\.from\(CASE_FILES_BUCKET\)\.remove/, 'E2E self-test must remove synthetic Storage objects through the Storage API');
+assert.match(e2eSelftestSource, /integritas_case_job_outputs/, 'E2E cleanup must include persisted investigation output objects');
+assert.match(e2eSelftestSource, /integritas_documents/, 'E2E cleanup must include submitted document objects');
+assert.match(e2eSelftestSource, /syntheticDataDeleted:\s*true/, 'E2E self-test must record verified synthetic cleanup');
+assert.ok(!/for\s*\(let\s+i\s*=\s*0;\s*i\s*<\s*24/.test(e2eSelftestSource), 'E2E self-test must not poll a long-running investigation inside one Edge invocation');
+assert.ok(!/setTimeout\([^,]+,\s*6000\)/.test(e2eSelftestSource), 'E2E self-test must not hold an Edge invocation open with six-second polling sleeps');
 
 for (const dangerous of [
   "'exec_shell'",
