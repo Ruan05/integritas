@@ -104,6 +104,7 @@ assert.ok(!investigationRunner.includes('shell: true'), 'runner must never execu
 assert.match(investigationConfig, /\$include:\s*["']\.\/openclaw\.json["']/, 'investigation config must inherit the pinned OpenClaw config');
 assert.match(investigationConfig, /workspaceAccess:\s*["']ro["']/, 'investigation evidence workspace must remain read-only');
 assert.match(investigationConfig, /profile:\s*["']minimal["']/, 'investigation agent must start from the minimal tool profile');
+assert.match(investigationConfig, /modelPolicy:\s*\{[\s\S]*allow:/, 'investigation overlay must own its model allowlist');
 assert.ok(!investigationConfig.includes('integritas-groq'), 'unprovisioned Groq must not make production config validation fail');
 assert.ok(!investigationConfig.includes('GROQ_API_KEY'), 'unprovisioned Groq SecretRef must not be required by the production overlay');
 for (const model of ['deepseek/deepseek-v4.1-flash', 'z-ai/glm-5.3', 'z-ai/glm-5.3-flash']) {
