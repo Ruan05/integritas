@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   MAX_CASE_DOCUMENTS,
+  MAX_CASE_FILE_BYTES,
   SUPPORTED_CASE_FILE_ACCEPT,
   canStartInvestigation,
   createIntegritasBrowserClient,
@@ -33,6 +34,21 @@ describe('Integritas browser adapter', () => {
     expect(MAX_CASE_DOCUMENTS).toBe(20);
     expect(() => validateCaseDocumentSelection(18, files)).toThrow(/20 documents/i);
     expect(validateCaseDocumentSelection(17, files)).toEqual(files);
+  });
+
+  it('rejects oversized or unsupported files before hitting the upload API', () => {
+    expect(MAX_CASE_FILE_BYTES).toBe(5 * 1024 * 1024);
+    const oversized = new File([new Uint8Array(MAX_CASE_FILE_BYTES + 1)], 'too-big.pdf', { type: 'application/pdf' });
+    expect(() => validateCaseDocumentSelection(0, [oversized])).toThrow(/5 MB/i);
+    const unsupported = new File(['x'], 'payload.exe', { type: 'application/octet-stream' });
+    expect(() => validateCaseDocumentSelection(0, [unsupported])).toThrow(/supported evidence file/i);
+  });
+
+  it('preserves HTTP status when an upstream upload failure is not JSON', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('upstream failure', { status: 502 }));
+    const client = createIntegritasBrowserClient({ adminApiUrl: 'https://example.test/admin', controlApiUrl: 'https://example.test/control', fetchImpl });
+    await expect(client.uploadFiles('token', '11111111-1111-4111-8111-111111111111', 0, [new File(['x'], 'evidence.txt', { type: 'text/plain' })]))
+      .rejects.toThrow(/HTTP 502/);
   });
 
   it('uploads selected evidence through the authenticated admin API one file at a time', async () => {
