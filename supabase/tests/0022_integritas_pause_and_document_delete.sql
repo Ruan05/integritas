@@ -73,12 +73,14 @@ select public.integritas_resume_case_investigation(
   :'pause_case_job_id'::uuid,'c2222222-2222-4222-8222-222222222222'
 );
 select id as released_command_id from public.integritas_control_lease('oracle-primary',600) \gset pause_resume_
-select public.integritas_checkpoint_case_investigation(
-  :'pause_control_command_id'::uuid,'oracle-primary',:'pause_case_job_id'::uuid,1,'completed',100,'{}'::jsonb
+select public.integritas_cancel_case_investigation(
+  :'pause_case_job_id'::uuid,'c2222222-2222-4222-8222-222222222222'
 );
 select pg_temp.assert_true(
-  public.integritas_control_complete(:'pause_control_command_id'::uuid,'oracle-primary',jsonb_build_object('terminal_outcome','completed')),
-  'resumed investigation completes normally'
+  public.integritas_acknowledge_case_investigation_cancel(
+    :'pause_control_command_id'::uuid,'oracle-primary',:'pause_case_job_id'::uuid
+  ),
+  'a resumed investigation can be cancelled without corrupting pause recovery state'
 );
 
 select public.integritas_finalize_document_delete(
