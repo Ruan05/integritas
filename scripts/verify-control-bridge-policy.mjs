@@ -88,16 +88,16 @@ assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/
 assert.ok(investigationRunner.includes("const NVIDIA_PRIMARY = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b'"), 'NVIDIA Nemotron remains available only for trusted synthetic validation');
 assert.ok(investigationRunner.includes("const NVIDIA_LIGHTNING = 'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b'"), 'Nemotron Lightning must be available as the direct high-throughput fallback');
 assert.ok(investigationRunner.includes("SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, [NVIDIA_LIGHTNING, ...FREE_FALLBACKS])"), 'synthetic validation may use direct NVIDIA plus bounded free fallbacks');
-assert.ok(investigationRunner.includes("REAL_MODEL_ROUTES = routes(NVIDIA_PRIMARY, [NVIDIA_LIGHTNING])"), 'real investigations must stay on direct NVIDIA production routes');
-assert.ok(investigationRunner.includes("real investigations must use only direct NVIDIA production routes"), 'real-data provider policy must fail closed to direct production routes');
-assert.ok(investigationRunner.includes("'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'"), 'OpenRouter free Nemotron may remain only in the synthetic fallback chain');
-assert.ok(!investigationRunner.includes("model: 'opencode-go/"), 'unfunded OpenCode Go routes must not remain primary investigation phases');
+assert.ok(investigationRunner.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash'"), 'real research must expose DeepSeek V4.1 Flash');
+assert.ok(investigationRunner.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3'"), 'real planning/critic must expose GLM 5.3');
+assert.ok(investigationRunner.includes("const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash'"), 'real investigation fallback must expose GLM 5.3 Flash');
+assert.ok(investigationRunner.includes("planner: { model: GLM_53"), 'standard/deep planning must prefer GLM 5.3');
+assert.ok(investigationRunner.includes("research: { model: DEEPSEEK_FLASH"), 'real research must prefer DeepSeek V4.1 Flash');
+assert.ok(investigationRunner.includes("'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'"), 'free Nemotron may remain as an emergency fallback');
 assert.ok(investigationRunner.includes("'--model', phaseRoute.model"), 'runner must explicitly pin each bounded phase model');
 assert.ok(investigationRunner.includes("args.push('--fallback', fallback)"), 'legacy bounded phases must use only their explicit fallback chain');
 assert.ok(investigationRunner.includes("'integritas-openrouter/openrouter/free'"), 'dynamic OpenRouter free routing may be used only as synthetic emergency fallback');
 assert.ok(!investigationRunner.includes("model: 'integritas-openrouter/openrouter/free'"), 'dynamic OpenRouter free routing must never be a primary investigation route');
-assert.ok(!investigationRunner.includes("research: { model: 'opencode-go/kimi-k3'"), 'Kimi K3 must not be the research or default investigation model');
-assert.ok(!investigationRunner.includes("synthesis: { model: 'opencode-go/kimi-k3'"), 'Kimi K3 must not be the final synthesis model');
 assert.ok(!investigationRunner.includes('opencode-go/deepseek-v4-pro'), 'DeepSeek Pro must not be a default investigation fallback');
 assert.ok(!investigationRunner.includes("'integritas-groq/openai/gpt-oss-20b'"), 'Groq 20B is not approved for production investigation routing');
 assert.ok(!investigationRunner.includes('shell: true'), 'runner must never execute through a shell');
@@ -106,7 +106,9 @@ assert.match(investigationConfig, /workspaceAccess:\s*["']ro["']/, 'investigatio
 assert.match(investigationConfig, /profile:\s*["']minimal["']/, 'investigation agent must start from the minimal tool profile');
 assert.ok(!investigationConfig.includes('integritas-groq'), 'unprovisioned Groq must not make production config validation fail');
 assert.ok(!investigationConfig.includes('GROQ_API_KEY'), 'unprovisioned Groq SecretRef must not be required by the production overlay');
-assert.ok(!investigationConfig.includes('opencode-go/'), 'production investigation profile must not expose unfunded OpenCode Go models');
+for (const model of ['deepseek/deepseek-v4.1-flash', 'z-ai/glm-5.3', 'z-ai/glm-5.3-flash']) {
+  assert.ok(investigationConfig.includes(model), `production investigation profile must expose ${model}`);
+}
 assert.match(installer, /for name in OPENROUTER_API_KEY NVIDIA_API_KEY; do/, 'only provisioned NVIDIA/OpenRouter secrets may be mandatory');
 assert.ok(installer.includes('OPENROUTER_API_KEY|NVIDIA_API_KEY|GROQ_API_KEY'), 'Groq may remain an approved optional staged variable for future activation');
 assert.match(investigationConfig, /"integritas-openrouter"/, 'investigation config must define a fixed OpenRouter provider');
@@ -114,7 +116,10 @@ assert.match(investigationConfig, /apiKey:\s*\{\s*source:\s*["']env["'],\s*provi
 assert.match(investigationConfig, /id:\s*["']openrouter\/free["']/, 'investigation config may register the dynamic free router only for emergency fallback');
 assert.match(investigationConfig, /deny:\s*\[[^\]]*["']write["'][^\]]*["']edit["'][^\]]*["']exec["'][^\]]*["']apply_patch["']/s, 'investigation agent must not mutate files or invoke execution tools');
 assert.match(investigationRunner, /'--code-mode', 'direct'/, 'investigation agent must use direct tool mode');
-assert.ok(largeInvestigationRunner.includes("const NVIDIA_LIGHTNING = 'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b'"), 'large-case runner must use Lightning for bounded high-throughput phases');
+assert.ok(largeInvestigationRunner.includes("const NVIDIA_LIGHTNING = 'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b'"), 'large-case runner must retain NVIDIA emergency fallback');
+assert.ok(largeInvestigationRunner.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash'"), 'large-case runner must expose DeepSeek V4.1 Flash');
+assert.ok(largeInvestigationRunner.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3'"), 'large-case runner must expose GLM 5.3');
+assert.ok(largeInvestigationRunner.includes("FREE_OPENROUTER_MODELS.has(model)"), 'large-case free budget must apply only to free routes');
 assert.ok(largeInvestigationRunner.includes("const MAX_OPENROUTER_FREE_USES = 4"), 'large-case free-router usage must be globally bounded per investigation');
 assert.match(largeInvestigationRunner, /buildDocumentShards\(manifest, 4\)/, 'large-case runner must shard documents into bounded groups');
 assert.match(largeInvestigationRunner, /mapLimit\(shards, 2/, 'document shard concurrency must remain bounded');
