@@ -18,7 +18,8 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
   assert.match(source, /const NVIDIA_PRIMARY = 'integritas-nvidia\/nvidia\/nemotron-3-ultra-550b-a55b'/);
   assert.match(source, /const FREE_FAST = 'integritas-openrouter\/nvidia\/nemotron-3-super-120b-a12b:free'/);
-  assert.match(source, /SYNTHETIC_MODEL_ROUTES = routes\(NVIDIA_PRIMARY, FREE_FALLBACKS\)/);
+  assert.match(source, /ACTIVE_FREE_FALLBACKS = process\.env\.OPENCODE_ZEN_API_KEY/);
+  assert.match(source, /SYNTHETIC_MODEL_ROUTES = routes\(NVIDIA_PRIMARY, ACTIVE_FREE_FALLBACKS\)/);
   assert.doesNotMatch(source, /NVIDIA_LIGHTNING/, 'unhealthy Lightning route must not be auto-selected');
   assert.ok(source.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';"));
   assert.ok(source.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';"));
@@ -106,6 +107,8 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.ok(large.includes("const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash';"), 'large investigations must expose the low-cost GLM fallback');
   assert.ok(large.includes('FREE_OPENROUTER_MODELS.has(model)'), 'free-fallback budget must apply only to free OpenRouter routes');
   assert.match(large, /MAX_OPENROUTER_FREE_USES = 4/, 'OpenRouter free fallback must remain synthetic-only and bounded');
+  assert.match(large, /MAX_ZEN_FREE_USES = 4/, 'Zen free fallback must remain bounded per investigation');
+  assert.match(large, /ZEN_FREE_MODELS\.has\(model\)/, 'Zen free routes must use their own bounded budget');
   assert.match(large, /external lane sources require observed research-tool use in the same phase/, 'external source provenance must be phase-local');
   assert.match(large, /# MASTER SUMMARY — READ THIS FIRST/);
   assert.match(large, /## DIRECT NEXT STEPS — WHAT TO DO NOW/);
@@ -130,6 +133,20 @@ test('investigation profile uses only required provider SecretRefs and keeps the
   assert.doesNotMatch(config, /"integritas-groq"/);
   assert.doesNotMatch(config, /GROQ_API_KEY/);
   assert.match(config, /"integritas-openrouter"/);
+  assert.match(config, /"integritas-opencode-zen"/, 'OpenCode Zen chat provider must be configured');
+  assert.match(config, /"integritas-opencode-zen-responses"/, 'OpenCode Zen responses provider must be configured');
+  assert.match(config, /id: "OPENCODE_ZEN_API_KEY"/, 'OpenCode Zen chat provider must use the Zen API key SecretRef');
+  for (const model of [
+    'integritas-opencode-zen/big-pickle',
+    'integritas-opencode-zen/deepseek-v4-flash-free',
+    'integritas-opencode-zen/mimo-v2.5-free',
+    'integritas-opencode-zen/ling-3.0-flash-fin-free',
+    'integritas-opencode-zen/nemotron-3-ultra-free',
+    'integritas-opencode-zen/nemotron-3.5-lightning-free',
+    'integritas-opencode-zen-responses/muse-spark-1.3-contributor-free',
+  ]) {
+    assert.ok(config.includes(`"${model}"`), `missing staged Zen model: ${model}`);
+  }
   assert.match(config, /apiKey: \{ source: "env", provider: "default", id: "OPENROUTER_API_KEY" \}/);
   assert.match(config, /id: "nvidia\/nemotron-3-ultra-550b-a55b:free"/);
   assert.match(config, /id: "nvidia\/nemotron-3-ultra-550b-a55b:free"[\s\S]*maxTokens: 65536/, 'Nemotron free fallback must expose its verified completion budget');
@@ -201,7 +218,7 @@ test('investigation profile uses only required provider SecretRefs and keeps the
 
 test('runner passes only approved provider credentials into OpenClaw', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
-  assert.ok(source.includes("const providerNames = ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY'];"));
+  assert.ok(source.includes("const providerNames = ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY', 'OPENCODE_ZEN_API_KEY'];"));
   assert.ok(source.includes('env: agentEnv()'));
   for (const name of ['GROQ_API_KEY', 'GEMINI_API_KEY', 'CEREBRAS_API_KEY', 'EXA_API_KEY', 'HF_TOKEN']) {
     assert.doesNotMatch(source, new RegExp(`'${name}'`));
