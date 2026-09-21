@@ -1,4 +1,5 @@
 export const MAX_CASE_DOCUMENTS = 20;
+export const MAX_CASE_FILE_BYTES = 5 * 1024 * 1024;
 export const SUPPORTED_CASE_FILE_ACCEPT = '.pdf,.txt,.md,.csv';
 
 export function getIntegritasFunctionUrls(
@@ -70,6 +71,18 @@ export function validateCaseDocumentSelection(existingCount: number, files: File
   if (existingCount + files.length > MAX_CASE_DOCUMENTS) {
     throw new Error('A case can contain no more than 20 documents.');
   }
+  for (const file of files) {
+    if (!Number.isFinite(file.size) || file.size < 1) {
+      throw new Error(`${file.name || 'Selected file'} is empty or unreadable.`);
+    }
+    if (file.size > MAX_CASE_FILE_BYTES) {
+      throw new Error(`${file.name} exceeds the 5 MB per-file upload limit.`);
+    }
+    const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+    if (!['pdf', 'txt', 'md', 'csv'].includes(extension)) {
+      throw new Error(`${file.name} is not a supported evidence file.`);
+    }
+  }
   return files;
 }
 
@@ -133,8 +146,13 @@ export function createIntegritasBrowserClient(options: BrowserClientOptions) {
           headers: { authorization: `Bearer ${token}` },
           body: form,
         });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(String(payload?.error || `Upload failed for ${file.name}.`));
+        const raw = await response.text();
+        let payload: any = {};
+        try { payload = raw ? JSON.parse(raw) : {}; } catch { payload = {}; }
+        if (!response.ok) {
+          const message = String(payload?.error || `Upload failed for ${file.name} (HTTP ${response.status}).`);
+          throw new Error(message);
+        }
         results.push(payload);
       }
       return results;
