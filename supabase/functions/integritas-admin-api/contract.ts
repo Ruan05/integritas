@@ -91,8 +91,8 @@ export function validateUpload(name: unknown, mime: unknown, size: unknown) {
   const n = Number(size);
   if (!MIME.has(m))
     throw Object.assign(new Error("Unsupported file type"), { status: 400 });
-  if (!Number.isFinite(n) || n < 1 || n > 5 * 1024 * 1024)
-    throw Object.assign(new Error("Maximum upload size is 5 MB"), {
+  if (!Number.isFinite(n) || n < 1 || n > 50 * 1024 * 1024)
+    throw Object.assign(new Error("Maximum upload size is 50 MB"), {
       status: 400,
     });
   return { name: clean, mime: m, size: n };
