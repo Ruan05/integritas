@@ -10,4 +10,10 @@ drop function if exists integritas_private.integritas_finalize_document_delete(u
 alter table public.integritas_case_jobs drop column if exists pause_requested;
 alter table public.integritas_control_commands drop constraint if exists integritas_control_commands_status_check;
 alter table public.integritas_control_commands add constraint integritas_control_commands_status_check check (status in ('queued','leased','running','completed','failed','cancelled'));
+alter table public.integritas_case_job_checkpoints drop constraint if exists integritas_case_job_checkpoints_stage_check;
+alter table public.integritas_case_job_checkpoints add constraint integritas_case_job_checkpoints_stage_check check (stage in (
+  'queued','extracting','analyzing_documents','mapping_entities','planning_research',
+  'researching','verifying','cross_checking','independent_review','drafting_report',
+  'completed','incomplete','failed','cancelled','research_limit_reached'
+));
 commit;

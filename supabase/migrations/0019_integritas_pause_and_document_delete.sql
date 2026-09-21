@@ -11,6 +11,16 @@ alter table public.integritas_control_commands
   add constraint integritas_control_commands_status_check
   check (status in ('queued','leased','running','paused','completed','failed','cancelled'));
 
+alter table public.integritas_case_job_checkpoints
+  drop constraint if exists integritas_case_job_checkpoints_stage_check;
+alter table public.integritas_case_job_checkpoints
+  add constraint integritas_case_job_checkpoints_stage_check
+  check (stage in (
+    'queued','extracting','analyzing_documents','mapping_entities','planning_research',
+    'researching','verifying','cross_checking','independent_review','drafting_report',
+    'paused','completed','incomplete','failed','cancelled','research_limit_reached'
+  ));
+
 create or replace function integritas_private.integritas_investigation_job_state(
   p_command_id uuid, p_worker_id text, p_case_job_id uuid
 ) returns jsonb
