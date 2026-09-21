@@ -56,7 +56,7 @@ function emails(runId: string) {
 }
 
 async function passwordFor(runId: string, token: string) {
-  return `E2E-${await sha256(`integritas-e2e-password:${runId}:${token}`)}-Aa9!`;
+  return `E2E-${await sha256(`integritas-e2e-password:${runId}:${token}`)}-A9!`;
 }
 
 async function call(jwt: string, body: any, form = false) {
