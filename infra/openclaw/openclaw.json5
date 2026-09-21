@@ -58,6 +58,8 @@
     enabled: true,
     defaultProfile: "openclaw",
     headless: true,
+    snapshotDefaults: { mode: "efficient" },
+    tabCleanup: { enabled: true },
   },
   tools: {
     profile: "coding",
