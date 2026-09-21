@@ -18,12 +18,26 @@ import {
   parseReportSectionFinal,
   shouldUseLargeInvestigation,
 } from '../../large-investigation.mjs';
-import { deterministicSyntheticCaseAnalysis, deterministicSyntheticCritic } from '../../large-investigation-agent-runner-v2.mjs';
+import { deterministicSyntheticCaseAnalysis, deterministicSyntheticCritic, providerBlockedLane } from '../../large-investigation-agent-runner-v2.mjs';
 
 const CASE_ID='11111111-1111-4111-8111-111111111111';
 const JOB_ID='22222222-2222-4222-8222-222222222222';
 const DOC1='33333333-3333-4333-8333-333333333333';
 const DOC2='44444444-4444-4444-8444-444444444444';
+
+test('provider failure becomes a blocked lane without fabricated evidence', () => {
+  const lane = providerBlockedLane({
+    lane_id: 'public-registry', priority: 'high', question: 'Verify the subject against a public registry.',
+    preferred_sources: ['Official registry'], stop_condition: 'Retry the official registry lookup.',
+  });
+  assert.deepEqual(lane.sources, []);
+  assert.deepEqual(lane.findings, []);
+  assert.equal(lane.check.status, 'blocked');
+  assert.match(lane.check.outcome, /no external claim was asserted/i);
+  assert.equal(lane.unresolved_checks.length, 1);
+  assert.match(lane.unresolved_checks[0].reason, /provider routing/i);
+  assert.match(lane.limitations[0], /no external evidence was asserted/i);
+});
 
 function manifest(depth='maximum') {
   return {

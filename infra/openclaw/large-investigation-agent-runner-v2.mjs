@@ -547,6 +547,27 @@ function manualLane(lane) {
     limitations: [`Lane ${lane.lane_id} requires manual confirmation.`],
   };
 }
+export function providerBlockedLane(lane) {
+  return {
+    sources: [],
+    findings: [],
+    unresolved_checks: [{
+      unresolved_key: `lane.${lane.lane_id}.u01`,
+      description: lane.question,
+      reason: 'Automated provider routing was exhausted before a validated lane result was available.',
+      attempted_methods: ['Bounded provider/model fallback chain'],
+      blocker: 'No validated external evidence was returned by the configured provider routes.',
+      next_manual_action: lane.stop_condition || 'Retry the lane when a healthy provider is available, then verify the required sources manually.',
+    }],
+    check: {
+      check_key: `lane.${lane.lane_id}`, entity_key: null, check_type: 'research_lane',
+      description: lane.question, priority: lane.priority,
+      required_source: lane.preferred_sources?.[0] || '', status: 'blocked',
+      outcome: 'Automated research was unavailable; no external claim was asserted.',
+    },
+    limitations: [`Lane ${lane.lane_id} was blocked by provider/model availability; no external evidence was asserted.`],
+  };
+}
 function reportTask(spec) {
   const headings = SECTION_HEADINGS[spec.id].join('\n');
   return `# Integritas Prototype-1 report section ${spec.id}
@@ -698,23 +719,35 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
       await progress(jobDir, 'researching', 52 + Math.round(((index + 1) / Math.max(1, plan.research_lanes.length)) * 14), 'large_research_lanes', `lane ${index + 1}/${plan.research_lanes.length}`);
       return materializeLaneResult(result.value, lane, index);
     }
-    const result = await validated({
-      jobDir, id: `lane-${lane.lane_id}`, role: 'lane', task: laneTask(lane, synthetic),
-      execName: `large-v2-lane-${safePart(lane.lane_id)}-exec.json`, synthetic,
-      allowExternal: !synthetic,
-      validator: (final, envelope) => {
-        const parsed = parseLaneFinal(
-          synthetic ? normalizeSyntheticLaneFinal(final, entityKeys, docSourceKeys) : final,
-          lane.lane_id,
-          entityKeys,
-          docSourceKeys,
-        );
-        if (!synthetic && parsed.sources.length > 0 && externalTools(envelope).length < 1) {
-          throw new Error('external lane sources require observed research-tool use in the same phase');
-        }
-        return parsed;
-      },
-    });
+    let result;
+    try {
+      result = await validated({
+        jobDir, id: `lane-${lane.lane_id}`, role: 'lane', task: laneTask(lane, synthetic),
+        execName: `large-v2-lane-${safePart(lane.lane_id)}-exec.json`, synthetic,
+        allowExternal: !synthetic,
+        validator: (final, envelope) => {
+          const parsed = parseLaneFinal(
+            synthetic ? normalizeSyntheticLaneFinal(final, entityKeys, docSourceKeys) : final,
+            lane.lane_id,
+            entityKeys,
+            docSourceKeys,
+          );
+          if (!synthetic && parsed.sources.length > 0 && externalTools(envelope).length < 1) {
+            throw new Error('external lane sources require observed research-tool use in the same phase');
+          }
+          return parsed;
+        },
+      });
+    } catch (error) {
+      const blocked = providerBlockedLane(lane);
+      result = {
+        envelope: { toolSummary: { tools: [], calls: 0, failures: 1 } },
+        value: blocked,
+        reused: false,
+        blocked: true,
+        failures: [{ model: 'validated-provider-routes', error: String(error?.message ?? error).slice(0, 500) }],
+      };
+    }
     if (synthetic && externalTools(result.envelope).length) throw new Error('synthetic lane performed external research');
     phases.push({ phase: `lane-${lane.lane_id}`, ...result });
     await progress(jobDir, 'researching', 52 + Math.round(((index + 1) / Math.max(1, plan.research_lanes.length)) * 14), 'large_research_lanes', `lane ${index + 1}/${plan.research_lanes.length}`);
