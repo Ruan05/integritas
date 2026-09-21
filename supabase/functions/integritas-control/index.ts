@@ -676,7 +676,11 @@ Deno.serve(async (req) => {
       if (citedSources.data?.length) return json({ error: 'document_delete_blocked_saved_evidence' }, 409, origin);
       const { error: storageError } = await service.storage.from(CASE_FILES_BUCKET).remove([document.storage_path]);
       if (storageError) throw new Error('storage document deletion failed: ' + safeError(storageError));
-      const deleted = await rpc('integritas_finalize_document_delete', { p_case_id: caseId, p_document_id: documentId });
+      const deleted = await rpc('integritas_finalize_document_delete', {
+        p_case_id: caseId,
+        p_document_id: documentId,
+        p_requested_by: principal.userId,
+      });
       return json({ deleted }, 200, origin);
     }
 

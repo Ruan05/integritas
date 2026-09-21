@@ -150,14 +150,24 @@ $$;
 -- silently corrupting a historical result.  The Edge Function removes the
 -- private object immediately before this atomic database finalisation.
 create or replace function integritas_private.integritas_finalize_document_delete(
-  p_case_id uuid, p_document_id uuid
+  p_case_id uuid, p_document_id uuid, p_requested_by uuid
 ) returns jsonb
 language plpgsql security definer set search_path = ''
 as $$
-declare v_document public.integritas_documents; v_revision integer;
+declare
+  v_document public.integritas_documents;
+  v_revision integer;
+  v_command_id uuid;
 begin
+  if p_requested_by is null
+    or not exists (select 1 from public.integritas_admin_users where user_id=p_requested_by) then
+    raise exception 'admin required';
+  end if;
   select * into v_document from public.integritas_documents where id=p_document_id and case_id=p_case_id for update;
   if not found then raise exception 'document not found'; end if;
+  if not exists (select 1 from public.integritas_case_access a where a.case_id=p_case_id and a.user_id=p_requested_by) then
+    raise exception 'case access denied';
+  end if;
   if exists (select 1 from public.integritas_case_jobs j where j.case_id=p_case_id and j.stage not in ('completed','incomplete','failed','cancelled','research_limit_reached')) then
     raise exception 'cannot delete evidence while an investigation is active';
   end if;
@@ -167,6 +177,14 @@ begin
   update public.integritas_cases set revision=revision+1 where id=p_case_id returning revision into v_revision;
   if not found then raise exception 'case not found'; end if;
   delete from public.integritas_documents where id=p_document_id and case_id=p_case_id;
+  select j.control_command_id into v_command_id
+  from public.integritas_case_jobs j
+  where j.case_id=p_case_id and j.control_command_id is not null
+  order by j.updated_at desc, j.id desc
+  limit 1;
+  insert into public.integritas_control_audit(command_id,event_type,actor_type,actor_id,metadata)
+    values(v_command_id,'document_deleted','admin',p_requested_by::text,
+      jsonb_build_object('case_id',p_case_id,'document_id',p_document_id,'case_revision',v_revision));
   return jsonb_build_object('document_id',p_document_id,'storage_path',v_document.storage_path,'case_revision',v_revision);
 end;
 $$;
@@ -174,11 +192,11 @@ $$;
 revoke all on function integritas_private.integritas_pause_case_investigation(uuid,uuid),
   integritas_private.integritas_acknowledge_case_investigation_pause(uuid,text,uuid),
   integritas_private.integritas_resume_case_investigation(uuid,uuid),
-  integritas_private.integritas_finalize_document_delete(uuid,uuid) from public, anon, authenticated;
+  integritas_private.integritas_finalize_document_delete(uuid,uuid,uuid) from public, anon, authenticated;
 grant execute on function integritas_private.integritas_pause_case_investigation(uuid,uuid),
   integritas_private.integritas_acknowledge_case_investigation_pause(uuid,text,uuid),
   integritas_private.integritas_resume_case_investigation(uuid,uuid),
-  integritas_private.integritas_finalize_document_delete(uuid,uuid) to service_role;
+  integritas_private.integritas_finalize_document_delete(uuid,uuid,uuid) to service_role;
 
 create or replace function public.integritas_pause_case_investigation(p_case_job_id uuid,p_requested_by uuid) returns jsonb
 language sql security definer set search_path = '' as $$ select integritas_private.integritas_pause_case_investigation(p_case_job_id,p_requested_by); $$;
@@ -186,9 +204,9 @@ create or replace function public.integritas_resume_case_investigation(p_case_jo
 language sql security definer set search_path = '' as $$ select integritas_private.integritas_resume_case_investigation(p_case_job_id,p_requested_by); $$;
 create or replace function public.integritas_acknowledge_case_investigation_pause(p_command_id uuid,p_worker_id text,p_case_job_id uuid) returns boolean
 language sql security definer set search_path = '' as $$ select integritas_private.integritas_acknowledge_case_investigation_pause(p_command_id,p_worker_id,p_case_job_id); $$;
-create or replace function public.integritas_finalize_document_delete(p_case_id uuid,p_document_id uuid) returns jsonb
-language sql security definer set search_path = '' as $$ select integritas_private.integritas_finalize_document_delete(p_case_id,p_document_id); $$;
-revoke all on function public.integritas_pause_case_investigation(uuid,uuid),public.integritas_resume_case_investigation(uuid,uuid),public.integritas_acknowledge_case_investigation_pause(uuid,text,uuid),public.integritas_finalize_document_delete(uuid,uuid) from public, anon, authenticated;
-grant execute on function public.integritas_pause_case_investigation(uuid,uuid),public.integritas_resume_case_investigation(uuid,uuid),public.integritas_acknowledge_case_investigation_pause(uuid,text,uuid),public.integritas_finalize_document_delete(uuid,uuid) to service_role;
+create or replace function public.integritas_finalize_document_delete(p_case_id uuid,p_document_id uuid,p_requested_by uuid) returns jsonb
+language sql security definer set search_path = '' as $$ select integritas_private.integritas_finalize_document_delete(p_case_id,p_document_id,p_requested_by); $$;
+revoke all on function public.integritas_pause_case_investigation(uuid,uuid),public.integritas_resume_case_investigation(uuid,uuid),public.integritas_acknowledge_case_investigation_pause(uuid,text,uuid),public.integritas_finalize_document_delete(uuid,uuid,uuid) from public, anon, authenticated;
+grant execute on function public.integritas_pause_case_investigation(uuid,uuid),public.integritas_resume_case_investigation(uuid,uuid),public.integritas_acknowledge_case_investigation_pause(uuid,text,uuid),public.integritas_finalize_document_delete(uuid,uuid,uuid) to service_role;
 
 commit;

@@ -126,6 +126,7 @@ jobs:
           psql -f supabase/migrations/0016_integritas_monotonic_checkpoint_retry.sql
           psql -f supabase/migrations/0017_integritas_performance_hardening.sql
           psql -f supabase/migrations/0018_integritas_report_pdf_artifact.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/0019_integritas_pause_and_document_delete.sql
       - name: Verify control bridge contract
         run: |
           psql -f supabase/tests/0005_integritas_control_bridge.sql
@@ -142,6 +143,7 @@ jobs:
           psql -f supabase/tests/0017_integritas_draft_bundle_replacement.sql
           psql -f supabase/tests/0018_integritas_performance_hardening.sql
           psql -f supabase/tests/0020_integritas_report_pdf_artifact.sql
+          psql -f supabase/tests/0022_integritas_pause_and_document_delete.sql
       - name: Verify investigation rollback preflight
         run: |
           if psql -v ON_ERROR_STOP=1 -f supabase/rollback/0005_integritas_openclaw_investigation_runtime.rollback.sql; then
@@ -152,6 +154,7 @@ jobs:
           psql -c "delete from public.integritas_control_commands where command_type = 'run_case_investigation';"
       - name: Roll back staged control bridge
         run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/rollback/0019_integritas_pause_and_document_delete.rollback.sql
           psql -f supabase/rollback/0018_integritas_report_pdf_artifact.rollback.sql
           psql -f supabase/tests/0021_integritas_report_pdf_artifact_rollback.sql
           psql -f supabase/rollback/0017_integritas_performance_hardening.rollback.sql
