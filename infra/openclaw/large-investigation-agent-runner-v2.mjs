@@ -282,6 +282,80 @@ export function deterministicSyntheticCaseAnalysis(summaries) {
   };
 }
 
+export function deterministicSyntheticCritic({ manifest, documentSummaries, caseAnalysis }) {
+  const expectedDocumentIds = new Set(
+    Array.isArray(manifest?.documents) ? manifest.documents.map((row) => row.id).filter(Boolean) : [],
+  );
+  const coveredDocumentIds = new Set(
+    Array.isArray(documentSummaries) ? documentSummaries.map((row) => row.document_id).filter(Boolean) : [],
+  );
+  const missingDocumentIds = [...expectedDocumentIds].filter((id) => !coveredDocumentIds.has(id));
+  const findings = Array.isArray(caseAnalysis?.findings) ? caseAnalysis.findings : [];
+  const entities = Array.isArray(caseAnalysis?.entities) ? caseAnalysis.entities : [];
+  const contradictions = Array.isArray(caseAnalysis?.contradictions) ? caseAnalysis.contradictions : [];
+  const unresolvedChecks = Array.isArray(caseAnalysis?.unresolved_checks) ? caseAnalysis.unresolved_checks : [];
+  const issues = [];
+
+  if (missingDocumentIds.length) {
+    issues.push({
+      severity: 'critical',
+      category: 'document_coverage',
+      description: `Synthetic QA is missing ${missingDocumentIds.length} submitted document(s) from deterministic review.`,
+      recommended_correction: 'Do not publish; restore complete document coverage and rerun deterministic QA.',
+    });
+  }
+
+  const hasInstructionLikeText = Array.isArray(documentSummaries)
+    && documentSummaries.some((row) => row?.instruction_like_text === true);
+  const hasInjectionFinding = findings.some((row) => row?.finding_type === 'prompt_injection_content');
+  if (hasInstructionLikeText && !hasInjectionFinding) {
+    issues.push({
+      severity: 'critical',
+      category: 'prompt_injection_coverage',
+      description: 'Instruction-like submitted content exists without a corresponding prompt-injection finding.',
+      recommended_correction: 'Retain the hostile text as evidence and add an explicit prompt-injection finding before publication.',
+    });
+  }
+
+  const aliasOwners = new Map();
+  for (const entity of entities) {
+    if (entity?.entity_type !== 'person') continue;
+    const names = [...(Array.isArray(entity.aliases) ? entity.aliases : []), entity.display_name]
+      .filter((value) => typeof value === 'string' && value.trim().length)
+      .map((value) => value.replace(/\s*\([^)]*\)\s*$/u, '').trim().toLowerCase());
+    for (const name of names) {
+      if (!aliasOwners.has(name)) aliasOwners.set(name, new Set());
+      aliasOwners.get(name).add(entity.entity_key);
+    }
+  }
+  const hasSameNameCollision = [...aliasOwners.values()].some((owners) => owners.size > 1);
+  const hasIdentitySeparationFinding = findings.some((row) => row?.finding_type === 'same_name_identity_separation');
+  if (hasSameNameCollision && !hasIdentitySeparationFinding) {
+    issues.push({
+      severity: 'critical',
+      category: 'identity_separation',
+      description: 'Same-name person entities are present without an explicit identity-separation finding.',
+      recommended_correction: 'Keep the identities separate and preserve conflicting identifiers until authoritative linkage is established.',
+    });
+  }
+
+  if (contradictions.length || unresolvedChecks.length) {
+    issues.push({
+      severity: 'high',
+      category: 'synthetic_unresolved_verification',
+      description: `Synthetic hostile QA retains ${contradictions.length} contradiction(s) and ${unresolvedChecks.length} unresolved verification gate(s).`,
+      recommended_correction: 'Keep the terminal outcome incomplete and require authoritative verification in an approved real-data investigation.',
+    });
+  }
+
+  return parseCriticIssuesFinal(JSON.stringify({
+    verdict: issues.length ? 'revise' : 'pass',
+    issues,
+    missing_document_ids: missingDocumentIds,
+    report_gaps: [],
+  }));
+}
+
 function planTask(synthetic) {
   return `# Integritas bounded large-case planner
 
@@ -585,13 +659,38 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
   await writeAtomic(jobDir, 'large-bundle-precritic.json', `${JSON.stringify(preCritic, null, 2)}\n`);
 
   await progress(jobDir, 'independent_review', 68, 'large_independent_critic');
-  const criticResult = await validated({
-    jobDir, id: 'large-critic', role: 'critic', task: criticTask(synthetic),
-    execName: 'large-v2-critic-exec.json', synthetic, allowExternal: false,
-    validator: (final) => parseCriticIssuesFinal(final),
-  });
+  let criticResult;
+  let critic;
+  if (synthetic) {
+    critic = deterministicSyntheticCritic({ manifest, documentSummaries, caseAnalysis });
+    criticResult = {
+      envelope: {
+        ok: true,
+        status: 'ok',
+        final: '',
+        provider: 'integritas',
+        model: 'deterministic-synthetic-critic-v1',
+        sessionId: jobId,
+        toolSummary: { tools: [], calls: 0, failures: 0 },
+      },
+      value: critic,
+      reused: true,
+      failures: [],
+    };
+    executionTools.push(toolResult(
+      'integritas_synthetic_critic_v1',
+      'completed',
+      `Deterministic synthetic critic verdict ${critic.verdict}; ${critic.issues.length} issue(s), ${critic.missing_document_ids.length} missing document(s).`,
+    ));
+  } else {
+    criticResult = await validated({
+      jobDir, id: 'large-critic', role: 'critic', task: criticTask(false),
+      execName: 'large-v2-critic-exec.json', synthetic: false, allowExternal: false,
+      validator: (final) => parseCriticIssuesFinal(final),
+    });
+    critic = criticResult.value;
+  }
   phases.push({ phase: 'large-critic', ...criticResult });
-  const critic = criticResult.value;
   await writeAtomic(jobDir, 'large-critic.json', `${JSON.stringify(critic, null, 2)}\n`);
 
   const reviewed = assembleLargeBundle({
