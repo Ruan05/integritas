@@ -15,6 +15,8 @@ const qaTrusted = {
     title: '[SYNTHETIC QA] Conflicting Nimbus case',
     purpose: 'Authorized synthetic quality assurance only',
     authorized_scope: 'Two synthetic documents and public-source planning; no real-person decision',
+    intended_subjects: 'Two distinct people named Alex Smith; Nimbus Holdings',
+    jurisdictions: ['ZA', 'GB'],
   },
 };
 
@@ -29,6 +31,15 @@ test('recognizes only explicitly trusted synthetic production-validation metadat
   }), false);
   assert.equal(isTrustedSyntheticValidationManifest({
     case: { ...qaTrusted.case, authorized_scope: 'Real-person decision' },
+  }), false);
+  assert.equal(isTrustedSyntheticValidationManifest({
+    case: { ...qaTrusted.case, intended_subjects: 'Real customer' },
+  }), false);
+  assert.equal(isTrustedSyntheticValidationManifest({
+    case: { ...qaTrusted.case, jurisdictions: ['ZA'] },
+  }), false);
+  assert.equal(isTrustedSyntheticValidationManifest({
+    case: { ...qaTrusted.case, jurisdictions: ['ZA', 'GB', 'US'] },
   }), false);
   assert.equal(isTrustedSyntheticValidationManifest({
     case: { ...trusted.case, title: 'Real counterparty investigation' },
