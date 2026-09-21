@@ -37,6 +37,7 @@ jobs:
           node --test infra/report-renderer/test/*.test.mjs
           node scripts/test-integritas-control-contract.mjs
           node scripts/test-integritas-document-limit-contract.mjs
+          node scripts/test-integritas-upload-capacity-contract.mjs
           node scripts/test-integritas-external-research-provenance.mjs
           node scripts/verify-control-bridge-policy.mjs
           node --check infra/openclaw/investigation-agent-runner.mjs
