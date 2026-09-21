@@ -18,7 +18,7 @@ import {
   parseReportSectionFinal,
   shouldUseLargeInvestigation,
 } from '../../large-investigation.mjs';
-import { deterministicSyntheticCaseAnalysis, deterministicSyntheticCritic, providerBlockedLane } from '../../large-investigation-agent-runner-v2.mjs';
+import { deterministicSyntheticCaseAnalysis, deterministicSyntheticCritic, deterministicProviderReportSection, providerBlockedCritic, providerBlockedLane } from '../../large-investigation-agent-runner-v2.mjs';
 
 const CASE_ID='11111111-1111-4111-8111-111111111111';
 const JOB_ID='22222222-2222-4222-8222-222222222222';
@@ -37,6 +37,21 @@ test('provider failure becomes a blocked lane without fabricated evidence', () =
   assert.equal(lane.unresolved_checks.length, 1);
   assert.match(lane.unresolved_checks[0].reason, /provider routing/i);
   assert.match(lane.limitations[0], /no external evidence was asserted/i);
+});
+
+test('provider failure preserves revision-required critic and a structured report fallback', () => {
+  const critic = providerBlockedCritic();
+  assert.equal(critic.verdict, 'revise');
+  assert.equal(critic.issues.length, 1);
+  const text = deterministicProviderReportSection(
+    { id: '01' },
+    { entities: [], findings: [], sources: [], checks: [], unresolved_checks: [] },
+    critic,
+  );
+  assert.match(text, /# MASTER SUMMARY — READ THIS FIRST/);
+  assert.match(text, /Executive Decision Summary/);
+  assert.match(text, /## DIRECT NEXT STEPS — WHAT TO DO NOW/);
+  assert.ok(text.length >= 1800);
 });
 
 function manifest(depth='maximum') {
