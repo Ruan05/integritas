@@ -19,6 +19,11 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.match(source, /const NVIDIA_PRIMARY = 'nvidia\/nvidia\/nemotron-3-ultra-550b-a55b'/);
   assert.match(source, /const NVIDIA_LIGHTNING = 'nvidia\/nvidia\/nemotron-3\.5-lightning-30b-a3b'/);
   assert.match(source, /SYNTHETIC_MODEL_ROUTES = routes\(NVIDIA_PRIMARY, \[NVIDIA_LIGHTNING, \.\.\.FREE_FALLBACKS\]\)/);
+  assert.ok(source.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';"));
+  assert.ok(source.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';"));
+  assert.ok(source.includes("const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash';"));
+  assert.ok(source.includes('planner: { model: GLM_53'));
+  assert.ok(source.includes('research: { model: DEEPSEEK_FLASH'));
   assert.match(source, /integritas-openrouter\/nvidia\/nemotron-3-ultra-550b-a55b:free/);
   assert.match(source, /trustedForensics/);
   assert.match(source, /integritas_forensics_v1/);
@@ -90,8 +95,10 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.match(large, /provider: 'integritas', model: 'deterministic-large-assembly-v2'/, 'final canonical bundle must be assembled deterministically rather than by a model');
   assert.match(large, /failed every validated model route/, 'schema-invalid model output must trigger application-level model failover');
   assert.match(large, /readFile\(path\.join\(jobDir, execName\)/, 'validated phase artifacts must be reused on retry');
-  assert.ok(large.includes("const REAL_EVIDENCE_MODEL = 'opencode-go/kimi-k3';"), 'large real-evidence work must use the approved zero-retention route');
-  assert.ok(large.includes('if (!synthetic) return [REAL_EVIDENCE_MODEL];'), 'large real-evidence work must fail closed to one approved provider route');
+  assert.ok(large.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';"), 'large research lanes must expose DeepSeek V4.1 Flash');
+  assert.ok(large.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';"), 'large planning and critic lanes must expose GLM 5.3');
+  assert.ok(large.includes("const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash';"), 'large investigations must expose the low-cost GLM fallback');
+  assert.ok(large.includes('FREE_OPENROUTER_MODELS.has(model)'), 'free-fallback budget must apply only to free OpenRouter routes');
   assert.match(large, /MAX_OPENROUTER_FREE_USES = 4/, 'OpenRouter free fallback must remain synthetic-only and bounded');
   assert.match(large, /external lane sources require observed research-tool use in the same phase/, 'external source provenance must be phase-local');
   assert.match(large, /# MASTER SUMMARY — READ THIS FIRST/);
@@ -122,7 +129,13 @@ test('investigation profile uses only required provider SecretRefs and keeps the
   ]) {
     assert.ok(config.includes(`"${model}"`), `missing routed model allowlist entry: ${model}`);
   }
-  assert.ok(config.includes('"opencode-go/kimi-k3": {}'), 'production investigation profile must allow the approved zero-retention real-evidence model');
+  for (const model of [
+    'integritas-openrouter/deepseek/deepseek-v4.1-flash',
+    'integritas-openrouter/z-ai/glm-5.3',
+    'integritas-openrouter/z-ai/glm-5.3-flash',
+  ]) {
+    assert.ok(config.includes(`"${model}": {}`), `missing optimized real-investigation model: ${model}`);
+  }
   assert.doesNotMatch(config, /gsk_[A-Za-z0-9_-]+/);
   assert.doesNotMatch(config, /sk-or-v1-[A-Za-z0-9_-]+/);
   assert.doesNotMatch(config, /nvapi-[A-Za-z0-9_-]+/);
@@ -134,11 +147,10 @@ test('investigation profile uses only required provider SecretRefs and keeps the
   }
 });
 
-test('runner exposes NVIDIA/OpenRouter credentials only to trusted synthetic validation', async () => {
+test('runner passes only approved provider credentials into OpenClaw', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
-  assert.ok(source.includes('function agentEnv(trustedSynthetic)'));
-  assert.ok(source.includes("trustedSynthetic ? ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY'] : []"));
-  assert.ok(source.includes('env: agentEnv(trustedSynthetic)'));
+  assert.ok(source.includes("const providerNames = ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY'];"));
+  assert.ok(source.includes('env: agentEnv()'));
   for (const name of ['GROQ_API_KEY', 'GEMINI_API_KEY', 'CEREBRAS_API_KEY', 'EXA_API_KEY', 'HF_TOKEN']) {
     assert.doesNotMatch(source, new RegExp(`'${name}'`));
   }
