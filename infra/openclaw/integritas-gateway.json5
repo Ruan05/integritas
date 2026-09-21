@@ -61,4 +61,45 @@
       },
     },
   },
+  memory: {
+    search: {
+      enabled: true,
+      provider: "openai-compatible",
+      model: "nvidia/nemotron-3-embed-1b",
+      sources: ["memory", "sessions"],
+      experimental: { sessionMemory: true },
+      remote: {
+        baseUrl: "https://integrate.api.nvidia.com/v1",
+        apiKey: { source: "env", provider: "default", id: "NVIDIA_API_KEY" },
+      },
+      queryInputType: "query",
+      documentInputType: "passage",
+      fallback: "none",
+      rememberAcrossConversations: true,
+    },
+  },
+  plugins: {
+    entries: {
+      "active-memory": {
+        enabled: true,
+        config: {
+          enabled: true,
+          mode: "escalate",
+          agents: ["main", "personal-admin"],
+          allowedChatTypes: ["direct", "explicit"],
+          queryMode: "recent",
+          promptStyle: "balanced",
+          timeoutMs: 12000,
+          maxSummaryChars: 220,
+          persistTranscripts: false,
+          logging: false,
+        },
+      },
+      "memory-core": {
+        config: {
+          dreaming: { enabled: true },
+        },
+      },
+    },
+  },
 }
