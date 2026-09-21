@@ -91,6 +91,42 @@ test('bounded large plan stays compact and builds compatible planner metadata', 
   assert.throws(()=>parseLargePlanFinal(JSON.stringify({...plan,research_lanes:Array.from({length:17},(_,i)=>({...plan.research_lanes[0],lane_id:`lane-${i}`}))})),/array/);
 });
 
+test('large plan normalizes structured planner tests and specialist checks', () => {
+  const parsed=parseLargePlanFinal(JSON.stringify({
+    case_profile:{
+      case_type:'synthetic hostile diligence',
+      jurisdictions:['ZA'],
+      assets_or_products:[],
+      incoterms:[],
+      payment_instruments:[],
+      critical_transaction_features:['identity conflicts'],
+    },
+    research_lanes:[],
+    cross_document_tests:[{
+      test_id:'registration_number_conflict',
+      description:'Compare conflicting registration identifiers.',
+      expected_outcome:'Conflict remains unresolved pending authoritative verification.',
+    }],
+    specialist_checks:[{
+      check_id:'registry_access_verification',
+      specialist:'Corporate registry specialist',
+      required_action:'Obtain the authoritative registry extract.',
+      trigger_condition:'Public registry access is unavailable or ambiguous.',
+    }],
+    automatic_stop_conditions:['Do not treat submitted claims as registry proof.'],
+  }),{allowZeroLanes:true});
+  assert.deepEqual(parsed.cross_document_tests,[
+    '[registration_number_conflict] Compare conflicting registration identifiers. Expected outcome: Conflict remains unresolved pending authoritative verification.',
+  ]);
+  assert.deepEqual(parsed.specialist_checks,[
+    '[registry_access_verification] Corporate registry specialist: Obtain the authoritative registry extract. Trigger: Public registry access is unavailable or ambiguous.',
+  ]);
+  assert.throws(()=>parseLargePlanFinal(JSON.stringify({
+    ...parsed,
+    specialist_checks:[{check_id:'bad',specialist:'X',required_action:'Y',trigger_condition:'Z',unexpected:'no'}],
+  }),{allowZeroLanes:true}),/unknown field/);
+});
+
 test('case/lane outputs materialize into deterministic canonical keys', () => {
   const docKeys=new Set([documentSourceKey(DOC1),documentSourceKey(DOC2)]);
   const analysis=parseCaseAnalysisFinal(JSON.stringify({
