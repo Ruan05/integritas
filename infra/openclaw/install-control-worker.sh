@@ -16,6 +16,8 @@ RUNNER_SCRIPT_SRC="$REPO_ROOT/infra/openclaw/investigation-agent-runner.mjs"
 RUNNER_SCRIPT_DEST=/opt/integritas/current/infra/openclaw/investigation-agent-runner.mjs
 GATEWAY_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-gateway.json5"
 RUNNER_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-investigation.json5"
+ZEN_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-investigation-zen.json5"
+ZEN_TOOL_SRC="$REPO_ROOT/infra/openclaw/integritas-zen.sh"
 POLKIT_SRC="$REPO_ROOT/infra/openclaw/49-integritas-openclaw-control.rules"
 ENV_DIR=/etc/integritas
 ENV_FILE="$ENV_DIR/control-worker.env"
@@ -29,6 +31,9 @@ OPENCLAW_CONFIG_DIR=/etc/openclaw
 OPENCLAW_CONFIG_PATH="$OPENCLAW_CONFIG_DIR/openclaw.json"
 GATEWAY_CONFIG_DEST="$OPENCLAW_CONFIG_DIR/integritas-gateway.json"
 RUNNER_CONFIG_DEST="$OPENCLAW_CONFIG_DIR/integritas-investigation.json"
+ZEN_CONFIG_DEST="$OPENCLAW_CONFIG_DIR/integritas-investigation-zen.json"
+ZEN_TOOL_DEST=/usr/local/sbin/integritas-zen
+ZEN_ENABLE_MARKER="$OPENCLAW_CONFIG_DIR/zen-enabled"
 
 repair_openclaw_config_permissions() {
   install -d -o root -g openclaw -m 0750 "$OPENCLAW_CONFIG_DIR"
@@ -45,6 +50,14 @@ repair_openclaw_config_permissions() {
   if [[ -f "$RUNNER_CONFIG_DEST" ]]; then
     chown root:openclaw "$RUNNER_CONFIG_DEST"
     chmod 0640 "$RUNNER_CONFIG_DEST"
+  fi
+  if [[ -f "$ZEN_CONFIG_DEST" ]]; then
+    chown root:openclaw "$ZEN_CONFIG_DEST"
+    chmod 0640 "$ZEN_CONFIG_DEST"
+  fi
+  if [[ -f "$ZEN_ENABLE_MARKER" ]]; then
+    chown root:openclaw "$ZEN_ENABLE_MARKER"
+    chmod 0640 "$ZEN_ENABLE_MARKER"
   fi
 }
 
@@ -92,7 +105,7 @@ validate_openclaw_with_provider_env() {
 for required in /usr/bin/node /usr/bin/systemctl /usr/bin/systemd-analyze /usr/bin/getent /usr/bin/env /usr/bin/bash /usr/bin/grep /usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/sbin/runuser; do
   [[ -x "$required" ]] || { echo "Missing required executable: $required" >&2; exit 1; }
 done
-for required in "$SERVICE_SRC" "$GATEWAY_SERVICE_SRC" "$RUNNER_SERVICE_SRC" "$DEPLOY_SERVICE_SRC" "$CONTROLLED_DEPLOY_SRC" "$RUNNER_SCRIPT_SRC" "$GATEWAY_CONFIG_SRC" "$RUNNER_CONFIG_SRC" "$POLKIT_SRC"; do
+for required in "$SERVICE_SRC" "$GATEWAY_SERVICE_SRC" "$RUNNER_SERVICE_SRC" "$DEPLOY_SERVICE_SRC" "$CONTROLLED_DEPLOY_SRC" "$RUNNER_SCRIPT_SRC" "$GATEWAY_CONFIG_SRC" "$RUNNER_CONFIG_SRC" "$ZEN_CONFIG_SRC" "$ZEN_TOOL_SRC" "$POLKIT_SRC"; do
   [[ -f "$required" ]] || { echo "Missing required file: $required" >&2; exit 1; }
 done
 [[ -d /etc/polkit-1/rules.d ]] || { echo "Polkit rules directory is unavailable" >&2; exit 1; }
@@ -125,6 +138,8 @@ fi
 repair_openclaw_config_permissions
 install -o root -g openclaw -m 0640 "$GATEWAY_CONFIG_SRC" "$GATEWAY_CONFIG_DEST"
 install -o root -g openclaw -m 0640 "$RUNNER_CONFIG_SRC" "$RUNNER_CONFIG_DEST"
+install -o root -g openclaw -m 0640 "$ZEN_CONFIG_SRC" "$ZEN_CONFIG_DEST"
+install -o root -g root -m 0755 "$ZEN_TOOL_SRC" "$ZEN_TOOL_DEST"
 repair_openclaw_config_permissions
 install -o root -g root -m 0644 "$POLKIT_SRC" /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
 
@@ -152,6 +167,11 @@ fi
 
 validate_openclaw_with_provider_env "$GATEWAY_CONFIG_DEST"
 validate_openclaw_with_provider_env "$RUNNER_CONFIG_DEST"
+if grep -Eq '^OPENCODE_ZEN_API_KEY=.+' "$PROVIDER_ENV_FILE"; then
+  validate_openclaw_with_provider_env "$ZEN_CONFIG_DEST"
+else
+  rm -f "$ZEN_ENABLE_MARKER"
+fi
 /usr/bin/systemctl daemon-reload
 /usr/bin/systemd-analyze verify /etc/systemd/system/integritas-control-worker.service >/dev/null
 /usr/bin/systemd-analyze verify /etc/systemd/system/openclaw-gateway.service >/dev/null
