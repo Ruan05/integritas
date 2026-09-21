@@ -15,12 +15,17 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const MAX_AGENT_ENVELOPE_BYTES = 5 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
 
-const NVIDIA_PRIMARY = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
-const NVIDIA_LIGHTNING = 'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b';
+const NVIDIA_PRIMARY = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b';
+const FREE_FAST = 'integritas-openrouter/nvidia/nemotron-3-super-120b-a12b:free';
 const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';
 const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';
 const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash';
 const FREE_FALLBACKS = [
+  FREE_FAST,
+  'integritas-openrouter/nex-agi/nex-n2.5-pro:free',
+  'integritas-openrouter/cohere/north-mini-code:free',
+  'integritas-openrouter/inclusionai/ling-3.0-flash-fin:free',
+  'integritas-openrouter/poolside/laguna-xs-2.1:free',
   'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
   'integritas-openrouter/openrouter/free',
 ];
@@ -50,13 +55,13 @@ function routes(primary, fallbacks) {
   });
 }
 
-const SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, [NVIDIA_LIGHTNING, ...FREE_FALLBACKS]);
+const SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, FREE_FALLBACKS);
 const QUALITY_FALLBACKS = [DEEPSEEK_FLASH, GLM_53_FLASH, NVIDIA_PRIMARY, ...FREE_FALLBACKS];
-const RESEARCH_FALLBACKS = [GLM_53_FLASH, GLM_53, NVIDIA_LIGHTNING, ...FREE_FALLBACKS];
+const RESEARCH_FALLBACKS = [GLM_53_FLASH, GLM_53, NVIDIA_PRIMARY, ...FREE_FALLBACKS];
 const REAL_MODEL_ROUTES = Object.freeze({
   fast: {
     planner: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_PRIMARY, ...FREE_FALLBACKS], timeoutSeconds: 240 },
-    research: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_LIGHTNING, ...FREE_FALLBACKS], timeoutSeconds: 600 },
+    research: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_PRIMARY, ...FREE_FALLBACKS], timeoutSeconds: 600 },
   },
   standard: {
     planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 300 },
