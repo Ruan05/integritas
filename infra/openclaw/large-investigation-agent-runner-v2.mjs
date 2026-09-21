@@ -8,6 +8,7 @@ import { isTrustedSyntheticValidationManifest } from './synthetic-validation.mjs
 import { buildDeterministicChecks } from './transaction-checks.mjs';
 import { reconcilePlanChecks } from './plan-checks.mjs';
 import { buildNoEvidenceReport, classifyInvestigationWorkload } from './workload-classifier.mjs';
+import { applyEvidenceDrivenSpecialistRouting } from './specialist-router.mjs';
 import { validateInvestigationBundle } from './control-worker/src/bundle.mjs';
 import {
   LARGE_REPORT_SECTIONS,
@@ -778,7 +779,8 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
     ),
   });
   phases.push({ phase: 'large-plan', ...planResult });
-  const plan = buildCompatiblePlan(documentSummaries, planResult.value);
+  let plan = buildCompatiblePlan(documentSummaries, planResult.value);
+  plan = applyEvidenceDrivenSpecialistRouting(plan, manifest);
   await writeAtomic(jobDir, 'investigation-plan.json', `${JSON.stringify(plan, null, 2)}\n`);
   const deterministicChecks = buildDeterministicChecks(plan);
   await writeAtomic(jobDir, 'deterministic-checks.json', `${JSON.stringify(deterministicChecks, null, 2)}\n`);
