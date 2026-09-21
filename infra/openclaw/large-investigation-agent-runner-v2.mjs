@@ -28,6 +28,7 @@ const MAX_AGENT_ENVELOPE_BYTES = 8 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
 const NVIDIA_LIGHTNING = 'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b';
 const NVIDIA_ULTRA = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
+const REAL_EVIDENCE_MODEL = 'opencode-go/kimi-k3';
 const OPENROUTER_ULTRA = 'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free';
 const OPENROUTER_FREE = 'integritas-openrouter/openrouter/free';
 const MAX_OPENROUTER_FREE_USES = 4;
@@ -81,6 +82,7 @@ function safePart(value) { return String(value).replace(/[^A-Za-z0-9._-]/g, '-')
 function toolResult(tool, status, summary) { return { tool, status, summary: String(summary).slice(0, 4000) }; }
 
 function candidates(role, synthetic) {
+  if (!synthetic) return [REAL_EVIDENCE_MODEL];
   const nvidia = !!process.env.NVIDIA_API_KEY;
   const openrouter = !!process.env.OPENROUTER_API_KEY;
   const rows = {
@@ -97,14 +99,15 @@ function candidates(role, synthetic) {
 function timeoutFor(role) {
   return { shard: 300, plan: 420, analysis: 600, lane: 720, critic: 480, report: 480 }[role] ?? 600;
 }
-function agentEnv() {
+function agentEnv(synthetic) {
+  const providerNames = synthetic ? ['NVIDIA_API_KEY', 'OPENROUTER_API_KEY'] : [];
   return {
     HOME: '/var/lib/openclaw',
     OPENCLAW_HOME: '/var/lib/openclaw',
     OPENCLAW_STATE_DIR: '/var/lib/openclaw',
     PATH: '/opt/openclaw/bin:/usr/bin:/bin',
     LANG: 'C',
-    ...Object.fromEntries(['NVIDIA_API_KEY', 'OPENROUTER_API_KEY']
+    ...Object.fromEntries(providerNames
       .filter((name) => process.env[name]).map((name) => [name, process.env[name]])),
   };
 }
@@ -148,7 +151,7 @@ function externalTools(envelope) {
     ? envelope.toolSummary.tools.filter((tool) => RESEARCH_TOOLS.has(tool))
     : [];
 }
-async function invoke(jobDir, messageFile, model, timeoutSeconds) {
+async function invoke(jobDir, messageFile, model, timeoutSeconds, synthetic) {
   const args = [
     'agent', 'exec', '--config', '/etc/openclaw/integritas-investigation.json',
     '--cwd', jobDir, '--message-file', path.join(jobDir, messageFile),
@@ -156,7 +159,7 @@ async function invoke(jobDir, messageFile, model, timeoutSeconds) {
   ];
   const result = await execFileAsync('/opt/openclaw/bin/openclaw', args, {
     cwd: jobDir,
-    env: agentEnv(),
+    env: agentEnv(synthetic),
     timeout: (timeoutSeconds + 60) * 1000,
     maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
   });
@@ -185,7 +188,7 @@ async function validated({
     }
     if (model.startsWith('integritas-openrouter/')) openRouterFallbackUses += 1;
     try {
-      const raw = await invoke(jobDir, taskName, model, timeoutFor(role));
+      const raw = await invoke(jobDir, taskName, model, timeoutFor(role), synthetic);
       await writeAtomic(jobDir, `large-v2-attempt-${safePart(id)}-${index + 1}.json`, raw);
       const envelope = parseEnvelope(raw, id);
       if (!allowExternal && externalTools(envelope).length) throw new Error('phase used forbidden external research');
