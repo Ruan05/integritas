@@ -21,6 +21,9 @@ MANAGED_FILES=(
   /etc/openclaw/openclaw.json
   /etc/openclaw/integritas-gateway.json
   /etc/openclaw/integritas-investigation.json
+  /etc/openclaw/integritas-investigation-zen.json
+  /etc/openclaw/zen-enabled
+  /usr/local/sbin/integritas-zen
   /etc/systemd/system/integritas-control-worker.service
   /etc/systemd/system/openclaw-gateway.service
   /etc/systemd/system/integritas-openclaw-investigation@.service
@@ -91,6 +94,8 @@ for required in \
   infra/openclaw/contracts/investigation-bundle-v1.schema.json \
   infra/openclaw/integritas-gateway.json5 \
   infra/openclaw/integritas-investigation.json5 \
+  infra/openclaw/integritas-investigation-zen.json5 \
+  infra/openclaw/integritas-zen.sh \
   infra/openclaw/integritas-control-worker.service \
   infra/openclaw/openclaw-gateway.service \
   infra/openclaw/integritas-openclaw-investigation@.service \
