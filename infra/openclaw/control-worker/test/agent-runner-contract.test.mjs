@@ -43,6 +43,7 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.match(source, /isTrustedSyntheticValidationManifest\(manifest\)/, 'zero-lane exception must depend on trusted manifest metadata');
   assert.match(source, /plan\.research_lanes\.length < 1 && !allowZeroResearchLanes/, 'real investigations must still require at least one research lane');
   assert.match(source, /filterSyntheticExternalResearchLanes/, 'trusted synthetic plans must remove external research lanes');
+  assert.match(source, /applyEvidenceDrivenSpecialistRouting\(plan, manifest\)/, 'validated plans must pass through deterministic evidence-driven specialist routing');
   assert.match(source, /synthetic validation research must not perform external research/, 'synthetic external tool use must fail closed');
   const retainedPlannerRead = source.indexOf("readFile(path.join(jobDir, 'planner-agent-exec.json'), 'utf8')");
   const plannerRun = source.indexOf("runAgent('planner-task.md', route.planner)");
@@ -101,6 +102,7 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.match(large, /mapLimit\(shards, 2/, 'document shard concurrency must remain rate-safe');
   assert.match(large, /mapLimit\(plan\.research_lanes, 2/, 'research lane concurrency must remain rate-safe');
   assert.match(large, /parseLargePlanFinal/, 'large plan must use a bounded contract');
+  assert.match(large, /applyEvidenceDrivenSpecialistRouting\(plan, manifest\)/, 'large plans must use the same evidence-driven specialist router');
   assert.match(large, /parseDocumentShardFinal/, 'document shards must validate exact coverage');
   assert.match(large, /parseLaneFinal/, 'research lanes must use a bounded schema');
   assert.match(large, /validateInvestigationBundle\(finalBundle, manifest, reportMarkdown\)/, 'deterministic assembly must pass the canonical bundle validator');
