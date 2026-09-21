@@ -28,9 +28,12 @@ const MAX_AGENT_ENVELOPE_BYTES = 8 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
 const NVIDIA_LIGHTNING = 'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b';
 const NVIDIA_ULTRA = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
-const REAL_EVIDENCE_MODEL = 'opencode-go/kimi-k3';
+const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';
+const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';
+const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash';
 const OPENROUTER_ULTRA = 'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free';
 const OPENROUTER_FREE = 'integritas-openrouter/openrouter/free';
+const FREE_OPENROUTER_MODELS = new Set([OPENROUTER_ULTRA, OPENROUTER_FREE]);
 const MAX_OPENROUTER_FREE_USES = 4;
 let openRouterFallbackUses = 0;
 
@@ -82,9 +85,19 @@ function safePart(value) { return String(value).replace(/[^A-Za-z0-9._-]/g, '-')
 function toolResult(tool, status, summary) { return { tool, status, summary: String(summary).slice(0, 4000) }; }
 
 function candidates(role, synthetic) {
-  if (!synthetic) return [REAL_EVIDENCE_MODEL];
   const nvidia = !!process.env.NVIDIA_API_KEY;
   const openrouter = !!process.env.OPENROUTER_API_KEY;
+  if (!synthetic) {
+    const rows = {
+      shard: [openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_LIGHTNING, OPENROUTER_ULTRA, OPENROUTER_FREE],
+      plan: [openrouter && GLM_53, openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, OPENROUTER_ULTRA, OPENROUTER_FREE],
+      analysis: [openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, openrouter && GLM_53, nvidia && NVIDIA_ULTRA, OPENROUTER_ULTRA, OPENROUTER_FREE],
+      lane: [openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, openrouter && GLM_53, nvidia && NVIDIA_ULTRA, OPENROUTER_ULTRA, OPENROUTER_FREE],
+      critic: [openrouter && GLM_53, openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, OPENROUTER_ULTRA, OPENROUTER_FREE],
+      report: [openrouter && GLM_53, openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_LIGHTNING, OPENROUTER_ULTRA, OPENROUTER_FREE],
+    }[role] ?? [];
+    return uniq(rows);
+  }
   const rows = {
     shard: [nvidia && NVIDIA_LIGHTNING, nvidia && NVIDIA_ULTRA],
     plan: [nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_LIGHTNING],
@@ -93,14 +106,14 @@ function candidates(role, synthetic) {
     critic: [nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_LIGHTNING],
     report: [nvidia && NVIDIA_LIGHTNING, nvidia && NVIDIA_ULTRA],
   }[role] ?? [];
-  if (synthetic && openrouter) rows.push(OPENROUTER_ULTRA, OPENROUTER_FREE);
+  if (openrouter) rows.push(OPENROUTER_ULTRA, OPENROUTER_FREE);
   return uniq(rows);
 }
 function timeoutFor(role) {
   return { shard: 300, plan: 420, analysis: 600, lane: 720, critic: 480, report: 480 }[role] ?? 600;
 }
-function agentEnv(synthetic) {
-  const providerNames = synthetic ? ['NVIDIA_API_KEY', 'OPENROUTER_API_KEY'] : [];
+function agentEnv() {
+  const providerNames = ['NVIDIA_API_KEY', 'OPENROUTER_API_KEY'];
   return {
     HOME: '/var/lib/openclaw',
     OPENCLAW_HOME: '/var/lib/openclaw',
@@ -159,7 +172,7 @@ async function invoke(jobDir, messageFile, model, timeoutSeconds, synthetic) {
   ];
   const result = await execFileAsync('/opt/openclaw/bin/openclaw', args, {
     cwd: jobDir,
-    env: agentEnv(synthetic),
+    env: agentEnv(),
     timeout: (timeoutSeconds + 60) * 1000,
     maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
   });
@@ -182,11 +195,11 @@ async function validated({
   const models = candidates(role, synthetic);
   if (!models.length) throw new Error(`${id}: no configured provider candidate available`);
   for (const [index, model] of models.entries()) {
-    if (model.startsWith('integritas-openrouter/') && openRouterFallbackUses >= MAX_OPENROUTER_FREE_USES) {
+    if (FREE_OPENROUTER_MODELS.has(model) && openRouterFallbackUses >= MAX_OPENROUTER_FREE_USES) {
       failures.push({ model, error: 'skipped because per-investigation OpenRouter free fallback budget is exhausted' });
       continue;
     }
-    if (model.startsWith('integritas-openrouter/')) openRouterFallbackUses += 1;
+    if (FREE_OPENROUTER_MODELS.has(model)) openRouterFallbackUses += 1;
     try {
       const raw = await invoke(jobDir, taskName, model, timeoutFor(role), synthetic);
       await writeAtomic(jobDir, `large-v2-attempt-${safePart(id)}-${index + 1}.json`, raw);
