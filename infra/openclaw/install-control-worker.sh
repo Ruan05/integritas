@@ -10,6 +10,7 @@ REPO_ROOT=${INTEGRITAS_REPO_ROOT:-/opt/integritas/current}
 SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-control-worker.service"
 GATEWAY_SERVICE_SRC="$REPO_ROOT/infra/openclaw/openclaw-gateway.service"
 BROWSER_SERVICE_SRC="$REPO_ROOT/infra/openclaw/openclaw-browser.service"
+BROWSER_HELPER_SRC="$REPO_ROOT/infra/openclaw/integritas-browser-start.sh"
 RUNNER_SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-openclaw-investigation@.service"
 DEPLOY_SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-release-deploy@.service"
 CONTROLLED_DEPLOY_SRC="$REPO_ROOT/infra/oracle/deploy-integritas-controlled.sh"
@@ -33,6 +34,7 @@ OPENCLAW_CONFIG_PATH="$OPENCLAW_CONFIG_DIR/openclaw.json"
 GATEWAY_CONFIG_DEST="$OPENCLAW_CONFIG_DIR/integritas-gateway.json"
 RUNNER_CONFIG_DEST="$OPENCLAW_CONFIG_DIR/integritas-investigation.json"
 BROWSER_SERVICE_DEST=/etc/systemd/system/openclaw-browser.service
+BROWSER_HELPER_DEST=/usr/local/libexec/integritas-browser-start
 ZEN_CONFIG_DEST="$OPENCLAW_CONFIG_DIR/integritas-investigation-zen.json"
 ZEN_TOOL_DEST=/usr/local/sbin/integritas-zen
 ZEN_ENABLE_MARKER="$OPENCLAW_CONFIG_DIR/zen-enabled"
@@ -107,7 +109,7 @@ validate_openclaw_with_provider_env() {
 for required in /usr/bin/node /usr/bin/systemctl /usr/bin/systemd-analyze /usr/bin/getent /usr/bin/env /usr/bin/bash /usr/bin/grep /usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/sbin/runuser; do
   [[ -x "$required" ]] || { echo "Missing required executable: $required" >&2; exit 1; }
 done
-for required in "$SERVICE_SRC" "$GATEWAY_SERVICE_SRC" "$BROWSER_SERVICE_SRC" "$RUNNER_SERVICE_SRC" "$DEPLOY_SERVICE_SRC" "$CONTROLLED_DEPLOY_SRC" "$RUNNER_SCRIPT_SRC" "$GATEWAY_CONFIG_SRC" "$RUNNER_CONFIG_SRC" "$ZEN_CONFIG_SRC" "$ZEN_TOOL_SRC" "$POLKIT_SRC"; do
+for required in "$SERVICE_SRC" "$GATEWAY_SERVICE_SRC" "$BROWSER_SERVICE_SRC" "$BROWSER_HELPER_SRC" "$RUNNER_SERVICE_SRC" "$DEPLOY_SERVICE_SRC" "$CONTROLLED_DEPLOY_SRC" "$RUNNER_SCRIPT_SRC" "$GATEWAY_CONFIG_SRC" "$RUNNER_CONFIG_SRC" "$ZEN_CONFIG_SRC" "$ZEN_TOOL_SRC" "$POLKIT_SRC"; do
   [[ -f "$required" ]] || { echo "Missing required file: $required" >&2; exit 1; }
 done
 [[ -d /etc/polkit-1/rules.d ]] || { echo "Polkit rules directory is unavailable" >&2; exit 1; }
@@ -129,6 +131,8 @@ install -d -o integritas-control -g "$SHARED_GROUP" -m 2770 "$RUNNER_ROOT" "$RUN
 install -o root -g root -m 0644 "$SERVICE_SRC" /etc/systemd/system/integritas-control-worker.service
 install -o root -g root -m 0644 "$GATEWAY_SERVICE_SRC" /etc/systemd/system/openclaw-gateway.service
 install -o root -g root -m 0644 "$BROWSER_SERVICE_SRC" "$BROWSER_SERVICE_DEST"
+install -d -o root -g root -m 0755 /usr/local/libexec
+install -o root -g root -m 0755 "$BROWSER_HELPER_SRC" "$BROWSER_HELPER_DEST"
 install -o root -g root -m 0644 "$RUNNER_SERVICE_SRC" /etc/systemd/system/integritas-openclaw-investigation@.service
 install -o root -g root -m 0644 "$DEPLOY_SERVICE_SRC" /etc/systemd/system/integritas-release-deploy@.service
 chmod 0755 "$CONTROLLED_DEPLOY_SRC"
