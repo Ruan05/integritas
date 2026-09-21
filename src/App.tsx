@@ -141,10 +141,11 @@ export function App() {
       try {
         const runtimes = await browserClient.runtimeStatus(token);
         if (!cancelled) setRuntime((runtimes.find((item: RuntimeStatus) => item.worker_id === 'oracle-primary') ?? runtimes[0] ?? null) as RuntimeStatus | null);
-      } catch (error) {
+      } catch {
         if (!cancelled) {
-          setRuntime(null);
-          setNotice(error instanceof Error ? error.message : String(error));
+          // Preserve the last attested heartbeat across a transient network failure.
+          // Readiness naturally expires once last_seen_at becomes stale.
+          setRuntime((current) => current);
         }
       }
     };
