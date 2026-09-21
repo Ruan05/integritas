@@ -20,6 +20,14 @@ const FREE_FAST = 'integritas-openrouter/nvidia/nemotron-3-super-120b-a12b:free'
 const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';
 const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';
 const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash';
+const ZEN_FREE_FALLBACKS = [
+  'integritas-opencode-zen/big-pickle',
+  'integritas-opencode-zen/nemotron-3-ultra-free',
+  'integritas-opencode-zen/deepseek-v4-flash-free',
+  'integritas-opencode-zen/mimo-v2.5-free',
+  'integritas-opencode-zen/ling-3.0-flash-fin-free',
+  'integritas-opencode-zen/nemotron-3.5-lightning-free',
+];
 const FREE_FALLBACKS = [
   FREE_FAST,
   'integritas-openrouter/nex-agi/nex-n2.5-pro:free',
@@ -55,13 +63,16 @@ function routes(primary, fallbacks) {
   });
 }
 
-const SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, FREE_FALLBACKS);
-const QUALITY_FALLBACKS = [DEEPSEEK_FLASH, GLM_53_FLASH, NVIDIA_PRIMARY, ...FREE_FALLBACKS];
-const RESEARCH_FALLBACKS = [GLM_53_FLASH, GLM_53, NVIDIA_PRIMARY, ...FREE_FALLBACKS];
+const ACTIVE_FREE_FALLBACKS = process.env.OPENCODE_ZEN_API_KEY
+  ? [...ZEN_FREE_FALLBACKS, ...FREE_FALLBACKS]
+  : FREE_FALLBACKS;
+const SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, ACTIVE_FREE_FALLBACKS);
+const QUALITY_FALLBACKS = [DEEPSEEK_FLASH, GLM_53_FLASH, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS];
+const RESEARCH_FALLBACKS = [GLM_53_FLASH, GLM_53, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS];
 const REAL_MODEL_ROUTES = Object.freeze({
   fast: {
-    planner: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_PRIMARY, ...FREE_FALLBACKS], timeoutSeconds: 240 },
-    research: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_PRIMARY, ...FREE_FALLBACKS], timeoutSeconds: 600 },
+    planner: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS], timeoutSeconds: 240 },
+    research: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS], timeoutSeconds: 600 },
   },
   standard: {
     planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 300 },
@@ -102,7 +113,7 @@ if (!trustedSynthetic && !Object.values(route).every((phaseRoute) =>
 }
 
 function agentEnv() {
-  const providerNames = ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY'];
+  const providerNames = ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY', 'OPENCODE_ZEN_API_KEY'];
   return {
     HOME: '/var/lib/openclaw',
     OPENCLAW_HOME: '/var/lib/openclaw',
