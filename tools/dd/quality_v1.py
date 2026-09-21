@@ -369,8 +369,36 @@ def validate_report_front_matter(report_text, errors):
     }
 
 
+def evidence_proportional_no_evidence(bundle):
+    checks = bundle.get('checks') if isinstance(bundle.get('checks'), list) else []
+    execution = bundle.get('execution') if isinstance(bundle.get('execution'), dict) else {}
+    tools = execution.get('tool_results') if isinstance(execution.get('tool_results'), list) else []
+    sources = bundle.get('sources') if isinstance(bundle.get('sources'), list) else []
+    marker_check = any(
+        isinstance(row, dict)
+        and row.get('check_key') == 'workload.no_investigable_evidence'
+        and row.get('status') == 'complete'
+        for row in checks
+    )
+    marker_tool = any(
+        isinstance(row, dict)
+        and row.get('tool') == 'integritas_workload_classifier_v1'
+        and row.get('status') == 'completed'
+        for row in tools
+    )
+    empty_material_records = all(
+        isinstance(bundle.get(key), list) and len(bundle.get(key)) == 0
+        for key in ('entities', 'relationships', 'findings', 'contradictions', 'unresolved_checks')
+    )
+    no_external_research = all(
+        isinstance(row, dict) and row.get('evidence_origin') == 'submitted_document'
+        for row in sources
+    )
+    return marker_check and marker_tool and empty_material_records and no_external_research
+
+
 def validate_maximum_report(bundle, report_text, errors):
-    if bundle.get('depth') != 'maximum':
+    if bundle.get('depth') != 'maximum' or evidence_proportional_no_evidence(bundle):
         return {'required_lanes': 0, 'missing_lanes': [], 'missing_features': []}
     if len(report_text) < MAXIMUM_REPORT_MIN_CHARS:
         errors.append(
