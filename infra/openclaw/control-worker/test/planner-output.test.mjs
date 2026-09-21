@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePlannerJsonObject, filterSyntheticExternalResearchLanes } from '../../planner-output.mjs';
+import { parsePlannerJsonObject, filterSyntheticExternalResearchLanes, normalizeOptionalStringArray } from '../../planner-output.mjs';
 
 test('accepts one bounded fenced planner JSON object wrapped in prose', () => {
   const value = {
@@ -37,6 +37,16 @@ test('rejects ambiguous or structurally unsafe fenced planner wrappers', () => {
     () => parsePlannerJsonObject('Unsafe {brace} wrapper\n' + fence + 'json\n' + value + '\n' + fence),
     /must contain one valid JSON object/,
   );
+});
+
+test('optional planner string arrays normalize nullish values but reject malformed types', () => {
+  assert.deepEqual(normalizeOptionalStringArray(null, 'parties', 4, 20), []);
+  assert.deepEqual(normalizeOptionalStringArray(undefined, 'parties', 4, 20), []);
+  assert.deepEqual(normalizeOptionalStringArray([], 'parties', 4, 20), []);
+  assert.deepEqual(normalizeOptionalStringArray(['Nimbus'], 'parties', 4, 20), ['Nimbus']);
+  assert.throws(() => normalizeOptionalStringArray('Nimbus', 'parties', 4, 20), /parties is invalid/);
+  assert.throws(() => normalizeOptionalStringArray([{}], 'parties', 4, 20), /parties is invalid/);
+  assert.throws(() => normalizeOptionalStringArray(['x'.repeat(21)], 'parties', 4, 20), /parties is invalid/);
 });
 
 test('trusted synthetic plans keep internal lanes and remove only external-research lanes', () => {

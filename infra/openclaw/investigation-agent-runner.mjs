@@ -4,7 +4,7 @@ import { chmod, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { parseAgentBundle, parseSingleJsonObject } from './agent-result.mjs';
-import { parsePlannerJsonObject, filterSyntheticExternalResearchLanes } from './planner-output.mjs';
+import { parsePlannerJsonObject, filterSyntheticExternalResearchLanes, normalizeOptionalStringArray } from './planner-output.mjs';
 import { isTrustedSyntheticValidationManifest } from './synthetic-validation.mjs';
 import { reconcilePlanChecks } from './plan-checks.mjs';
 import { buildDeterministicChecks } from './transaction-checks.mjs';
@@ -342,10 +342,10 @@ function parsePlan(stdout) {
     boundedString(row.document_type, `planner document profile ${index} document_type`, 160);
     boundedString(row.purpose, `planner document profile ${index} purpose`, 2000);
     boundedString(row.issuer_claim, `planner document profile ${index} issuer_claim`, 1000);
-    boundedStringArray(row.parties, `planner document profile ${index} parties`, 30, 500);
-    boundedStringArray(row.material_identifiers, `planner document profile ${index} material_identifiers`, 60, 500);
-    boundedStringArray(row.material_terms, `planner document profile ${index} material_terms`, 60, 1000);
-    boundedStringArray(row.priority_questions, `planner document profile ${index} priority_questions`, 40, 1200);
+    row.parties = normalizeOptionalStringArray(row.parties, `planner document profile ${index} parties`, 30, 500);
+    row.material_identifiers = normalizeOptionalStringArray(row.material_identifiers, `planner document profile ${index} material_identifiers`, 60, 500);
+    row.material_terms = normalizeOptionalStringArray(row.material_terms, `planner document profile ${index} material_terms`, 60, 1000);
+    row.priority_questions = normalizeOptionalStringArray(row.priority_questions, `planner document profile ${index} priority_questions`, 40, 1200);
   }
   if (seenIds.size !== manifestIds.size) throw new Error('planner must classify every manifest document');
 
@@ -360,11 +360,11 @@ function parsePlan(stdout) {
     throw new Error('planner case_profile contains unknown fields');
   }
   boundedString(plan.case_profile.case_type, 'planner case_type', 240);
-  boundedStringArray(plan.case_profile.jurisdictions, 'planner jurisdictions', 30, 240);
-  boundedStringArray(plan.case_profile.assets_or_products, 'planner assets_or_products', 30, 500);
-  boundedStringArray(plan.case_profile.incoterms, 'planner incoterms', 20, 160);
-  boundedStringArray(plan.case_profile.payment_instruments, 'planner payment_instruments', 30, 240);
-  boundedStringArray(plan.case_profile.critical_transaction_features, 'planner critical_transaction_features', 60, 1200);
+  plan.case_profile.jurisdictions = normalizeOptionalStringArray(plan.case_profile.jurisdictions, 'planner jurisdictions', 30, 240);
+  plan.case_profile.assets_or_products = normalizeOptionalStringArray(plan.case_profile.assets_or_products, 'planner assets_or_products', 30, 500);
+  plan.case_profile.incoterms = normalizeOptionalStringArray(plan.case_profile.incoterms, 'planner incoterms', 20, 160);
+  plan.case_profile.payment_instruments = normalizeOptionalStringArray(plan.case_profile.payment_instruments, 'planner payment_instruments', 30, 240);
+  plan.case_profile.critical_transaction_features = normalizeOptionalStringArray(plan.case_profile.critical_transaction_features, 'planner critical_transaction_features', 60, 1200);
 
   const allowZeroResearchLanes = isTrustedSyntheticValidationManifest(manifest);
   if (!Array.isArray(plan.research_lanes) || plan.research_lanes.length > 50
@@ -385,16 +385,16 @@ function parsePlan(stdout) {
     laneIds.add(lane.lane_id);
     if (!['critical', 'high', 'medium', 'low'].includes(lane.priority)) throw new Error('planner lane priority is invalid');
     boundedString(lane.question, `planner lane ${index} question`, 2000);
-    boundedStringArray(lane.preferred_sources, `planner lane ${index} preferred_sources`, 20, 500);
-    boundedStringArray(lane.fallback_sources, `planner lane ${index} fallback_sources`, 20, 500);
-    boundedStringArray(lane.tools, `planner lane ${index} tools`, 12, 80);
-    boundedStringArray(lane.search_identifiers, `planner lane ${index} search_identifiers`, 40, 500);
+    lane.preferred_sources = normalizeOptionalStringArray(lane.preferred_sources, `planner lane ${index} preferred_sources`, 20, 500);
+    lane.fallback_sources = normalizeOptionalStringArray(lane.fallback_sources, `planner lane ${index} fallback_sources`, 20, 500);
+    lane.tools = normalizeOptionalStringArray(lane.tools, `planner lane ${index} tools`, 12, 80);
+    lane.search_identifiers = normalizeOptionalStringArray(lane.search_identifiers, `planner lane ${index} search_identifiers`, 40, 500);
     boundedString(lane.stop_condition, `planner lane ${index} stop_condition`, 1500);
     if (typeof lane.manual_only !== 'boolean') throw new Error('planner lane manual_only is invalid');
   }
-  boundedStringArray(plan.cross_document_tests, 'planner cross_document_tests', 80, 1500);
-  boundedStringArray(plan.specialist_checks, 'planner specialist_checks', 80, 1500);
-  boundedStringArray(plan.automatic_stop_conditions, 'planner automatic_stop_conditions', 60, 1500);
+  plan.cross_document_tests = normalizeOptionalStringArray(plan.cross_document_tests, 'planner cross_document_tests', 80, 1500);
+  plan.specialist_checks = normalizeOptionalStringArray(plan.specialist_checks, 'planner specialist_checks', 80, 1500);
+  plan.automatic_stop_conditions = normalizeOptionalStringArray(plan.automatic_stop_conditions, 'planner automatic_stop_conditions', 60, 1500);
 
   const researchTools = Array.isArray(envelope?.toolSummary?.tools)
     ? envelope.toolSummary.tools.filter((tool) => RESEARCH_TOOLS.has(tool))

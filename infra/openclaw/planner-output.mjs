@@ -25,6 +25,15 @@ export function parsePlannerJsonObject(text) {
   }
 }
 
+export function normalizeOptionalStringArray(value, label, maxItems = 40, maxLength = 1000) {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.length > maxItems
+    || value.some((item) => typeof item !== 'string' || item.length < 1 || item.length > maxLength)) {
+    throw new Error(`${label} is invalid`);
+  }
+  return value;
+}
+
 export function filterSyntheticExternalResearchLanes(plan, trustedSynthetic) {
   if (!trustedSynthetic || !plan || typeof plan !== 'object' || Array.isArray(plan)
     || !Array.isArray(plan.research_lanes)) return plan;

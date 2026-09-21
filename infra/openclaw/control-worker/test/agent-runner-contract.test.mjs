@@ -37,6 +37,9 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.match(source, /trustedForensics/);
   assert.match(source, /integritas_forensics_v1/);
   assert.match(source, /parsePlan/);
+  assert.match(source, /row\.parties = normalizeOptionalStringArray/, 'planner must normalize null or omitted optional party arrays instead of crashing');
+  assert.match(source, /plan\.case_profile\.jurisdictions = normalizeOptionalStringArray/, 'optional case-profile arrays must be null-safe');
+  assert.match(source, /lane\.preferred_sources = normalizeOptionalStringArray/, 'optional lane source arrays must be null-safe');
   assert.match(source, /isTrustedSyntheticValidationManifest\(manifest\)/, 'zero-lane exception must depend on trusted manifest metadata');
   assert.match(source, /plan\.research_lanes\.length < 1 && !allowZeroResearchLanes/, 'real investigations must still require at least one research lane');
   assert.match(source, /filterSyntheticExternalResearchLanes/, 'trusted synthetic plans must remove external research lanes');
