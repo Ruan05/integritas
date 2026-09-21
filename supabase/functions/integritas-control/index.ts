@@ -8,6 +8,8 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const CONNECTOR_TOKEN = Deno.env.get('INTEGRITAS_CONTROL_CONNECTOR_TOKEN') ?? '';
+const CRM_BACKEND_TOKEN_SHA256 = 'f9bcc215afc326b4fbbc90aafe3880894751f3863a700bddcd5ee70e3fac623f';
+const CRM_USER_ID = '0b34575b-ae33-4e08-9ccb-4ac22380b69d';
 const ALLOWED_ORIGINS = new Set([
   'https://integritass.com',
   'https://www.integritass.com',
@@ -58,7 +60,7 @@ async function sha256Hex(value: string): Promise<string> {
 
 function cors(origin: string | null) {
   const headers: Record<string, string> = {
-    'access-control-allow-headers': 'authorization, content-type, x-integritas-worker-token, x-integritas-worker-id, x-integritas-connector-token, idempotency-key',
+    'access-control-allow-headers': 'authorization, content-type, x-integritas-worker-token, x-integritas-worker-id, x-integritas-connector-token, x-integritas-crm-token, idempotency-key',
     'access-control-allow-methods': 'POST, OPTIONS',
     'vary': 'Origin',
   };
@@ -194,6 +196,13 @@ async function authenticate(req: Request) {
       .maybeSingle();
     if (error || !credential || !credential.enabled || !secureEquals(digest, credential.token_sha256)) return null;
     return { kind: 'worker' as const, actor: `worker:${workerId}`, userId: null, workerId };
+  }
+
+  const crm = req.headers.get('x-integritas-crm-token') ?? '';
+  if (crm) {
+    const digest = await sha256Hex(crm);
+    if (!secureEquals(digest, CRM_BACKEND_TOKEN_SHA256)) return null;
+    return { kind: 'admin' as const, actor: 'crm-site', userId: CRM_USER_ID };
   }
 
   const connector = req.headers.get('x-integritas-connector-token') ?? '';

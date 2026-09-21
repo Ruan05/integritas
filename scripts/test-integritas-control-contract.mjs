@@ -10,6 +10,14 @@ assert.match(source, /x-integritas-worker-token/, 'worker token header must be i
 assert.match(source, /x-integritas-worker-id/, 'worker id header must be required for scoped worker authentication');
 assert.match(source, /integritas_control_worker_credentials/, 'worker credentials must be validated against the production credential table');
 assert.match(source, /x-integritas-connector-token/, 'connector token header must be implemented');
+assert.match(source, /x-integritas-crm-token/, 'CRM site token header must be preserved for live password login');
+assert.match(source, /CRM_BACKEND_TOKEN_SHA256/, 'CRM site token must be verified by stored SHA-256 digest');
+assert.match(source, /actor:\s*'crm-site'/, 'CRM site authentication must retain its bounded actor identity');
+assert.match(source, /userId:\s*CRM_USER_ID/, 'CRM site authentication must map to the authorized admin identity');
+assert.ok(
+  source.indexOf("req.headers.get('x-integritas-crm-token')") < source.indexOf("req.headers.get('x-integritas-connector-token')"),
+  'CRM authentication must be evaluated before connector authentication as in the verified live control function',
+);
 assert.match(source, /INTEGRITAS_CONTROL_ALLOWED_ORIGINS/, 'control API must support an explicit origin allowlist');
 assert.match(source, /integritas-private-admin\.ruansch1\.chatgpt\.site/, 'private admin origin must be explicitly allowlisted');
 assert.ok(!source.includes("'access-control-allow-origin': '*'"), 'CORS must not allow wildcard origins');
