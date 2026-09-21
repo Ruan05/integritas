@@ -34,12 +34,15 @@ jobs:
       - name: Verify ChatGPT/OpenClaw control bridge
         run: |
           node --test infra/openclaw/control-worker/test/*.test.mjs
+          node --test infra/report-renderer/test/*.test.mjs
           node scripts/test-integritas-control-contract.mjs
           node scripts/test-integritas-document-limit-contract.mjs
           node scripts/test-integritas-external-research-provenance.mjs
           node scripts/verify-control-bridge-policy.mjs
           node --check infra/openclaw/investigation-agent-runner.mjs
           node --check infra/openclaw/control-worker/src/investigation.mjs
+          node --check infra/report-renderer/render-report.mjs
+          node --check infra/report-renderer/template.mjs
       - run: npm run build
       - run: npm run verify:secrets
       - run: npm run verify:secrets -- dist
@@ -57,6 +60,8 @@ jobs:
           bash -n infra/openclaw/verify-image.sh
           bash -n infra/openclaw/install-native.sh
           bash -n infra/openclaw/install-control-worker.sh
+          bash -n infra/report-renderer/install-gotenberg.sh
+          docker compose -f infra/report-renderer/gotenberg-compose.yml config >/dev/null
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
       - run: npm run audit
@@ -120,6 +125,7 @@ jobs:
           psql -f supabase/migrations/0015_integritas_draft_bundle_replacement.sql
           psql -f supabase/migrations/0016_integritas_monotonic_checkpoint_retry.sql
           psql -f supabase/migrations/0017_integritas_performance_hardening.sql
+          psql -f supabase/migrations/0018_integritas_report_pdf_artifact.sql
       - name: Verify control bridge contract
         run: |
           psql -f supabase/tests/0005_integritas_control_bridge.sql
@@ -135,6 +141,7 @@ jobs:
           psql -f supabase/tests/0016_integritas_external_research_provenance.sql
           psql -f supabase/tests/0017_integritas_draft_bundle_replacement.sql
           psql -f supabase/tests/0018_integritas_performance_hardening.sql
+          psql -f supabase/tests/0020_integritas_report_pdf_artifact.sql
       - name: Verify investigation rollback preflight
         run: |
           if psql -v ON_ERROR_STOP=1 -f supabase/rollback/0005_integritas_openclaw_investigation_runtime.rollback.sql; then
@@ -145,6 +152,8 @@ jobs:
           psql -c "delete from public.integritas_control_commands where command_type = 'run_case_investigation';"
       - name: Roll back staged control bridge
         run: |
+          psql -f supabase/rollback/0018_integritas_report_pdf_artifact.rollback.sql
+          psql -f supabase/tests/0021_integritas_report_pdf_artifact_rollback.sql
           psql -f supabase/rollback/0017_integritas_performance_hardening.rollback.sql
           psql -f supabase/rollback/0015_integritas_draft_bundle_replacement.rollback.sql
           psql -f supabase/rollback/0014_integritas_external_research_provenance.rollback.sql

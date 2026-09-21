@@ -651,3 +651,156 @@ test('rejoins an already-running scoped unit after worker restart without starti
     await rm(spoolRoot, { recursive: true, force: true });
   }
 });
+
+
+async function runRetainedRenderFixture(reportRenderer) {
+  const spoolRoot = await mkdtemp(path.join(os.tmpdir(), 'integritas-investigation-render-'));
+  const bytes = Buffer.from('alpha evidence');
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const jobDir = path.join(spoolRoot, JOB_ID);
+  const documentsDir = path.join(jobDir, 'documents');
+  await mkdir(documentsDir, { recursive: true });
+  await writeFile(path.join(documentsDir, `${DOC_ID}.pdf`), bytes);
+  const report = '# Render fixture\n\nCanonical Markdown report.';
+  const bundle = {
+    schema_version: 1,
+    case_id: CASE_ID,
+    case_job_id: JOB_ID,
+    case_revision: 7,
+    depth: 'deep',
+    generated_at: '2026-09-21T18:00:00Z',
+    entities: [],
+    relationships: [],
+    sources: [],
+    findings: [],
+    checks: [],
+    contradictions: [],
+    unresolved_checks: [],
+    limitations: [],
+    report: { summary: 'Render fixture', markdown: report, status: 'draft' },
+    execution: {
+      started_at: '2026-09-21T17:59:00Z',
+      completed_at: '2026-09-21T18:00:00Z',
+      stages: [],
+      tool_results: [],
+      warnings: [],
+      terminal_outcome: 'completed',
+    },
+  };
+  await writeFile(path.join(jobDir, 'bundle.json'), JSON.stringify(bundle));
+  await writeFile(path.join(jobDir, 'report.md'), report);
+
+  const events = [];
+  const outputs = [];
+  const checkpoints = [];
+  const client = {
+    baseUrl: 'https://project.supabase.co/functions/v1/integritas-control',
+    storageSelfTest: async () => ({ storage: { ok: true } }),
+    manifest: async () => manifestFor(bytes, sha256, { job_stage: 'drafting_report', job_progress: 90 }),
+    checkpoint: async (...args) => { checkpoints.push(args); return { ok: true }; },
+    jobState: async () => ({ state: {
+      cancel_requested: false,
+      stale_revision: false,
+      job_progress: 90,
+      job_stage: 'drafting_report',
+    } }),
+    publishOutput: async (...args) => {
+      outputs.push(args);
+      events.push(`publish:${args[3]}`);
+      return { ok: true };
+    },
+    commitBundle: async () => {
+      events.push('commit');
+      return { commit_summary: { findings: 0, sources: 0 } };
+    },
+  };
+  const systemctlRunner = async (_file, args) => {
+    if (args[0] === 'show') return { stdout: 'inactive\n', stderr: '' };
+    throw new Error('retained render fixture must not start OpenClaw');
+  };
+  const wrappedRenderer = reportRenderer
+    ? async (details) => {
+        events.push('render');
+        return reportRenderer(details);
+      }
+    : null;
+
+  try {
+    const result = await executeInvestigation(command, {
+      client,
+      fetchImpl: async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      }),
+      systemctlRunner,
+      spoolRoot,
+      repoRoot: REPO_ROOT,
+      retainWorkspace: true,
+      qaRunner: async () => ({ valid: true, errors: [], summary: {} }),
+      reportRenderer: wrappedRenderer,
+    });
+    return { result, outputs, checkpoints, events, jobDir };
+  } finally {
+    if (!reportRenderer?.retainFixture) await rm(spoolRoot, { recursive: true, force: true });
+  }
+}
+
+test('publishes a rendered PDF only after the canonical investigation commit', async () => {
+  const pdf = Buffer.from('%PDF-1.4\n% Integritas PDF fixture\n%%EOF\n');
+  const pdfSha = createHash('sha256').update(pdf).digest('hex');
+  const fixture = await runRetainedRenderFixture(async ({ outputPath, trace }) => {
+    await writeFile(outputPath, pdf);
+    return {
+      pdf_sha256: pdfSha,
+      gotenberg_trace: trace,
+      template_version: 'integritas-report-v1',
+    };
+  });
+  assert.equal(fixture.result.ok, true);
+  assert.equal(fixture.result.terminal_outcome, 'completed');
+  assert.equal(fixture.result.render_status, 'ready');
+  assert.equal(fixture.result.pdf_sha256, pdfSha);
+  assert.deepEqual(fixture.events, [
+    'publish:bundle',
+    'publish:report_markdown',
+    'commit',
+    'render',
+    'publish:report_pdf',
+  ]);
+  assert.deepEqual(fixture.outputs.map((entry) => entry[3]), [
+    'bundle',
+    'report_markdown',
+    'report_pdf',
+  ]);
+  const pdfOutput = fixture.outputs[2];
+  assert.equal(pdfOutput[4], 'application/pdf');
+  assert.equal(pdfOutput[5], pdf.toString('base64'));
+  assert.equal(pdfOutput[6], pdfSha);
+  assert.equal(pdfOutput[7], 'base64');
+  assert.equal(pdfOutput[8].template_version, 'integritas-report-v1');
+  const terminal = fixture.checkpoints.find((entry) => entry[3] === 'completed' && entry[4] === 100);
+  assert.equal(terminal?.[5]?.render_status, 'ready');
+  assert.equal(terminal?.[5]?.pdf_sha256, pdfSha);
+});
+
+test('renderer failure never downgrades or fails a committed investigation', async () => {
+  const fixture = await runRetainedRenderFixture(async () => {
+    throw new Error('synthetic renderer outage');
+  });
+  assert.equal(fixture.result.ok, true);
+  assert.equal(fixture.result.terminal_outcome, 'completed');
+  assert.equal(fixture.result.render_status, 'render_failed');
+  assert.equal(fixture.result.pdf_sha256, null);
+  assert.deepEqual(fixture.events, [
+    'publish:bundle',
+    'publish:report_markdown',
+    'commit',
+    'render',
+  ]);
+  assert.deepEqual(fixture.outputs.map((entry) => entry[3]), [
+    'bundle',
+    'report_markdown',
+  ]);
+  const terminal = fixture.checkpoints.find((entry) => entry[3] === 'completed' && entry[4] === 100);
+  assert.equal(terminal?.[5]?.render_status, 'render_failed');
+});

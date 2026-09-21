@@ -126,6 +126,7 @@ function decodeArtifactContent(content: unknown, encoding: unknown): Uint8Array 
 
 function outputExtension(contentType: string): string {
   if (contentType === 'application/json') return 'json';
+  if (contentType === 'application/pdf') return 'pdf';
   if (contentType === 'text/html') return 'html';
   if (contentType === 'text/markdown') return 'md';
   if (contentType === 'text/plain') return 'txt';
@@ -369,11 +370,16 @@ Deno.serve(async (req) => {
         const outputType = body.output_type;
         const contentType = body.content_type;
         const expectedSha = body.sha256;
+        const safeMetadata = body.safe_metadata ?? {};
+        const encodedMetadata = isObject(safeMetadata) ? JSON.stringify(safeMetadata) : '';
         if (!validUuid(caseJobId)
           || !Number.isInteger(caseRevision) || Number(caseRevision) < 0
           || typeof outputType !== 'string' || !INVESTIGATION_OUTPUT_TYPES.has(outputType)
           || typeof contentType !== 'string' || !INVESTIGATION_CONTENT_TYPES.has(contentType)
-          || typeof expectedSha !== 'string' || !SHA256_PATTERN.test(expectedSha)) {
+          || typeof expectedSha !== 'string' || !SHA256_PATTERN.test(expectedSha)
+          || !isObject(safeMetadata) || encodedMetadata.length > 16384
+          || encodedMetadata.includes('/storage/v1/object/sign/')
+          || ((outputType === 'report_pdf') !== (contentType === 'application/pdf'))) {
           return json({ error: 'invalid_output_metadata' }, 400, origin);
         }
         const bytes = decodeArtifactContent(body.content, body.encoding);
@@ -398,12 +404,20 @@ Deno.serve(async (req) => {
         if (uploadError) throw uploadError;
         let output;
         try {
-          output = await rpc('integritas_register_case_job_output', {
-            p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
-            p_case_revision: caseRevision, p_output_type: outputType, p_content_type: contentType,
-            p_storage_path: storagePath, p_sha256: actualSha, p_size_bytes: bytes.byteLength,
-            p_safe_metadata: {},
-          });
+          if (outputType === 'report_pdf') {
+            output = await rpc('integritas_register_report_pdf_output', {
+              p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
+              p_case_revision: caseRevision, p_storage_path: storagePath,
+              p_sha256: actualSha, p_size_bytes: bytes.byteLength, p_safe_metadata: safeMetadata,
+            });
+          } else {
+            output = await rpc('integritas_register_case_job_output', {
+              p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
+              p_case_revision: caseRevision, p_output_type: outputType, p_content_type: contentType,
+              p_storage_path: storagePath, p_sha256: actualSha, p_size_bytes: bytes.byteLength,
+              p_safe_metadata: safeMetadata,
+            });
+          }
         } catch (error) {
           const { error: cleanupError } = await service.storage.from(CASE_FILES_BUCKET).remove([storagePath]);
           if (cleanupError) console.error('investigation artifact cleanup failed', safeError(cleanupError));

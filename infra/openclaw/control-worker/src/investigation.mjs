@@ -5,6 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { validateInvestigationBundle } from './bundle.mjs';
 import { parseAgentBundle } from '../../agent-result.mjs';
+import { renderReport } from '../../../report-renderer/render-report.mjs';
 
 const execFileAsync = promisify(execFile);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -451,6 +452,7 @@ export async function executeInvestigation(command, {
   repoRoot = process.env.INTEGRITAS_REPO_ROOT || '/opt/integritas/current',
   retainWorkspace = false,
   qaRunner = defaultQaRunner,
+  reportRenderer = process.env.GOTENBERG_URL ? renderReport : null,
   statePollMs = 5000,
 } = {}) {
   if (!client) throw new Error('control client is required');
@@ -677,16 +679,79 @@ export async function executeInvestigation(command, {
     const committed = await client.commitBundle(command.id, jobId, revision, bundleSha, reportSha, bundleJson);
     const commitSummary = committed?.commit_summary ?? {};
     const terminalOutcome = bundleJson.execution.terminal_outcome;
+
+    let renderStatus = reportRenderer ? 'render_queued' : 'skipped';
+    let pdfSha = null;
+    let rendererTrace = null;
+    let rendererTemplateVersion = null;
+    if (reportRenderer) {
+      try {
+        const pdfPath = path.join(jobDir, 'report.pdf');
+        rendererTrace = `integritas-${jobId}-r${revision}`;
+        const rendered = await reportRenderer({
+          bundlePath,
+          markdownPath: reportPath,
+          outputPath: pdfPath,
+          gotenbergUrl: process.env.GOTENBERG_URL,
+          trace: rendererTrace,
+        });
+        const pdf = await readBounded(pdfPath);
+        pdfSha = createHash('sha256').update(pdf).digest('hex');
+        if (rendered?.pdf_sha256 && rendered.pdf_sha256 !== pdfSha) {
+          throw new Error('rendered PDF digest mismatch');
+        }
+        rendererTrace = typeof rendered?.gotenberg_trace === 'string'
+          ? rendered.gotenberg_trace.slice(0, 128)
+          : rendererTrace;
+        rendererTemplateVersion = typeof rendered?.template_version === 'string'
+          ? rendered.template_version.slice(0, 128)
+          : 'unknown';
+        await client.publishOutput(
+          command.id,
+          jobId,
+          revision,
+          'report_pdf',
+          'application/pdf',
+          pdf.toString('base64'),
+          pdfSha,
+          'base64',
+          {
+            renderer: 'integritas-report-renderer',
+            template_version: rendererTemplateVersion,
+            source_bundle_sha256: bundleSha,
+            source_markdown_sha256: reportSha,
+            gotenberg_trace: rendererTrace,
+          },
+        );
+        renderStatus = 'ready';
+      } catch {
+        renderStatus = 'render_failed';
+        pdfSha = null;
+      }
+    }
+
     finalMilestones = advanceMilestones(finalMilestones, { 'core.persist': 'complete' });
     await checkpoint(terminalOutcome, 100, {
-      bundle_sha256: bundleSha, report_sha256: reportSha,
-      qa_summary: qa.summary ?? {}, commit_summary: commitSummary,
+      bundle_sha256: bundleSha,
+      report_sha256: reportSha,
+      ...(pdfSha ? { pdf_sha256: pdfSha } : {}),
+      render_status: renderStatus,
+      ...(rendererTrace ? { renderer_trace: rendererTrace } : {}),
+      ...(rendererTemplateVersion ? { renderer_template_version: rendererTemplateVersion } : {}),
+      qa_summary: qa.summary ?? {},
+      commit_summary: commitSummary,
       milestones: finalMilestones,
     });
     completedSuccessfully = true;
     return {
-      ok: true, case_job_id: jobId, case_revision: revision, bundle_sha256: bundleSha,
-      report_sha256: reportSha, terminal_outcome: terminalOutcome,
+      ok: true,
+      case_job_id: jobId,
+      case_revision: revision,
+      bundle_sha256: bundleSha,
+      report_sha256: reportSha,
+      pdf_sha256: pdfSha,
+      render_status: renderStatus,
+      terminal_outcome: terminalOutcome,
     };
   } finally {
     if (completedSuccessfully && !retainWorkspace) await rm(jobDir, { recursive: true, force: true }).catch(() => {});

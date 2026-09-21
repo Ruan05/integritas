@@ -40,8 +40,18 @@ export class ControlClient {
   checkpoint(commandId, caseJobId, caseRevision, stage, progress, safeMetadata = {}) {
     return this.call('worker_checkpoint', { command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision, stage, progress, safe_metadata: safeMetadata });
   }
-  publishOutput(commandId, caseJobId, caseRevision, outputType, contentType, content, sha256) {
-    return this.call('worker_publish_output', { command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision, output_type: outputType, content_type: contentType, content, sha256 });
+  publishOutput(commandId, caseJobId, caseRevision, outputType, contentType, content, sha256, encoding = 'utf8', safeMetadata = {}) {
+    return this.call('worker_publish_output', {
+      command_id: commandId,
+      case_job_id: caseJobId,
+      case_revision: caseRevision,
+      output_type: outputType,
+      content_type: contentType,
+      content,
+      sha256,
+      encoding,
+      safe_metadata: safeMetadata,
+    });
   }
   registerResearchSource(commandId, caseJobId, caseRevision, source, toolSummary) {
     return this.call('worker_register_research_source', {

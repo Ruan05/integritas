@@ -9,12 +9,13 @@ export const CASE_INVESTIGATION_STAGES = new Set([
 export const CHECKPOINT_METADATA_KEYS = new Set([
   'branch_count', 'unresolved_branches', 'evidence_count', 'source_count', 'check_count',
   'output_refs', 'limitations_count', 'message', 'document_count', 'bundle_sha256',
-  'report_sha256', 'qa_summary', 'commit_summary', 'milestones',
+  'report_sha256', 'pdf_sha256', 'render_status', 'renderer_trace', 'renderer_template_version',
+  'qa_summary', 'commit_summary', 'milestones',
 ]);
 
-export const INVESTIGATION_OUTPUT_TYPES = new Set(['bundle', 'report_markdown', 'report_html', 'evidence', 'execution_log']);
+export const INVESTIGATION_OUTPUT_TYPES = new Set(['bundle', 'report_markdown', 'report_html', 'report_pdf', 'evidence', 'execution_log']);
 export const INVESTIGATION_CONTENT_TYPES = new Set([
-  'application/json', 'text/html', 'application/octet-stream', 'text/plain', 'text/markdown',
+  'application/json', 'application/pdf', 'text/html', 'application/octet-stream', 'text/plain', 'text/markdown',
 ]);
 
 export const REQUIRED_INVESTIGATION_CAPABILITIES = Object.freeze([

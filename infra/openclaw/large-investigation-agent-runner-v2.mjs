@@ -7,6 +7,7 @@ import { filterSyntheticExternalResearchLanes } from './planner-output.mjs';
 import { isTrustedSyntheticValidationManifest } from './synthetic-validation.mjs';
 import { buildDeterministicChecks } from './transaction-checks.mjs';
 import { reconcilePlanChecks } from './plan-checks.mjs';
+import { buildNoEvidenceReport, classifyInvestigationWorkload } from './workload-classifier.mjs';
 import { validateInvestigationBundle } from './control-worker/src/bundle.mjs';
 import {
   LARGE_REPORT_SECTIONS,
@@ -681,6 +682,92 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
   if (documentSummaries.length !== manifest.documents.length) throw new Error('shards did not cover every manifest document');
   await writeAtomic(jobDir, 'large-document-summaries.json', `${JSON.stringify(documentSummaries, null, 2)}\n`);
   executionTools.push(toolResult('integritas_document_shards_v2', 'completed', `${shards.length} shards covered ${documentSummaries.length} documents.`));
+
+  await progress(jobDir, 'analyzing_documents', 37, 'workload_classification');
+  const workload = await classifyInvestigationWorkload({ manifest, documentSummaries, jobDir });
+  await writeAtomic(jobDir, 'workload-classification.json', `${JSON.stringify(workload, null, 2)}\n`);
+  executionTools.push(toolResult(
+    'integritas_workload_classifier_v1',
+    'completed',
+    `Evidence-proportional route: ${workload.route} (${workload.reason_code}); ${workload.metrics.extracted_signals} extracted investigable signal(s).`,
+  ));
+
+  if (workload.route === 'no_investigable_evidence') {
+    const completedAt = new Date().toISOString();
+    const reportMarkdown = buildNoEvidenceReport({ manifest, workload });
+    const submittedSources = buildSubmittedSources(manifest, documentSummaries, completedAt);
+    const finalBundle = {
+      schema_version: 1,
+      case_id: manifest.case_id,
+      case_job_id: manifest.case_job_id,
+      case_revision: manifest.case_revision,
+      depth: manifest.depth,
+      generated_at: completedAt,
+      entities: [],
+      relationships: [],
+      sources: submittedSources,
+      findings: [],
+      checks: [{
+        check_key: 'workload.no_investigable_evidence',
+        entity_key: null,
+        check_type: 'workload_classification',
+        description: 'Determine whether the submitted evidence requires external investigation.',
+        priority: 'low',
+        required_source: 'Submitted evidence and trusted extraction',
+        status: 'complete',
+        outcome: 'No investigable evidence detected; planner, research, critic, and expanded report synthesis were skipped.',
+      }],
+      contradictions: [],
+      unresolved_checks: [],
+      limitations: ['No real-world subject or transaction was present in the submitted evidence.'],
+      report: {
+        summary: 'No investigable evidence identified in the submitted control material; external investigation was not warranted.',
+        markdown: reportMarkdown,
+        status: 'draft',
+      },
+      execution: {
+        started_at: startedAt,
+        completed_at: completedAt,
+        stages: ['document_shards', 'workload_classification', 'deterministic_assembly'],
+        tool_results: executionTools.slice(0, 200),
+        warnings: [],
+        terminal_outcome: 'completed',
+      },
+    };
+    validateInvestigationBundle(finalBundle, manifest, reportMarkdown);
+    const provenance = {
+      ok: true,
+      status: 'ok',
+      final: '',
+      provider: 'integritas',
+      model: 'deterministic-no-evidence-assembly-v1',
+      sessionId: jobId,
+      toolSummary: mergeToolSummary(phases.map((row) => row.envelope)),
+      phases: [
+        ...phases.map((row) => ({
+          phase: row.phase,
+          provider: row.envelope?.provider ?? null,
+          model: row.envelope?.model ?? null,
+          status: row.envelope?.status ?? null,
+          reused: row.reused,
+          failed_candidates: row.failures,
+        })),
+        {
+          phase: 'workload-classification',
+          provider: 'integritas',
+          model: 'deterministic-workload-classifier-v1',
+          status: 'ok',
+          reused: true,
+          failed_candidates: [],
+        },
+      ],
+    };
+    await writeAtomic(jobDir, 'agent-exec.json', `${JSON.stringify(provenance)}\n`);
+    await writeAtomic(jobDir, 'bundle.json', `${JSON.stringify(finalBundle, null, 2)}\n`);
+    await writeAtomic(jobDir, 'report.md', reportMarkdown);
+    await progress(jobDir, 'drafting_report', 82, 'ready_for_deterministic_qa', 'no-investigable-evidence short-circuit complete');
+    return;
+  }
 
   await progress(jobDir, 'mapping_entities', 38, 'large_bounded_plan');
   const planResult = await validated({

@@ -8,7 +8,9 @@ import { parsePlannerJsonObject, filterSyntheticExternalResearchLanes } from './
 import { isTrustedSyntheticValidationManifest } from './synthetic-validation.mjs';
 import { reconcilePlanChecks } from './plan-checks.mjs';
 import { buildDeterministicChecks } from './transaction-checks.mjs';
-import { shouldUseLargeInvestigation } from './large-investigation.mjs';
+import { buildSubmittedSources, shouldUseLargeInvestigation } from './large-investigation.mjs';
+import { buildNoEvidenceReport, classifyDeterministicTextPreflight } from './workload-classifier.mjs';
+import { validateInvestigationBundle } from './control-worker/src/bundle.mjs';
 import { runLargeInvestigationV2 } from './large-investigation-agent-runner-v2.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -573,6 +575,94 @@ Produce the final canonical investigation-bundle-v1 JSON. Resolve every critic i
 
 Your final response must be exactly one raw JSON object conforming to /agent/contracts/investigation-bundle-v1.schema.json with no Markdown fence and no prose before or after it.
 `;
+}
+
+const workloadPreflight = await classifyDeterministicTextPreflight({ manifest, jobDir });
+await writeSharedAtomic('workload-preflight.json', `${JSON.stringify(workloadPreflight, null, 2)}\n`);
+if (workloadPreflight.route === 'no_investigable_evidence') {
+  const startedAt = new Date().toISOString();
+  const completedAt = new Date().toISOString();
+  const reportMarkdown = buildNoEvidenceReport({ manifest, workload: {
+    ...workloadPreflight,
+    metrics: {
+      ...workloadPreflight.metrics,
+      extracted_signals: 0,
+    },
+  } });
+  const submittedSources = buildSubmittedSources(
+    manifest,
+    workloadPreflight.document_summaries,
+    completedAt,
+  );
+  const finalBundle = {
+    schema_version: 1,
+    case_id: manifest.case_id,
+    case_job_id: manifest.case_job_id,
+    case_revision: manifest.case_revision,
+    depth: manifest.depth,
+    generated_at: completedAt,
+    entities: [],
+    relationships: [],
+    sources: submittedSources,
+    findings: [],
+    checks: [{
+      check_key: 'workload.no_investigable_evidence',
+      entity_key: null,
+      check_type: 'workload_classification',
+      description: 'Determine whether the submitted evidence requires an external investigation.',
+      priority: 'low',
+      required_source: 'Submitted evidence and trusted forensic intake',
+      status: 'complete',
+      outcome: 'Deterministic preflight found no investigable evidence; all model, research, critic, and expanded-report phases were skipped.',
+    }],
+    contradictions: [],
+    unresolved_checks: [],
+    limitations: ['No real-world subject or transaction was present in the submitted evidence.'],
+    report: {
+      summary: 'No investigable evidence identified; the case completed through deterministic intake without provider or web research calls.',
+      markdown: reportMarkdown,
+      status: 'draft',
+    },
+    execution: {
+      started_at: startedAt,
+      completed_at: completedAt,
+      stages: ['deterministic_text_preflight', 'deterministic_assembly'],
+      tool_results: [
+        {
+          tool: 'integritas_forensics_v1',
+          status: 'completed',
+          summary: `Trusted forensic pre-pass covered ${trustedForensics.reports.length} submitted document(s).`,
+        },
+        {
+          tool: 'integritas_workload_classifier_v1',
+          status: 'completed',
+          summary: `Deterministic text preflight selected ${workloadPreflight.route} (${workloadPreflight.reason_code}); no provider call was required.`,
+        },
+      ],
+      warnings: [],
+      terminal_outcome: 'completed',
+    },
+  };
+  validateInvestigationBundle(finalBundle, manifest, reportMarkdown);
+  await writeSharedAtomic('agent-exec.json', `${JSON.stringify({
+    ok: true,
+    status: 'ok',
+    final: '',
+    provider: 'integritas',
+    model: 'deterministic-text-preflight-v1',
+    sessionId: jobId,
+    toolSummary: { tools: [], calls: 0, failures: 0 },
+    phases: [{
+      phase: 'workload-preflight',
+      provider: 'integritas',
+      model: 'deterministic-text-preflight-v1',
+      status: 'ok',
+    }],
+  })}\n`);
+  await writeSharedAtomic('bundle.json', `${JSON.stringify(finalBundle, null, 2)}\n`);
+  await writeSharedAtomic('report.md', reportMarkdown);
+  await writeProgress('drafting_report', 82, 'ready_for_deterministic_qa', []);
+  process.exit(0);
 }
 
 if (shouldUseLargeInvestigation(manifest)) {
