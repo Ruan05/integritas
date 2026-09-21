@@ -781,6 +781,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
   phases.push({ phase: 'large-plan', ...planResult });
   let plan = buildCompatiblePlan(documentSummaries, planResult.value);
   plan = applyEvidenceDrivenSpecialistRouting(plan, manifest);
+  plan = filterSyntheticExternalResearchLanes(plan, synthetic);
   await writeAtomic(jobDir, 'investigation-plan.json', `${JSON.stringify(plan, null, 2)}\n`);
   const deterministicChecks = buildDeterministicChecks(plan);
   await writeAtomic(jobDir, 'deterministic-checks.json', `${JSON.stringify(deterministicChecks, null, 2)}\n`);
