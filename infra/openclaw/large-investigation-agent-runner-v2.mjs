@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -26,6 +27,11 @@ import {
 const execFileAsync = promisify(execFile);
 const MAX_AGENT_ENVELOPE_BYTES = 8 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
+const BASE_CONFIG_PATH = '/etc/openclaw/integritas-investigation.json';
+const ZEN_CONFIG_PATH = '/etc/openclaw/integritas-investigation-zen.json';
+const ZEN_ENABLE_MARKER = '/etc/openclaw/zen-enabled';
+const ZEN_ENABLED = !!process.env.OPENCODE_ZEN_API_KEY && existsSync(ZEN_ENABLE_MARKER);
+const ACTIVE_CONFIG_PATH = ZEN_ENABLED ? ZEN_CONFIG_PATH : BASE_CONFIG_PATH;
 const NVIDIA_ULTRA = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b';
 const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';
 const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';
@@ -105,7 +111,7 @@ function toolResult(tool, status, summary) { return { tool, status, summary: Str
 function candidates(role, synthetic) {
   const nvidia = !!process.env.NVIDIA_API_KEY;
   const openrouter = !!process.env.OPENROUTER_API_KEY;
-  const zen = !!process.env.OPENCODE_ZEN_API_KEY;
+  const zen = ZEN_ENABLED;
   if (!synthetic) {
     const healthyFree = [
       ...(zen ? [ZEN_BIG_PICKLE, ZEN_ULTRA, ZEN_DEEPSEEK, ZEN_MIMO, ZEN_LING, ZEN_LIGHTNING] : []),
@@ -186,7 +192,7 @@ function externalTools(envelope) {
 }
 async function invoke(jobDir, messageFile, model, timeoutSeconds, synthetic) {
   const args = [
-    'agent', 'exec', '--config', '/etc/openclaw/integritas-investigation.json',
+    'agent', 'exec', '--config', ACTIVE_CONFIG_PATH,
     '--cwd', jobDir, '--message-file', path.join(jobDir, messageFile),
     '--json', '--code-mode', 'direct', '--model', model, '--timeout', String(timeoutSeconds),
   ];
