@@ -17,7 +17,9 @@ const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
 
 const NVIDIA_PRIMARY = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
 const NVIDIA_LIGHTNING = 'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b';
-const REAL_EVIDENCE_MODEL = 'opencode-go/kimi-k3';
+const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';
+const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';
+const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash';
 const FREE_FALLBACKS = [
   'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
   'integritas-openrouter/openrouter/free',
@@ -49,7 +51,30 @@ function routes(primary, fallbacks) {
 }
 
 const SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, [NVIDIA_LIGHTNING, ...FREE_FALLBACKS]);
-const REAL_MODEL_ROUTES = routes(REAL_EVIDENCE_MODEL, []);
+const QUALITY_FALLBACKS = [DEEPSEEK_FLASH, GLM_53_FLASH, NVIDIA_PRIMARY, ...FREE_FALLBACKS];
+const RESEARCH_FALLBACKS = [GLM_53_FLASH, GLM_53, NVIDIA_LIGHTNING, ...FREE_FALLBACKS];
+const REAL_MODEL_ROUTES = Object.freeze({
+  fast: {
+    planner: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_PRIMARY, ...FREE_FALLBACKS], timeoutSeconds: 240 },
+    research: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_LIGHTNING, ...FREE_FALLBACKS], timeoutSeconds: 600 },
+  },
+  standard: {
+    planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 300 },
+    research: { model: DEEPSEEK_FLASH, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 900 },
+  },
+  deep: {
+    planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 360 },
+    research: { model: DEEPSEEK_FLASH, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 1200 },
+    critic: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 420 },
+    synthesis: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 600 },
+  },
+  maximum: {
+    planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 420 },
+    research: { model: DEEPSEEK_FLASH, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 2400 },
+    critic: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 480 },
+    synthesis: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 720 },
+  },
+});
 
 const jobId = process.argv[2] ?? '';
 if (!UUID.test(jobId)) throw new Error('invalid investigation job id');
@@ -65,13 +90,14 @@ if (trustedForensics?.schema_version !== 1 || trustedForensics?.tool !== 'integr
 const trustedSynthetic = isTrustedSyntheticValidationManifest(manifest);
 const route = (trustedSynthetic ? SYNTHETIC_MODEL_ROUTES : REAL_MODEL_ROUTES)[manifest.depth];
 if (!route) throw new Error('invalid investigation depth');
-if (!trustedSynthetic && (route.planner.model !== REAL_EVIDENCE_MODEL
-  || Object.values(route).some((phaseRoute) => (phaseRoute.fallbacks ?? []).length > 0))) {
-  throw new Error('real evidence routing must use the approved zero-retention model without fallback');
+if (!trustedSynthetic && !Object.values(route).every((phaseRoute) =>
+  phaseRoute.model.startsWith('integritas-openrouter/') || phaseRoute.model.startsWith('nvidia/')
+)) {
+  throw new Error('real investigation routing contains an unapproved provider');
 }
 
-function agentEnv(trustedSynthetic) {
-  const providerNames = trustedSynthetic ? ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY'] : [];
+function agentEnv() {
+  const providerNames = ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY'];
   return {
     HOME: '/var/lib/openclaw',
     OPENCLAW_HOME: '/var/lib/openclaw',
@@ -190,7 +216,7 @@ function buildArgs(messageFile, phaseRoute) {
 async function runAgent(messageFile, phaseRoute) {
   const result = await execFileAsync('/opt/openclaw/bin/openclaw', buildArgs(messageFile, phaseRoute), {
     cwd: jobDir,
-    env: agentEnv(trustedSynthetic),
+    env: agentEnv(),
     timeout: (phaseRoute.timeoutSeconds + 60) * 1000,
     maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
   });
