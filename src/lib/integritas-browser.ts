@@ -1,5 +1,5 @@
 export const MAX_CASE_DOCUMENTS = 20;
-export const MAX_CASE_FILE_BYTES = 5 * 1024 * 1024;
+export const MAX_CASE_FILE_BYTES = 50 * 1024 * 1024;
 export const SUPPORTED_CASE_FILE_ACCEPT = '.pdf,.txt,.md,.csv';
 
 export function getIntegritasFunctionUrls(
@@ -76,7 +76,7 @@ export function validateCaseDocumentSelection(existingCount: number, files: File
       throw new Error(`${file.name || 'Selected file'} is empty or unreadable.`);
     }
     if (file.size > MAX_CASE_FILE_BYTES) {
-      throw new Error(`${file.name} exceeds the 5 MB per-file upload limit.`);
+      throw new Error(`${file.name} exceeds the 50 MB per-file upload limit.`);
     }
     const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
     if (!['pdf', 'txt', 'md', 'csv'].includes(extension)) {
