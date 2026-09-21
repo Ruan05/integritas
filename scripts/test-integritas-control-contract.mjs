@@ -5,6 +5,7 @@ const source = readFileSync('supabase/functions/integritas-control/index.ts', 'u
 const leaseSource = readFileSync('supabase/functions/integritas-control/lease.ts', 'utf8');
 const runtimeContractSource = readFileSync('supabase/functions/_shared/investigation-runtime-contract.ts', 'utf8');
 const e2eSelftestSource = readFileSync('supabase/functions/integritas-e2e-selftest/index.ts', 'utf8');
+const openclawSelftestSource = readFileSync('supabase/functions/integritas-openclaw-selftest/index.ts', 'utf8');
 
 assert.match(source, /x-integritas-worker-token/, 'worker token header must be implemented');
 assert.match(source, /x-integritas-worker-id/, 'worker id header must be required for scoped worker authentication');
@@ -83,6 +84,13 @@ assert.match(e2eSelftestSource, /integritas_documents/, 'E2E cleanup must includ
 assert.match(e2eSelftestSource, /syntheticDataDeleted:\s*true/, 'E2E self-test must record verified synthetic cleanup');
 assert.ok(!/for\s*\(let\s+i\s*=\s*0;\s*i\s*<\s*24/.test(e2eSelftestSource), 'E2E self-test must not poll a long-running investigation inside one Edge invocation');
 assert.ok(!/setTimeout\([^,]+,\s*6000\)/.test(e2eSelftestSource), 'E2E self-test must not hold an Edge invocation open with six-second polling sleeps');
+
+assert.match(openclawSelftestSource, /body\.mode === \"noevidence\"/, 'OpenClaw self-test must expose the no-evidence mode');
+assert.match(openclawSelftestSource, /Synthetic evidence only\. No real person, company, identifier, allegation, or confidential data\./, 'no-evidence fixture must remain free of investigable subject or identifier claims');
+assert.match(openclawSelftestSource, /intendedSubjects: mode === \"noevidence\" \? \"\"/, 'no-evidence mode must not inject a subject that defeats deterministic short-circuiting');
+assert.match(openclawSelftestSource, /depth: mode === \"hostile20\" \? \"maximum\" : \"fast\"/, 'no-evidence mode must use the normal fast investigation path rather than a custom bypass');
+assert.match(openclawSelftestSource, /start_case_investigation/, 'OpenClaw self-test must exercise the real control API');
+assert.match(openclawSelftestSource, /cleanupResources/, 'OpenClaw self-test must retain bounded synthetic cleanup');
 
 for (const dangerous of [
   "'exec_shell'",
