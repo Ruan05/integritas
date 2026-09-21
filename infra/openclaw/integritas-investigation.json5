@@ -44,6 +44,7 @@
         workspaceAccess: "ro",
       },
       models: {
+        "opencode-go/kimi-k3": {},
         "integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free": {},
         "integritas-openrouter/openrouter/free": {},
         "nvidia/nvidia/nemotron-3-ultra-550b-a55b": {
