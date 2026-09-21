@@ -44,6 +44,7 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.match(source, /plan\.research_lanes\.length < 1 && !allowZeroResearchLanes/, 'real investigations must still require at least one research lane');
   assert.match(source, /filterSyntheticExternalResearchLanes/, 'trusted synthetic plans must remove external research lanes');
   assert.match(source, /applyEvidenceDrivenSpecialistRouting\(plan, manifest\)/, 'validated plans must pass through deterministic evidence-driven specialist routing');
+  assert.ok(source.indexOf('applyEvidenceDrivenSpecialistRouting(plan, manifest)') < source.indexOf('filterSyntheticExternalResearchLanes(plan, isTrustedSyntheticValidationManifest(manifest))'), 'synthetic lane filtering must run after specialist routing so test fixtures cannot regain external lanes');
   assert.match(source, /synthetic validation research must not perform external research/, 'synthetic external tool use must fail closed');
   const retainedPlannerRead = source.indexOf("readFile(path.join(jobDir, 'planner-agent-exec.json'), 'utf8')");
   const plannerRun = source.indexOf("runAgent('planner-task.md', route.planner)");
