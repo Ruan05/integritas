@@ -174,6 +174,60 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
         self.assertTrue(any("Prototype 1 features missing" in error for error in errors))
         self.assertGreater(len(summary["prototype1_missing_lanes"]), 0)
 
+    def test_maximum_no_evidence_route_accepts_compact_evidence_proportional_report(self):
+        bundle = copy.deepcopy(self.bundle)
+        report = (
+            "# MASTER SUMMARY — READ THIS FIRST\n"
+            "Deterministic intake found no real-world subject, transaction or material claim requiring external investigation.\n\n"
+            "# DIRECT NEXT STEPS — WHAT TO DO NOW\n"
+            "No external diligence action is required unless substantive evidence is added."
+        )
+        bundle["sources"] = [row for row in bundle["sources"] if row["evidence_origin"] == "submitted_document"]
+        bundle["checks"] = [{
+            "check_key": "workload.no_investigable_evidence",
+            "entity_key": None,
+            "check_type": "workload_classification",
+            "description": "Determine whether external investigation is required.",
+            "priority": "low",
+            "required_source": "Submitted evidence",
+            "status": "complete",
+            "outcome": "No investigable evidence detected.",
+        }]
+        bundle["execution"]["tool_results"].append({
+            "tool": "integritas_workload_classifier_v1",
+            "status": "completed",
+            "summary": "Deterministic no-evidence route selected.",
+        })
+        bundle["execution"]["terminal_outcome"] = "completed"
+        bundle["report"]["markdown"] = report
+        errors, summary = validate(bundle, self.manifest, report, 2, self.forensics)
+        self.assertEqual(errors, [])
+        self.assertEqual(summary["prototype1_required_lanes"], 0)
+        self.assertEqual(summary["prototype1_missing_lanes"], [])
+        self.assertEqual(summary["prototype1_missing_features"], [])
+
+    def test_no_evidence_marker_cannot_bypass_maximum_report_rules_when_external_research_exists(self):
+        bundle = copy.deepcopy(self.bundle)
+        bundle["checks"] = [{
+            "check_key": "workload.no_investigable_evidence",
+            "entity_key": None,
+            "check_type": "workload_classification",
+            "description": "Determine whether external investigation is required.",
+            "priority": "low",
+            "required_source": "Submitted evidence",
+            "status": "complete",
+            "outcome": "No investigable evidence detected.",
+        }]
+        bundle["execution"]["tool_results"].append({
+            "tool": "integritas_workload_classifier_v1",
+            "status": "completed",
+            "summary": "Marker present.",
+        })
+        report = "# MASTER SUMMARY — READ THIS FIRST\nShort.\n\n# DIRECT NEXT STEPS — WHAT TO DO NOW\nShort."
+        bundle["report"]["markdown"] = report
+        errors, _ = validate(bundle, self.manifest, report, 2, self.forensics)
+        self.assertTrue(any("Prototype 1 report is too short" in error for error in errors))
+
     def test_maximum_report_accepts_canonical_subject_status_matrix_heading(self):
         bundle = copy.deepcopy(self.bundle)
         report = prototype1_maximum_report().replace(
