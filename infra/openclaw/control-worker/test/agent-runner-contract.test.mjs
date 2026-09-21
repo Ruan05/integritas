@@ -16,15 +16,20 @@ test('OpenClaw runner materializes only validated structured final output', asyn
 
 test('OpenClaw runner uses evidence-first planning, bounded research and an independent critic for deep work', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
-  assert.match(source, /const NVIDIA_PRIMARY = 'nvidia\/nvidia\/nemotron-3-ultra-550b-a55b'/);
-  assert.match(source, /const NVIDIA_LIGHTNING = 'nvidia\/nvidia\/nemotron-3\.5-lightning-30b-a3b'/);
-  assert.match(source, /SYNTHETIC_MODEL_ROUTES = routes\(NVIDIA_PRIMARY, \[NVIDIA_LIGHTNING, \.\.\.FREE_FALLBACKS\]\)/);
+  assert.match(source, /const NVIDIA_PRIMARY = 'integritas-nvidia\/nvidia\/nemotron-3-ultra-550b-a55b'/);
+  assert.match(source, /const FREE_FAST = 'integritas-openrouter\/nvidia\/nemotron-3-super-120b-a12b:free'/);
+  assert.match(source, /SYNTHETIC_MODEL_ROUTES = routes\(NVIDIA_PRIMARY, FREE_FALLBACKS\)/);
+  assert.doesNotMatch(source, /NVIDIA_LIGHTNING/, 'unhealthy Lightning route must not be auto-selected');
   assert.ok(source.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';"));
   assert.ok(source.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';"));
   assert.ok(source.includes("const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash';"));
   assert.ok(source.includes('planner: { model: GLM_53'));
   assert.ok(source.includes('research: { model: DEEPSEEK_FLASH'));
   assert.match(source, /integritas-openrouter\/nvidia\/nemotron-3-ultra-550b-a55b:free/);
+  assert.match(source, /integritas-openrouter\/nvidia\/nemotron-3-super-120b-a12b:free/);
+  assert.match(source, /integritas-openrouter\/nex-agi\/nex-n2\.5-pro:free/);
+  assert.match(source, /integritas-openrouter\/cohere\/north-mini-code:free/);
+  assert.match(source, /integritas-openrouter\/poolside\/laguna-xs-2\.1:free/);
   assert.match(source, /trustedForensics/);
   assert.match(source, /integritas_forensics_v1/);
   assert.match(source, /parsePlan/);
