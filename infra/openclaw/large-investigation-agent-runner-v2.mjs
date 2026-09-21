@@ -290,6 +290,8 @@ ${synthetic ? 'This is trusted synthetic validation: propose only internal evide
 
 Return exactly one raw JSON object and no prose:
 {"case_profile":{"case_type":"","jurisdictions":[],"assets_or_products":[],"incoterms":[],"payment_instruments":[],"critical_transaction_features":[]},"research_lanes":[{"lane_id":"key","priority":"critical|high|medium|low","question":"","preferred_sources":[],"fallback_sources":[],"tools":[],"search_identifiers":[],"stop_condition":"","manual_only":false}],"cross_document_tests":[],"specialist_checks":[],"automatic_stop_conditions":[]}
+
+cross_document_tests, specialist_checks, and automatic_stop_conditions must each be arrays of concise strings, not arrays of objects. Keep each entry self-contained and evidence-oriented.
 `;
 }
 function analysisTask(synthetic) {
