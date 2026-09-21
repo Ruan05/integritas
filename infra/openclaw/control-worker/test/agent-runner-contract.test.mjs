@@ -93,8 +93,8 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.match(large, /provider: 'integritas', model: 'deterministic-large-assembly-v2'/, 'final canonical bundle must be assembled deterministically rather than by a model');
   assert.match(large, /failed every validated model route/, 'schema-invalid model output must trigger application-level model failover');
   assert.match(large, /readFile\(path\.join\(jobDir, execName\)/, 'validated phase artifacts must be reused on retry');
-  assert.match(large, /const REAL_EVIDENCE_MODEL = 'opencode-go\\/kimi-k3'/, 'large real-evidence work must use the approved zero-retention route');
-  assert.match(large, /if \\(!synthetic\\) return \\[REAL_EVIDENCE_MODEL\\]/, 'large real-evidence work must fail closed to one approved provider route');
+  assert.ok(large.includes("const REAL_EVIDENCE_MODEL = 'opencode-go/kimi-k3';"), 'large real-evidence work must use the approved zero-retention route');
+  assert.ok(large.includes('if (!synthetic) return [REAL_EVIDENCE_MODEL];'), 'large real-evidence work must fail closed to one approved provider route');
   assert.match(large, /MAX_OPENROUTER_FREE_USES = 4/, 'OpenRouter free fallback must remain synthetic-only and bounded');
   assert.match(large, /external lane sources require observed research-tool use in the same phase/, 'external source provenance must be phase-local');
   assert.match(large, /# MASTER SUMMARY — READ THIS FIRST/);
