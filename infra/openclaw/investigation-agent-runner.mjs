@@ -10,6 +10,7 @@ import { reconcilePlanChecks } from './plan-checks.mjs';
 import { buildDeterministicChecks } from './transaction-checks.mjs';
 import { buildSubmittedSources, shouldUseLargeInvestigation } from './large-investigation.mjs';
 import { buildNoEvidenceReport, classifyDeterministicTextPreflight } from './workload-classifier.mjs';
+import { applyEvidenceDrivenSpecialistRouting } from './specialist-router.mjs';
 import { validateInvestigationBundle } from './control-worker/src/bundle.mjs';
 import { runLargeInvestigationV2 } from './large-investigation-agent-runner-v2.mjs';
 
@@ -401,6 +402,7 @@ function parsePlan(stdout) {
     : [];
   if (researchTools.length) throw new Error('planner must not perform external research');
   plan = filterSyntheticExternalResearchLanes(plan, isTrustedSyntheticValidationManifest(manifest));
+  plan = applyEvidenceDrivenSpecialistRouting(plan, manifest);
   return { envelope, plan };
 }
 
