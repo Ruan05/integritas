@@ -112,6 +112,15 @@ test('investigation profile uses only required provider SecretRefs and keeps the
   const config = await readFile(new URL('../../integritas-investigation.json5', import.meta.url), 'utf8');
   assert.match(config, /workspaceAccess: "ro"/);
   assert.match(config, /profile: "minimal"/);
+  assert.match(config, /modelPolicy:\s*\{[\s\S]*allow:/, 'investigation overlay must carry its own model policy');
+  for (const model of [
+    'integritas-openrouter/deepseek/deepseek-v4.1-flash',
+    'integritas-openrouter/z-ai/glm-5.3',
+    'integritas-openrouter/z-ai/glm-5.3-flash',
+    'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b',
+  ]) {
+    assert.ok(config.includes(`"${model}"`), `model policy must allow ${model}`);
+  }
   assert.doesNotMatch(config, /"integritas-groq"/);
   assert.doesNotMatch(config, /GROQ_API_KEY/);
   assert.match(config, /"integritas-openrouter"/);
