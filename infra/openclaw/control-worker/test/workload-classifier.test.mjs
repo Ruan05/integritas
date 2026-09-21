@@ -93,6 +93,15 @@ test('deterministic identifiers in text prevent a false no-evidence short-circui
   assert.equal(workload.reason_code, 'deterministic_investigable_token_present');
 });
 
+test('generic evidence-derived subject scope is not mistaken for an explicitly named subject', async () => {
+  const text = 'INTEGRITAS SYNTHETIC BROWSER LANE FIXTURE. Harmless synthetic integration test only. No real personal or confidential data is present.';
+  const { jobDir, manifest } = await fixture(text);
+  manifest.case.intended_subjects = 'People, companies, representatives, identifiers and relationships identified in the submitted evidence.';
+  const workload = await classifyDeterministicTextPreflight({ manifest, jobDir });
+  assert.equal(workload.route, 'no_investigable_evidence');
+  assert.equal(workload.metrics.explicit_subject, false);
+});
+
 test('an explicitly named real subject prevents short-circuiting', async () => {
   const { jobDir, manifest } = await fixture('Synthetic test control. No real-world data.');
   manifest.case.intended_subjects = 'Acme Energy Trading Ltd';
