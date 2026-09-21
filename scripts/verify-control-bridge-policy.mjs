@@ -97,6 +97,8 @@ assert.ok(investigationRunner.includes("research: { model: DEEPSEEK_FLASH"), 're
 assert.ok(investigationRunner.includes("'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'"), 'free Nemotron Ultra may remain as an emergency fallback');
 assert.ok(investigationRunner.includes("'integritas-openrouter/nvidia/nemotron-3-super-120b-a12b:free'"), 'verified free Nemotron Super must be routable');
 assert.ok(investigationRunner.includes("'integritas-openrouter/nex-agi/nex-n2.5-pro:free'"), 'verified free Nex Pro must be routable');
+assert.ok(investigationRunner.includes('ACTIVE_FREE_FALLBACKS = process.env.OPENCODE_ZEN_API_KEY'), 'Zen fallback activation must be conditional on a server-side Zen key');
+assert.ok(investigationRunner.includes("'integritas-opencode-zen/big-pickle'"), 'Big Pickle must be staged as a conditional Zen fallback');
 assert.ok(investigationRunner.includes("'--model', phaseRoute.model"), 'runner must explicitly pin each bounded phase model');
 assert.ok(investigationRunner.includes("args.push('--fallback', fallback)"), 'legacy bounded phases must use only their explicit fallback chain');
 assert.ok(investigationRunner.includes("'integritas-openrouter/openrouter/free'"), 'dynamic OpenRouter free routing may be used only as synthetic emergency fallback');
@@ -114,9 +116,12 @@ for (const model of ['deepseek/deepseek-v4.1-flash', 'z-ai/glm-5.3', 'z-ai/glm-5
   assert.ok(investigationConfig.includes(model), `production investigation profile must expose ${model}`);
 }
 assert.match(installer, /for name in OPENROUTER_API_KEY NVIDIA_API_KEY; do/, 'only provisioned NVIDIA/OpenRouter secrets may be mandatory');
-assert.ok(installer.includes('OPENROUTER_API_KEY|NVIDIA_API_KEY|GROQ_API_KEY'), 'Groq may remain an approved optional staged variable for future activation');
+assert.ok(installer.includes('OPENROUTER_API_KEY|NVIDIA_API_KEY|GROQ_API_KEY|OPENCODE_ZEN_API_KEY'), 'Groq and OpenCode Zen may remain approved optional staged variables');
 assert.match(investigationConfig, /"integritas-openrouter"/, 'investigation config must define a fixed OpenRouter provider');
 assert.match(investigationConfig, /"integritas-nvidia"/, 'investigation config must define an explicit NVIDIA provider');
+assert.match(investigationConfig, /"integritas-opencode-zen"/, 'investigation config must define the OpenCode Zen chat provider');
+assert.match(investigationConfig, /"integritas-opencode-zen-responses"/, 'investigation config must define the OpenCode Zen responses provider');
+assert.match(investigationConfig, /id:\s*["']OPENCODE_ZEN_API_KEY["']/, 'OpenCode Zen must use the optional Zen SecretRef');
 assert.match(investigationConfig, /id:\s*["']NVIDIA_API_KEY["']/, 'explicit NVIDIA provider must use the NVIDIA environment SecretRef');
 assert.match(investigationConfig, /apiKey:\s*\{\s*source:\s*["']env["'],\s*provider:\s*["']default["'],\s*id:\s*["']OPENROUTER_API_KEY["']\s*\}/, 'OpenRouter key must be an environment SecretRef');
 assert.match(investigationConfig, /id:\s*["']openrouter\/free["']/, 'investigation config may register the dynamic free router only for emergency fallback');
@@ -128,6 +133,7 @@ assert.ok(largeInvestigationRunner.includes("const DEEPSEEK_FLASH = 'integritas-
 assert.ok(largeInvestigationRunner.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3'"), 'large-case runner must expose GLM 5.3');
 assert.ok(largeInvestigationRunner.includes("FREE_OPENROUTER_MODELS.has(model)"), 'large-case free budget must apply only to free routes');
 assert.ok(largeInvestigationRunner.includes("const MAX_OPENROUTER_FREE_USES = 4"), 'large-case free-router usage must be globally bounded per investigation');
+assert.ok(largeInvestigationRunner.includes("const MAX_ZEN_FREE_USES = 4"), 'large-case Zen free usage must be bounded per investigation');
 assert.match(largeInvestigationRunner, /buildDocumentShards\(manifest, 4\)/, 'large-case runner must shard documents into bounded groups');
 assert.match(largeInvestigationRunner, /mapLimit\(shards, 2/, 'document shard concurrency must remain bounded');
 assert.match(largeInvestigationRunner, /mapLimit\(plan\.research_lanes, 2/, 'research lane concurrency must remain bounded');
