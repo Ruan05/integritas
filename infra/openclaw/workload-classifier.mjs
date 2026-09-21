@@ -4,6 +4,7 @@ import path from 'node:path';
 const MAX_DETERMINISTIC_TEXT_BYTES = 8 * 1024;
 const SYNTHETIC_MARKER = /\b(?:synthetic|test control|test fixture|regression fixture|no real[- ]world|no real person|no real company|no real entit(?:y|ies)|no confidential data)\b/i;
 const EMPTY_SUBJECT = /^(?:none|n\/a|not applicable|synthetic|test(?: control| fixture)?)$/i;
+const GENERIC_SUBJECT_SCOPE = /^(?:people,? companies,? representatives,? identifiers? and relationships? identified in (?:the )?submitted evidence|people,? companies,? representatives,? identifiers? and relationships? identified in (?:the )?evidence|entities? identified in (?:the )?submitted evidence|subjects? identified in (?:the )?submitted evidence)[.]?$/i;
 const INVESTIGABLE_TOKEN = new RegExp([
   'https?://',
   '[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}',
@@ -33,7 +34,7 @@ function summarySignalCount(documentSummaries) {
 function intendedSubjectRequiresResearch(manifest) {
   const subject = String(manifest?.case?.intended_subjects ?? '').trim();
   if (!subject) return false;
-  if (EMPTY_SUBJECT.test(subject) || SYNTHETIC_MARKER.test(subject)) return false;
+  if (EMPTY_SUBJECT.test(subject) || GENERIC_SUBJECT_SCOPE.test(subject) || SYNTHETIC_MARKER.test(subject)) return false;
   return true;
 }
 
