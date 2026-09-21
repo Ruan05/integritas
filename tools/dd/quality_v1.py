@@ -46,7 +46,7 @@ MAXIMUM_REPORT_LANES = [
 ]
 MAXIMUM_REPORT_FEATURES = [
     ('master issue dashboard', r'master\s+(issue|summary)|issue\s+dashboard|decision\s+dashboard'),
-    ('subject status matrix', r'person-by-person|entity-by-entity|clearance\s+heatmap|subject\s+matrix'),
+    ('subject status matrix', r'subject\s+status\s+matrix|person-by-person|entity-by-entity|clearance\s+heatmap|subject\s+matrix'),
     ('comprehensive subject dossiers', r'comprehensive\s+(profile|subject|entity).*dossier|person\s+profile|entity\s+profile'),
     ('relationship evidence network', r'relationship.*(network|map)|evidence\s+network|relationship\s+intelligence\s+summary'),
     ('digital or commercial timeline', r'(digital|commercial|entity).*timeline|chronology'),

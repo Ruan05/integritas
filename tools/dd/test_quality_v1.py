@@ -174,6 +174,17 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
         self.assertTrue(any("Prototype 1 features missing" in error for error in errors))
         self.assertGreater(len(summary["prototype1_missing_lanes"]), 0)
 
+    def test_maximum_report_accepts_canonical_subject_status_matrix_heading(self):
+        bundle = copy.deepcopy(self.bundle)
+        report = prototype1_maximum_report().replace(
+            "Person-by-person clearance heatmap / subject matrix",
+            "Subject Status Matrix",
+        )
+        bundle["report"]["markdown"] = report
+        errors, summary = validate(bundle, self.manifest, report, 2, self.forensics)
+        self.assertFalse(any("subject status matrix" in error for error in errors))
+        self.assertNotIn("subject status matrix", summary["prototype1_missing_features"])
+
     def test_front_matter_requires_master_summary_then_direct_next_steps(self):
         bundle = copy.deepcopy(self.bundle)
         bad_report = prototype1_maximum_report().replace(
