@@ -15,6 +15,36 @@
         },
         models: [
           {
+            id: "deepseek/deepseek-v4.1-flash",
+            name: "Integritas DeepSeek V4.1 Flash",
+            reasoning: true,
+            input: ["text", "image"],
+            cost: { input: 0.15, output: 0.60, cacheRead: 0.015, cacheWrite: 0 },
+            contextWindow: 1048576,
+            contextTokens: 1000000,
+            maxTokens: 131072,
+          },
+          {
+            id: "z-ai/glm-5.3",
+            name: "Integritas GLM 5.3",
+            reasoning: true,
+            input: ["text"],
+            cost: { input: 0.90, output: 2.90, cacheRead: 0.17, cacheWrite: 0 },
+            contextWindow: 1310720,
+            contextTokens: 1200000,
+            maxTokens: 131072,
+          },
+          {
+            id: "z-ai/glm-5.3-flash",
+            name: "Integritas GLM 5.3 Flash",
+            reasoning: true,
+            input: ["text", "image"],
+            cost: { input: 0.075, output: 0.25, cacheRead: 0.015, cacheWrite: 0 },
+            contextWindow: 1310720,
+            contextTokens: 1200000,
+            maxTokens: 131072,
+          },
+          {
             id: "nvidia/nemotron-3-ultra-550b-a55b:free",
             name: "Integritas OpenRouter Free Nemotron 3 Ultra",
             reasoning: true,
@@ -44,7 +74,9 @@
         workspaceAccess: "ro",
       },
       models: {
-        "opencode-go/kimi-k3": {},
+        "integritas-openrouter/deepseek/deepseek-v4.1-flash": {},
+        "integritas-openrouter/z-ai/glm-5.3": {},
+        "integritas-openrouter/z-ai/glm-5.3-flash": {},
         "integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free": {},
         "integritas-openrouter/openrouter/free": {},
         "nvidia/nvidia/nemotron-3-ultra-550b-a55b": {
