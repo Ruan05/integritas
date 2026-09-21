@@ -38,7 +38,7 @@ function cors(req: Request) {
         "access-control-allow-origin": o,
         vary: "Origin",
         "access-control-allow-headers":
-          "authorization, content-type, apikey, x-client-info, x-integritas-crm-token",
+          "authorization, content-type, apikey, x-client-info, x-integritas-crm-token, x-integritas-worker-token, x-integritas-worker-id",
         "access-control-allow-methods": "POST, OPTIONS",
       }
     : {};
@@ -64,6 +64,20 @@ function secureEquals(a: string, b: string) {
   for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
 }
+async function workerUploadIdentity(req: Request): Promise<string | null> {
+  const token = req.headers.get("x-integritas-worker-token") || "";
+  const workerId = (req.headers.get("x-integritas-worker-id") || "").trim();
+  if (!token || !workerId || workerId.length > 200) return null;
+  const digest = await sha256(token);
+  const { data, error } = await admin
+    .from("integritas_control_worker_credentials")
+    .select("worker_id,token_sha256,enabled")
+    .eq("worker_id", workerId)
+    .maybeSingle();
+  if (error || !data?.enabled || !secureEquals(digest, data.token_sha256)) return null;
+  return workerId;
+}
+
 async function identity(req: Request): Promise<Who> {
   const crmToken = req.headers.get("x-integritas-crm-token") || "";
   if (crmToken) {
@@ -1182,14 +1196,20 @@ Deno.serve(async (req) => {
   if (req.method !== "POST")
     return json(req, { error: "Method not allowed" }, 405);
   try {
-    const who = await identity(req),
-      ct = req.headers.get("content-type") || "";
+    const ct = req.headers.get("content-type") || "";
     if (ct.includes("multipart/form-data")) {
       const form = await req.formData();
       if (validateAction(form.get("action")) !== "upload")
         throw new Error("Unsupported action");
+      const workerId = await workerUploadIdentity(req);
+      if (workerId) {
+        const result = await upload(CRM_USER_ID, form);
+        return json(req, { ...result, ingress: "oracle-worker", workerId });
+      }
+      const who = await identity(req);
       return json(req, await upload(who.userId, form));
     }
+    const who = await identity(req);
     const b = await req.json(),
       a = validateAction(b.action);
     if (a === "list_cases")
