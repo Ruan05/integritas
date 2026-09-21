@@ -11,14 +11,17 @@ test('OpenClaw runner materializes only validated structured final output', asyn
   assert.match(source, /'--code-mode', 'direct'/);
   assert.doesNotMatch(source, /report\.html/);
   assert.doesNotMatch(source, /'--state-dir'/, 'agent exec must use OpenClaw isolated temporary state while the Gateway owns the persistent state directory');
-  assert.match(source, /'--config', '\/etc\/openclaw\/integritas-investigation\.json'/);
+  assert.match(source, /const ACTIVE_CONFIG_PATH = ZEN_ENABLED \? ZEN_CONFIG_PATH : BASE_CONFIG_PATH/);
+  assert.match(source, /'--config', ACTIVE_CONFIG_PATH/);
 });
 
 test('OpenClaw runner uses evidence-first planning, bounded research and an independent critic for deep work', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
   assert.match(source, /const NVIDIA_PRIMARY = 'integritas-nvidia\/nvidia\/nemotron-3-ultra-550b-a55b'/);
   assert.match(source, /const FREE_FAST = 'integritas-openrouter\/nvidia\/nemotron-3-super-120b-a12b:free'/);
-  assert.match(source, /ACTIVE_FREE_FALLBACKS = process\.env\.OPENCODE_ZEN_API_KEY/);
+  assert.match(source, /const ZEN_ENABLED = !!process\.env\.OPENCODE_ZEN_API_KEY && existsSync\(ZEN_ENABLE_MARKER\)/);
+  assert.match(source, /const ZEN_ENABLE_MARKER = '\/etc\/openclaw\/zen-enabled'/);
+  assert.match(source, /ACTIVE_FREE_FALLBACKS = ZEN_ENABLED/);
   assert.match(source, /SYNTHETIC_MODEL_ROUTES = routes\(NVIDIA_PRIMARY, ACTIVE_FREE_FALLBACKS\)/);
   assert.doesNotMatch(source, /NVIDIA_LIGHTNING/, 'unhealthy Lightning route must not be auto-selected');
   assert.ok(source.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';"));
@@ -108,6 +111,7 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.ok(large.includes('FREE_OPENROUTER_MODELS.has(model)'), 'free-fallback budget must apply only to free OpenRouter routes');
   assert.match(large, /MAX_OPENROUTER_FREE_USES = 4/, 'OpenRouter free fallback must remain synthetic-only and bounded');
   assert.match(large, /MAX_ZEN_FREE_USES = 4/, 'Zen free fallback must remain bounded per investigation');
+  assert.match(large, /const zen = ZEN_ENABLED/, 'large-case Zen activation must require the validated enable marker');
   assert.match(large, /ZEN_FREE_MODELS\.has\(model\)/, 'Zen free routes must use their own bounded budget');
   assert.match(large, /external lane sources require observed research-tool use in the same phase/, 'external source provenance must be phase-local');
   assert.match(large, /# MASTER SUMMARY — READ THIS FIRST/);
@@ -119,6 +123,7 @@ test('large investigations shard before legacy planning and assemble the canonic
 
 test('investigation profile uses only required provider SecretRefs and keeps the evidence workspace read-only', async () => {
   const config = await readFile(new URL('../../integritas-investigation.json5', import.meta.url), 'utf8');
+  const zenConfig = await readFile(new URL('../../integritas-investigation-zen.json5', import.meta.url), 'utf8');
   assert.match(config, /workspaceAccess: "ro"/);
   assert.match(config, /profile: "minimal"/);
   assert.match(config, /modelPolicy:\s*\{[\s\S]*allow:/, 'investigation overlay must carry its own model policy');
@@ -133,9 +138,11 @@ test('investigation profile uses only required provider SecretRefs and keeps the
   assert.doesNotMatch(config, /"integritas-groq"/);
   assert.doesNotMatch(config, /GROQ_API_KEY/);
   assert.match(config, /"integritas-openrouter"/);
-  assert.match(config, /"integritas-opencode-zen"/, 'OpenCode Zen chat provider must be configured');
-  assert.match(config, /"integritas-opencode-zen-responses"/, 'OpenCode Zen responses provider must be configured');
-  assert.match(config, /id: "OPENCODE_ZEN_API_KEY"/, 'OpenCode Zen chat provider must use the Zen API key SecretRef');
+  assert.doesNotMatch(config, /integritas-opencode-zen/, 'active investigation config must not require unauthenticated Zen');
+  assert.doesNotMatch(config, /OPENCODE_ZEN_API_KEY/, 'active investigation config must not resolve the optional Zen secret');
+  assert.match(zenConfig, /"integritas-opencode-zen"/, 'staged Zen chat provider must be configured');
+  assert.match(zenConfig, /"integritas-opencode-zen-responses"/, 'staged Zen responses provider must be configured');
+  assert.match(zenConfig, /id: "OPENCODE_ZEN_API_KEY"/, 'staged Zen provider must use the Zen API key SecretRef');
   for (const model of [
     'integritas-opencode-zen/big-pickle',
     'integritas-opencode-zen/deepseek-v4-flash-free',
@@ -145,7 +152,7 @@ test('investigation profile uses only required provider SecretRefs and keeps the
     'integritas-opencode-zen/nemotron-3.5-lightning-free',
     'integritas-opencode-zen-responses/muse-spark-1.3-contributor-free',
   ]) {
-    assert.ok(config.includes(`"${model}"`), `missing staged Zen model: ${model}`);
+    assert.ok(zenConfig.includes(`"${model}"`), `missing staged Zen model: ${model}`);
   }
   assert.match(config, /apiKey: \{ source: "env", provider: "default", id: "OPENROUTER_API_KEY" \}/);
   assert.match(config, /id: "nvidia\/nemotron-3-ultra-550b-a55b:free"/);
