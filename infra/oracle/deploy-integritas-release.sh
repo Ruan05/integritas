@@ -27,6 +27,7 @@ MANAGED_FILES=(
   /etc/systemd/system/integritas-control-worker.service
   /etc/systemd/system/openclaw-gateway.service
   /etc/systemd/system/openclaw-browser.service
+  /usr/local/libexec/integritas-browser-start
   /etc/systemd/system/integritas-openclaw-investigation@.service
   /etc/systemd/system/integritas-release-deploy@.service
   /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
@@ -100,6 +101,7 @@ for required in \
   infra/openclaw/integritas-control-worker.service \
   infra/openclaw/openclaw-gateway.service \
   infra/openclaw/openclaw-browser.service \
+  infra/openclaw/integritas-browser-start.sh \
   infra/openclaw/integritas-openclaw-investigation@.service \
   infra/openclaw/integritas-release-deploy@.service \
   infra/oracle/deploy-integritas-controlled.sh \
