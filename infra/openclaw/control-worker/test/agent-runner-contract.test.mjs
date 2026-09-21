@@ -240,6 +240,7 @@ test('runner passes only approved provider credentials into OpenClaw', async () 
 });
 
 test('investigation skill imposes research and reread budgets', async () => {
+  const runner = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
   const skill = await readFile(new URL('../../skills/integritas-investigation-v1/SKILL.md', import.meta.url), 'utf8');
   assert.match(skill, /fast.*8 distinct external sources.*16 web\/browser tool calls/s);
   assert.match(skill, /standard.*16 distinct external sources.*32 web\/browser tool calls/s);
@@ -247,6 +248,13 @@ test('investigation skill imposes research and reread budgets', async () => {
   assert.match(skill, /maximum.*50 distinct external sources.*100 web\/browser tool calls/s);
   assert.match(skill, /Read each submitted evidence file comprehensively once/);
   assert.match(skill, /Do not repeatedly fetch the same URL/);
+  assert.match(skill, /Turkey petroleum \/ fuel transactions/);
+  assert.match(skill, /MERSİS or trade-registry record/);
+  assert.match(skill, /EPDK lane/);
+  assert.match(skill, /IMO-anchored vessel/);
+  assert.match(skill, /Stop a specialist lane once authoritative evidence answers its specific question/);
+  assert.match(runner, /fast:[\s\S]*timeoutSeconds: 90/);
+  assert.match(runner, /maximum:[\s\S]*research:[\s\S]*timeoutSeconds: 900/);
 });
 
 test('investigation prompts use the read-only /agent workspace mount', async () => {

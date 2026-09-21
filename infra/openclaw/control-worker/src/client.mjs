@@ -77,4 +77,7 @@ export class ControlClient {
   acknowledgeCancel(commandId, caseJobId) {
     return this.call('worker_cancel_ack', { command_id: commandId, case_job_id: caseJobId });
   }
+  acknowledgePause(commandId, caseJobId) {
+    return this.call('worker_pause_ack', { command_id: commandId, case_job_id: caseJobId });
+  }
 }

@@ -376,6 +376,11 @@ async function runAgentWithRecovery({
       await client.acknowledgeCancel(commandId, jobId);
       return { cancelled: true };
     }
+    if (state?.pause_requested) {
+      await systemctlRunner('/usr/bin/systemctl', ['stop', unit]);
+      await client.acknowledgePause(commandId, jobId);
+      return { paused: true };
+    }
     if (jobDir && typeof onProgress === 'function') {
       const agentProgress = await readAgentProgress(jobDir);
       const key = agentProgress
@@ -473,6 +478,9 @@ export async function executeInvestigation(command, {
     if (manifest.cancel_requested) {
       await client.acknowledgeCancel(command.id, jobId);
       return { ok: true, cancelled: true, case_job_id: jobId, case_revision: revision };
+    }
+    if (manifest.pause_requested) {
+      return { ok: true, paused: true, case_job_id: jobId, case_revision: revision };
     }
     if (TERMINAL_STAGES.has(manifest.job_stage)) throw new Error(`investigation job is already terminal: ${manifest.job_stage}`);
     const initialUnitState = await readUnitState(systemctlRunner, unit);
@@ -616,6 +624,9 @@ export async function executeInvestigation(command, {
       if (agentRun.cancelled) {
         return { ok: true, cancelled: true, case_job_id: jobId, case_revision: revision };
       }
+      if (agentRun.paused) {
+        return { ok: true, paused: true, case_job_id: jobId, case_revision: revision };
+      }
     }
 
     const recoveryState = await readRecoveryState(client, command.id, jobId, Math.min(statePollMs, 1000));
@@ -623,6 +634,10 @@ export async function executeInvestigation(command, {
     if (recoveryState?.cancel_requested) {
       await client.acknowledgeCancel(command.id, jobId);
       return { ok: true, cancelled: true, case_job_id: jobId, case_revision: revision };
+    }
+    if (recoveryState?.pause_requested) {
+      await client.acknowledgePause(command.id, jobId);
+      return { ok: true, paused: true, case_job_id: jobId, case_revision: revision };
     }
 
     let bundle = await readBounded(bundlePath);

@@ -175,6 +175,28 @@ export function createIntegritasBrowserClient(options: BrowserClientOptions) {
       });
       return payload.investigation;
     },
+    async pauseInvestigation(token: string, caseJobId: string) {
+      const payload = await controlRequest(token, {
+        action: 'pause_case_investigation',
+        case_job_id: caseJobId,
+      });
+      return payload.investigation;
+    },
+    async resumeInvestigation(token: string, caseJobId: string) {
+      const payload = await controlRequest(token, {
+        action: 'resume_case_investigation',
+        case_job_id: caseJobId,
+      });
+      return payload.investigation;
+    },
+    async deleteDocument(token: string, caseId: string, documentId: string) {
+      const payload = await controlRequest(token, {
+        action: 'delete_case_document',
+        case_id: caseId,
+        document_id: documentId,
+      });
+      return payload.deleted;
+    },
   };
 }
 

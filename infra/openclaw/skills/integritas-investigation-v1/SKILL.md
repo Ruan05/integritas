@@ -125,6 +125,15 @@ Use browser automation for dynamic/JavaScript portals, interactive registries, s
 - For Rotterdam or similar petroleum-storage deals, check the Port of Rotterdam/VOTOB storage-spoofing resources and independently contact the real terminal/operator through contact details sourced outside the submitted packet.
 - Never treat a real terminal address or real company name as proof that the counterparty has storage rights or inventory there.
 
+**Turkey petroleum / fuel transactions — trigger only when the evidence indicates a Turkish seller, origin, refinery, terminal, licence, vessel call, or delivery route**
+- Add a dedicated lane for the exact Turkish legal entity: validate the registration/MERSİS or trade-registry record, tax identity where available, legal status, directors/signatory authority, and the difference between a registered company and authority to sell the stated cargo.
+- Add an EPDK lane when the activity requires a Turkish downstream/petroleum licence. Verify the licence class, holder, validity, permitted activity and the connection between the licence holder and the contracting seller; a licence belonging to a similarly named entity is not proof.
+- Add a product/title/capacity lane: identify the asserted refinery, importer, title holder, storage/terminal operator, allocation or tank reference, volume, loading/delivery window, and nomination/release authority. Compare claimed quantities and cadence with evidenced storage, refinery, shipping or trading capacity. Treat capability mismatch as a verification gate, not an allegation.
+- Add a sanctions and origin lane: distinguish Turkish location from product origin; test the stated origin, route, ownership/control, counterparties and payment structure against applicable sanctions/export-control risks. Do not infer compliant origin from a Turkish document or port alone.
+- If maritime delivery is claimed, add IMO-anchored vessel, flag/class/P&I, owner/operator, charter/nomination and port/terminal feasibility checks. Keep AIS as operational context only, never control proof.
+- Add a trade-finance lane for beneficiary, issuing/advising bank, payment trigger, title-transfer sequence, third-party payment, unusual fees and any SWIFT/instrument claim. Direct bank/issuer confirmation remains a manual closure gate.
+- Stop a specialist lane once authoritative evidence answers its specific question or the required direct confirmation is unavailable; do not run every petroleum check merely because the selected depth is Maximum.
+
 **Inspection / quantity / quality / certificates**
 - Verify directly with the named issuer. For SGS-branded reports, use SGS’s official document-verification route and provide the full report where required.
 - A report number or PDF appearance alone is not issuer authentication.

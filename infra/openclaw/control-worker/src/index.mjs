@@ -114,7 +114,7 @@ while (!stopping) {
           repoRoot: process.env.INTEGRITAS_REPO_ROOT || '/opt/integritas/current',
         })
         : await executeCommand(validated);
-      if (!result?.cancelled) await client.complete(command.id, result);
+      if (!result?.cancelled && !result?.paused) await client.complete(command.id, result);
     } catch (error) {
       await client.fail(command.id, 'execution_failed', String(error.message || error).slice(0, 1000));
     } finally {

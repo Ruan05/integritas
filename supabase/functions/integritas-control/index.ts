@@ -537,6 +537,14 @@ Deno.serve(async (req) => {
         });
         return json({ ok: !!ok }, ok ? 200 : 409, origin);
       }
+      if (action === 'worker_pause_ack') {
+        const caseJobId = body.case_job_id;
+        if (!validUuid(caseJobId)) return json({ error: 'invalid_case_job_id' }, 400, origin);
+        const ok = await rpc('integritas_acknowledge_case_investigation_pause', {
+          p_command_id: commandId, p_worker_id: workerId, p_case_job_id: caseJobId,
+        });
+        return json({ ok: !!ok }, ok ? 200 : 409, origin);
+      }
       if (action === 'worker_touch') {
         const ok = await rpc('integritas_control_touch', { p_command_id: commandId, p_worker_id: workerId, p_lease_seconds: 90 });
         return json({ ok: !!ok }, ok ? 200 : 409, origin);
@@ -623,18 +631,53 @@ Deno.serve(async (req) => {
       return json({ investigation }, 202, origin);
     }
 
-    if (action === 'retry_case_investigation' || action === 'cancel_case_investigation') {
+    if (action === 'retry_case_investigation' || action === 'cancel_case_investigation'
+      || action === 'pause_case_investigation' || action === 'resume_case_investigation') {
       if (principal.kind !== 'admin') return json({ error: 'action_not_allowed' }, 403, origin);
       const caseJobId = body.case_job_id;
       if (!validUuid(caseJobId)) return json({ error: 'invalid_case_job_id' }, 400, origin);
-      const rpcName = action === 'retry_case_investigation'
-        ? 'integritas_retry_case_investigation'
-        : 'integritas_cancel_case_investigation';
+      const rpcName = {
+        retry_case_investigation: 'integritas_retry_case_investigation',
+        cancel_case_investigation: 'integritas_cancel_case_investigation',
+        pause_case_investigation: 'integritas_pause_case_investigation',
+        resume_case_investigation: 'integritas_resume_case_investigation',
+      }[action];
+      if (!rpcName) return json({ error: 'action_not_allowed' }, 403, origin);
       const result = await rpc(rpcName, {
         p_case_job_id: caseJobId,
         p_requested_by: principal.userId,
       });
       return json({ investigation: result }, 200, origin);
+    }
+
+    if (action === 'delete_case_document') {
+      if (principal.kind !== 'admin') return json({ error: 'action_not_allowed' }, 403, origin);
+      const caseId = body.case_id;
+      const documentId = body.document_id;
+      if (!validUuid(caseId) || !validUuid(documentId)) return json({ error: 'invalid_document_delete_request' }, 400, origin);
+      const { data: access, error: accessError } = await service
+        .from('integritas_case_access').select('case_id')
+        .eq('case_id', caseId).eq('user_id', principal.userId).maybeSingle();
+      if (accessError) throw accessError;
+      if (!access) return json({ error: 'case_access_denied' }, 403, origin);
+      const { data: document, error: documentError } = await service
+        .from('integritas_documents').select('id,storage_path')
+        .eq('id', documentId).eq('case_id', caseId).maybeSingle();
+      if (documentError) throw documentError;
+      if (!document?.storage_path) return json({ error: 'document_not_found' }, 404, origin);
+      const [activeJobs, citedSources] = await Promise.all([
+        service.from('integritas_case_jobs').select('id').eq('case_id', caseId)
+          .in('stage', ['queued','extracting','analyzing_documents','mapping_entities','planning_research','researching','verifying','cross_checking','independent_review','drafting_report','paused']).limit(1),
+        service.from('integritas_sources').select('id').eq('document_id', documentId).limit(1),
+      ]);
+      if (activeJobs.error) throw activeJobs.error;
+      if (citedSources.error) throw citedSources.error;
+      if (activeJobs.data?.length) return json({ error: 'document_delete_blocked_active_investigation' }, 409, origin);
+      if (citedSources.data?.length) return json({ error: 'document_delete_blocked_saved_evidence' }, 409, origin);
+      const { error: storageError } = await service.storage.from(CASE_FILES_BUCKET).remove([document.storage_path]);
+      if (storageError) throw new Error('storage document deletion failed: ' + safeError(storageError));
+      const deleted = await rpc('integritas_finalize_document_delete', { p_case_id: caseId, p_document_id: documentId });
+      return json({ deleted }, 200, origin);
     }
 
     if (action === 'enqueue') {

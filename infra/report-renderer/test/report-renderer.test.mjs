@@ -15,7 +15,8 @@ function bundle(markdown) {
     case_revision: 2,
     depth: 'maximum',
     generated_at: '2026-09-21T18:00:00.000Z',
-    entities: [{ entity_type: 'company' }, { entity_type: 'person' }],
+    entities: [{ entity_key: 'seller', display_name: 'Nimbus Seller', entity_type: 'company' }, { entity_key: 'director', display_name: 'Alex Test', entity_type: 'person' }],
+    relationships: [{ from_entity_key: 'director', to_entity_key: 'seller', relationship_type: 'director of', evidence_status: 'alleged' }],
     findings: [
       { evidence_status: 'verified' },
       { evidence_status: 'conflicting' },
@@ -25,10 +26,10 @@ function bundle(markdown) {
       { evidence_origin: 'submitted_document' },
       { evidence_origin: 'external_research' },
     ],
-    contradictions: [{}],
-    unresolved_checks: [{}],
+    contradictions: [{ contradiction_key: 'registration', description: 'Two registration numbers are claimed.', finding_keys: ['registration-a', 'registration-b'] }],
+    unresolved_checks: [{ description: 'Confirm beneficiary ownership.', blocker: 'Direct bank confirmation unavailable.', next_manual_action: 'Ask the bank through independently sourced contact details.' }],
     report: { status: 'draft', markdown },
-    execution: { terminal_outcome: 'incomplete' },
+    execution: { terminal_outcome: 'incomplete', stages: ['extracting', 'planning_research', 'researching'] },
   };
 }
 
@@ -58,6 +59,10 @@ test('template derives visual metrics from structured evidence', () => {
   assert.equal(spec.check_completion_percent, 50);
   const html = buildIndexHtml(value);
   assert.match(html, /Evidence dashboard/);
+  assert.match(html, /Entity relationship map/);
+  assert.match(html, /Contradiction matrix/);
+  assert.match(html, /Unresolved verification gates/);
+  assert.match(html, /Investigation timeline/);
   assert.match(html, /\{\{ toHTML "report\.md" \}\}/);
   assert.match(html, /integritas-report-v1/);
 });

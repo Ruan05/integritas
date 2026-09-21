@@ -98,6 +98,41 @@ function summaryVisuals(bundle, spec) {
 </section>`;
 }
 
+function compact(value, limit = 220) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+}
+
+function relationshipMap(bundle) {
+  const entities = new Map((bundle?.entities ?? []).map((row) => [row?.entity_key, row?.display_name || row?.entity_key]));
+  const rows = (bundle?.relationships ?? []).slice(0, 80).map((row) => {
+    const from = entities.get(row?.from_entity_key) || row?.from_entity_key || 'Unknown entity';
+    const to = entities.get(row?.to_entity_key) || row?.to_entity_key || 'Unknown entity';
+    return `<tr><td>${escapeHtml(from)}</td><td class="edge">${escapeHtml(row?.relationship_type || 'related to')}</td><td>${escapeHtml(to)}</td><td><span class="status-pill ${statusClass(row?.evidence_status)}">${escapeHtml(row?.evidence_status || 'uncertain')}</span></td></tr>`;
+  }).join('');
+  if (!rows) return '';
+  return `<section class="report-visual"><div class="visual-title"><div><div class="eyebrow">Evidence graph</div><h2>Entity relationship map</h2></div><span>${(bundle?.relationships ?? []).length} mapped link(s)</span></div><table><thead><tr><th>From</th><th>Relationship</th><th>To</th><th>Evidence</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+}
+
+function contradictionMatrix(bundle) {
+  const rows = (bundle?.contradictions ?? []).slice(0, 60).map((row) => `<tr><td>${escapeHtml(row?.contradiction_key || 'Contradiction')}</td><td>${escapeHtml(compact(row?.description, 420))}</td><td>${escapeHtml((row?.finding_keys ?? []).join(', '))}</td></tr>`).join('');
+  if (!rows) return '';
+  return `<section class="report-visual"><div class="visual-title"><div><div class="eyebrow">Conflict review</div><h2>Contradiction matrix</h2></div><span>${(bundle?.contradictions ?? []).length} item(s)</span></div><table><thead><tr><th>Conflict</th><th>What conflicts</th><th>Linked findings</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+}
+
+function unresolvedGates(bundle) {
+  const rows = (bundle?.unresolved_checks ?? []).slice(0, 60).map((row, index) => `<li><strong>${index + 1}. ${escapeHtml(compact(row?.description, 300))}</strong><span><b>Blocker:</b> ${escapeHtml(compact(row?.blocker || row?.reason, 240))}</span><span><b>Required action:</b> ${escapeHtml(compact(row?.next_manual_action, 360))}</span></li>`).join('');
+  if (!rows) return '';
+  return `<section class="report-visual gates"><div class="visual-title"><div><div class="eyebrow">Closure controls</div><h2>Unresolved verification gates</h2></div><span>${(bundle?.unresolved_checks ?? []).length} gate(s)</span></div><ol>${rows}</ol></section>`;
+}
+
+function executionTimeline(bundle) {
+  const stages = Array.isArray(bundle?.execution?.stages) ? bundle.execution.stages.slice(0, 32) : [];
+  if (!stages.length) return '';
+  const nodes = stages.map((stage, index) => `<li><span>${index + 1}</span><strong>${escapeHtml(stage)}</strong></li>`).join('');
+  return `<section class="report-visual"><div class="visual-title"><div><div class="eyebrow">Execution trace</div><h2>Investigation timeline</h2></div><span>${escapeHtml(bundle?.execution?.terminal_outcome || 'unknown')}</span></div><ol class="timeline">${nodes}</ol></section>`;
+}
+
 export function buildIndexHtml(bundle) {
   const spec = buildRenderSpec(bundle);
   const caseId = escapeHtml(bundle?.case_id ?? '');
@@ -149,6 +184,16 @@ blockquote { border-left: 3px solid #b68a32; margin-left: 0; padding-left: 12px;
 .bar-row { display:grid; grid-template-columns:30mm 1fr 9mm; gap:7px; align-items:center; font-size:8.5pt; margin:5px 0; }
 .bar-track { height:7px; background:#eee9df; }
 .bar-fill { height:7px; background:#b68a32; }
+.report-visual { border:1px solid #ded2b5; padding:13px; margin:14px 0 20px; break-inside:avoid-page; background:#fffdf8; }
+.visual-title { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; color:#6b5a39; font-size:8pt; }
+.visual-title h2 { color:#171717; margin:2px 0 9px; }
+.edge { color:#785719; font-weight:700; }
+.gates ol { margin:8px 0 0; padding-left:19px; }
+.gates li { margin:7px 0; padding:7px 9px; background:#fff5dd; border-left:3px solid #b68a32; break-inside:avoid; }
+.gates li span { display:block; font-size:8.5pt; margin-top:2px; }
+.timeline { list-style:none; padding:0; margin:10px 0 0; display:flex; flex-wrap:wrap; gap:7px; }
+.timeline li { display:flex; align-items:center; gap:5px; border:1px solid #ded2b5; padding:5px 7px; font-size:8pt; }
+.timeline li span { display:inline-grid; place-items:center; width:16px; height:16px; border-radius:50%; background:#171717; color:#f2d083; font-weight:700; }
 .report-body > h1:first-child { margin-top: 8px; }
 a { color:#785719; word-break:break-all; }
 img { max-width:100%; }
@@ -170,6 +215,10 @@ hr { border:0; border-top:1px solid #d9cfb9; margin:18px 0; }
   </div>
 </section>
 ${summaryVisuals(bundle, spec)}
+${relationshipMap(bundle)}
+${contradictionMatrix(bundle)}
+${unresolvedGates(bundle)}
+${executionTimeline(bundle)}
 <main class="report-body">
 {{ toHTML "report.md" }}
 </main>

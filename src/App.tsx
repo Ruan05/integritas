@@ -24,7 +24,7 @@ export { InvestigationResultsView } from './InvestigationResultsView';
 
 type CaseRow = { id: string; title: string; revision: number; created_at: string };
 type DocumentRow = { id: string; case_id: string; name: string; created_at: string };
-type JobRow = { id: string; case_id: string; case_revision: number; control_command_id: string | null; stage: string; progress: number; runtime_provider: string };
+type JobRow = { id: string; case_id: string; case_revision: number; control_command_id: string | null; stage: string; progress: number; runtime_provider: string; depth?: string; created_at?: string; updated_at?: string };
 const navigation = [
   ['Dashboard', '#dashboard', Activity], ['Cases', '#cases', FolderOpen],
   ['Documents', '#documents', FileSearch], ['Entities', '#entities', Network],
@@ -71,6 +71,7 @@ export function App() {
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [job, setJob] = useState<JobRow | null>(null);
+  const [caseJobs, setCaseJobs] = useState<JobRow[]>([]);
   const [commandStatus, setCommandStatus] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [depth, setDepth] = useState<InvestigationDepth>('deep');
@@ -99,6 +100,8 @@ export function App() {
   });
   const retryAllowed = !!token && !!browserClient && !!job && retryableInvestigationStages.has(job.stage) && !busy;
   const cancelAllowed = !!token && !!browserClient && !!job && !terminalInvestigationStages.has(job.stage) && !busy;
+  const pauseAllowed = !!token && !!browserClient && !!job && job.stage !== 'paused' && !terminalInvestigationStages.has(job.stage) && !busy;
+  const resumeAllowed = !!token && !!browserClient && !!job && job.stage === 'paused' && !busy;
 
   useEffect(() => {
     if (!supabase) return;
@@ -151,17 +154,19 @@ export function App() {
   }, [token, browserClient]);
 
   useEffect(() => {
-    if (!token || !supabase || !selectedCaseId) { setDocuments([]); setJob(null); return; }
+    if (!token || !supabase || !selectedCaseId) { setDocuments([]); setJob(null); setCaseJobs([]); return; }
     let cancelled = false;
     Promise.all([
       supabase.from('integritas_documents').select('id,case_id,name,created_at').eq('case_id', selectedCaseId).order('created_at'),
-      supabase.from('integritas_case_jobs').select('id,case_id,case_revision,control_command_id,stage,progress,runtime_provider').eq('case_id', selectedCaseId).eq('runtime_provider', 'openclaw-oracle').order('created_at', { ascending: false }).limit(1),
+      supabase.from('integritas_case_jobs').select('id,case_id,case_revision,control_command_id,stage,progress,runtime_provider,depth,created_at,updated_at').eq('case_id', selectedCaseId).eq('runtime_provider', 'openclaw-oracle').order('created_at', { ascending: false }),
     ]).then(([documentResult, jobResult]) => {
       if (cancelled) return;
       if (documentResult.error) { setNotice(documentResult.error.message); return; }
       if (jobResult.error) { setNotice(jobResult.error.message); return; }
       setDocuments((documentResult.data ?? []) as DocumentRow[]);
-      setJob(((jobResult.data ?? [])[0] ?? null) as JobRow | null);
+      const rows = (jobResult.data ?? []) as JobRow[];
+      setCaseJobs(rows);
+      setJob((current) => rows.find((row) => row.id === current?.id) ?? rows[0] ?? null);
     });
     return () => { cancelled = true; };
   }, [token, selectedCaseId]);
@@ -269,14 +274,16 @@ export function App() {
     const [caseResult, documentResult, jobResult] = await Promise.all([
       supabase.from('integritas_cases').select('id,title,revision,created_at').eq('id', selectedCaseId).single(),
       supabase.from('integritas_documents').select('id,case_id,name,created_at').eq('case_id', selectedCaseId).order('created_at'),
-      supabase.from('integritas_case_jobs').select('id,case_id,case_revision,control_command_id,stage,progress,runtime_provider').eq('case_id', selectedCaseId).eq('runtime_provider', 'openclaw-oracle').order('created_at', { ascending: false }).limit(1),
+      supabase.from('integritas_case_jobs').select('id,case_id,case_revision,control_command_id,stage,progress,runtime_provider,depth,created_at,updated_at').eq('case_id', selectedCaseId).eq('runtime_provider', 'openclaw-oracle').order('created_at', { ascending: false }),
     ]);
     if (caseResult.error) throw caseResult.error;
     if (documentResult.error) throw documentResult.error;
     if (jobResult.error) throw jobResult.error;
     setCases((current) => current.map((item) => item.id === selectedCaseId ? caseResult.data as CaseRow : item));
     setDocuments((documentResult.data ?? []) as DocumentRow[]);
-    setJob(((jobResult.data ?? [])[0] ?? null) as JobRow | null);
+    const rows = (jobResult.data ?? []) as JobRow[];
+    setCaseJobs(rows);
+    setJob((current) => rows.find((row) => row.id === current?.id) ?? rows[0] ?? null);
   };
 
   const uploadSelected = async () => {
@@ -308,11 +315,11 @@ export function App() {
     finally { setBusy(false); }
   };
 
-  const retryInvestigation = async () => {
-    if (!token || !browserClient || !job || !retryAllowed) return;
+  const retryInvestigation = async (targetJob = job) => {
+    if (!token || !browserClient || !targetJob || !retryableInvestigationStages.has(targetJob.stage) || busy) return;
     setBusy(true); setNotice('Retrying investigation from the latest durable checkpoint…');
     try {
-      await browserClient.retryInvestigation(token, job.id);
+      await browserClient.retryInvestigation(token, targetJob.id);
       setCommandStatus('queued');
       await refreshSelectedCase();
       setNotice('Investigation retry queued from the latest durable checkpoint.');
@@ -327,6 +334,40 @@ export function App() {
       await browserClient.cancelInvestigation(token, job.id);
       await refreshSelectedCase();
       setNotice('Cancellation requested. The Oracle worker will stop at the next safe checkpoint.');
+    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
+
+  const pauseInvestigation = async () => {
+    if (!token || !browserClient || !job || !pauseAllowed) return;
+    setBusy(true); setNotice('Pausing at the next durable checkpoint…');
+    try {
+      await browserClient.pauseInvestigation(token, job.id);
+      await refreshSelectedCase();
+      setNotice('Pause requested. Completed evidence and checkpoints remain preserved.');
+    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
+
+  const resumeInvestigation = async () => {
+    if (!token || !browserClient || !job || !resumeAllowed) return;
+    setBusy(true); setNotice('Resuming from the latest durable checkpoint…');
+    try {
+      await browserClient.resumeInvestigation(token, job.id);
+      await refreshSelectedCase();
+      setNotice('Investigation resumed from its durable checkpoint.');
+    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
+
+  const deleteDocument = async (document: DocumentRow) => {
+    if (!token || !browserClient || !selectedCase || busy) return;
+    if (!window.confirm(`Delete ${document.name}? This is permanent. Documents cited by a saved investigation are protected.`)) return;
+    setBusy(true); setNotice('Removing private evidence and its case record…');
+    try {
+      await browserClient.deleteDocument(token, selectedCase.id, document.id);
+      await refreshSelectedCase();
+      setNotice('Document removed. The case revision was advanced to keep prior reports stale.');
     } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
   };
@@ -405,7 +446,7 @@ export function App() {
               <label htmlFor="case-documents">Case documents</label>
               <input ref={fileInputRef} id="case-documents" type="file" accept={SUPPORTED_CASE_FILE_ACCEPT} multiple disabled={!token || !selectedCase || busy} onChange={(event) => onFileSelection(Array.from(event.target.files ?? []))} />
               <small>Upload up to 20 documents per case. {documents.length}/20 are currently registered.</small>
-              {documents.length > 0 && <ul className="document-list">{documents.map((document) => <li key={document.id}>{document.name}</li>)}</ul>}
+              {documents.length > 0 && <ul className="document-list">{documents.map((document) => <li key={document.id}><span>{document.name}</span><button type="button" className="text-button" disabled={busy} onClick={() => deleteDocument(document)}>Delete</button></li>)}</ul>}
               <button type="button" className="secondary" disabled={!token || !selectedCase || files.length === 0 || busy} onClick={uploadSelected}>
                 <UploadCloud size={18} />Upload selected documents
               </button>
@@ -423,7 +464,9 @@ export function App() {
             {job && <p className="muted job-summary">Command status: {commandStatus || 'queued'} · provider: {job.runtime_provider}</p>}
             {job && (
               <div className="actions">
-                {retryAllowed && <button type="button" className="secondary" onClick={retryInvestigation}>Retry from checkpoint</button>}
+                {retryAllowed && <button type="button" className="secondary" onClick={() => void retryInvestigation()}>Retry from checkpoint</button>}
+                {pauseAllowed && <button type="button" className="secondary" onClick={pauseInvestigation}>Pause safely</button>}
+                {resumeAllowed && <button type="button" className="secondary" onClick={resumeInvestigation}>Continue investigation</button>}
                 {cancelAllowed && <button type="button" className="secondary" onClick={cancelInvestigation}>Cancel investigation</button>}
               </div>
             )}
@@ -436,6 +479,23 @@ export function App() {
               jobProgress={job.progress ?? 0}
             />
           )}
+
+          <article className="panel wide" id="history-runs">
+            <div className="panel-head"><h2>Previous investigations</h2><span>{caseJobs.length}</span></div>
+            {caseJobs.length === 0 ? <p className="muted">No previous investigation runs for this case.</p> : (
+              <ul className="run-history">
+                {caseJobs.map((row) => (
+                  <li key={row.id} className={row.id === job?.id ? 'selected' : undefined}>
+                    <div><strong>{row.stage.replaceAll('_', ' ')}</strong><small>{row.depth ?? '—'} depth · revision {row.case_revision} · {row.progress}%</small></div>
+                    <details className="run-menu"><summary aria-label={`Actions for investigation ${row.id}`}>•••</summary><div>
+                      <button type="button" onClick={() => setJob(row)}>Open</button>
+                      {retryableInvestigationStages.has(row.stage) && <button type="button" disabled={busy} onClick={() => { setJob(row); void retryInvestigation(row); }}>Resume / retry</button>}
+                    </div></details>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
 
           {results && selectedCase && job ? (
             <InvestigationResultsView

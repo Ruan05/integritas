@@ -78,7 +78,19 @@ button.secondary { background: transparent; color: #f8f3e7; }
 select, input[type="file"] { width: 100%; border: 1px solid rgba(212, 175, 55, 0.28); border-radius: 8px; padding: 10px; color: #f8f3e7; background: #0b0907; }
 select:disabled, input:disabled { opacity: 0.6; }
 .document-list { margin: 0; padding-left: 20px; color: #d7cbb2; max-height: 130px; overflow: auto; }
-.document-list li { margin: 4px 0; overflow-wrap: anywhere; }
+.document-list li { margin: 4px 0; overflow-wrap: anywhere; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.text-button { padding: 3px 7px; border: 0; border-radius: 4px; background: transparent; color: #d4af37; font: inherit; font-size: 12px; cursor: pointer; }
+.text-button:hover:not(:disabled) { background: rgba(212,175,55,0.14); }
+.run-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.run-history li { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid rgba(212,175,55,0.18); padding: 10px 12px; }
+.run-history li.selected { border-color: #d4af37; background: rgba(212,175,55,0.06); }
+.run-history small { display: block; margin-top: 3px; color: #9f947d; text-transform: capitalize; }
+.run-menu { position: relative; }
+.run-menu summary { cursor: pointer; color: #d4af37; list-style: none; font-weight: 700; letter-spacing: 2px; }
+.run-menu summary::-webkit-details-marker { display: none; }
+.run-menu > div { position: absolute; z-index: 3; right: 0; top: 22px; width: 140px; display: grid; gap: 2px; padding: 5px; background: #16120e; border: 1px solid rgba(212,175,55,0.25); box-shadow: 0 12px 24px rgba(0,0,0,0.35); }
+.run-menu button { border: 0; background: transparent; color: #f8f3e7; padding: 7px; text-align: left; font: inherit; font-size: 12px; cursor: pointer; }
+.run-menu button:hover:not(:disabled) { background: rgba(212,175,55,0.14); }
 .status-dot.active { border-color: #d4af37; background: #d4af37; }
 .status-dot.done { border-color: #8cae68; background: #8cae68; }
 .runtime-summary { display: grid; gap: 3px; margin: 14px 0; padding: 10px; border: 1px solid rgba(212, 175, 55, 0.18); border-radius: 8px; }

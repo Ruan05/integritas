@@ -49,24 +49,24 @@ const FREE_FALLBACKS = [
 function routes(primary, fallbacks) {
   return Object.freeze({
     fast: {
-      planner: { model: primary, fallbacks, timeoutSeconds: 240 },
-      research: { model: primary, fallbacks, timeoutSeconds: 600 },
+      planner: { model: primary, fallbacks, timeoutSeconds: 90 },
+      research: { model: primary, fallbacks, timeoutSeconds: 180 },
     },
     standard: {
-      planner: { model: primary, fallbacks, timeoutSeconds: 300 },
-      research: { model: primary, fallbacks, timeoutSeconds: 900 },
+      planner: { model: primary, fallbacks, timeoutSeconds: 120 },
+      research: { model: primary, fallbacks, timeoutSeconds: 300 },
     },
     deep: {
-      planner: { model: primary, fallbacks, timeoutSeconds: 360 },
-      research: { model: primary, fallbacks, timeoutSeconds: 1200 },
-      critic: { model: primary, fallbacks, timeoutSeconds: 420 },
-      synthesis: { model: primary, fallbacks, timeoutSeconds: 600 },
+      planner: { model: primary, fallbacks, timeoutSeconds: 150 },
+      research: { model: primary, fallbacks, timeoutSeconds: 600 },
+      critic: { model: primary, fallbacks, timeoutSeconds: 180 },
+      synthesis: { model: primary, fallbacks, timeoutSeconds: 240 },
     },
     maximum: {
-      planner: { model: primary, fallbacks, timeoutSeconds: 420 },
-      research: { model: primary, fallbacks, timeoutSeconds: 2400 },
-      critic: { model: primary, fallbacks, timeoutSeconds: 480 },
-      synthesis: { model: primary, fallbacks, timeoutSeconds: 720 },
+      planner: { model: primary, fallbacks, timeoutSeconds: 180 },
+      research: { model: primary, fallbacks, timeoutSeconds: 900 },
+      critic: { model: primary, fallbacks, timeoutSeconds: 240 },
+      synthesis: { model: primary, fallbacks, timeoutSeconds: 360 },
     },
   });
 }
@@ -79,24 +79,24 @@ const QUALITY_FALLBACKS = [DEEPSEEK_FLASH, GLM_53_FLASH, NVIDIA_PRIMARY, ...ACTI
 const RESEARCH_FALLBACKS = [GLM_53_FLASH, GLM_53, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS];
 const REAL_MODEL_ROUTES = Object.freeze({
   fast: {
-    planner: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS], timeoutSeconds: 240 },
-    research: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS], timeoutSeconds: 600 },
+    planner: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS], timeoutSeconds: 90 },
+    research: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS], timeoutSeconds: 180 },
   },
   standard: {
-    planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 300 },
-    research: { model: DEEPSEEK_FLASH, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 900 },
+    planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 120 },
+    research: { model: DEEPSEEK_FLASH, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 300 },
   },
   deep: {
-    planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 360 },
-    research: { model: DEEPSEEK_FLASH, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 1200 },
-    critic: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 420 },
-    synthesis: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 600 },
+    planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 150 },
+    research: { model: DEEPSEEK_FLASH, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 600 },
+    critic: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 180 },
+    synthesis: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 240 },
   },
   maximum: {
-    planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 420 },
-    research: { model: DEEPSEEK_FLASH, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 2400 },
-    critic: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 480 },
-    synthesis: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 720 },
+    planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 180 },
+    research: { model: DEEPSEEK_FLASH, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 900 },
+    critic: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 240 },
+    synthesis: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 360 },
   },
 });
 

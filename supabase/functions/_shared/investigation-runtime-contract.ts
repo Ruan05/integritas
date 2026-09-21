@@ -3,7 +3,7 @@ export const CASE_INVESTIGATION_DEPTHS = new Set(['fast', 'standard', 'deep', 'm
 export const CASE_INVESTIGATION_STAGES = new Set([
   'queued', 'extracting', 'analyzing_documents', 'mapping_entities', 'planning_research',
   'researching', 'verifying', 'cross_checking', 'independent_review', 'drafting_report',
-  'completed', 'incomplete', 'failed', 'cancelled', 'research_limit_reached',
+  'completed', 'incomplete', 'failed', 'cancelled', 'paused', 'research_limit_reached',
 ]);
 
 export const CHECKPOINT_METADATA_KEYS = new Set([
