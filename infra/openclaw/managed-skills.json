@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-09-21T22:15:00Z",
+  "skills": [
+    {
+      "name": "self-improvement-loops",
+      "source": "https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering",
+      "path": "skills/self-improvement-loops",
+      "commit": "6dbe1a1d868eab51a3bc9011b0f55e2891513e40",
+      "purpose": "Bounded, evidence-gated self-improvement of workflows and harnesses."
+    },
+    {
+      "name": "hermes-loop-master",
+      "source": "https://github.com/s0heyl/hermes-loop-master",
+      "path": ".",
+      "commit": "b877131eab2682b33f88e801b0327ecac3099c33",
+      "purpose": "Spec-first execution, verification, adversarial review, and durable handoff."
+    }
+  ]
+}
