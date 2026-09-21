@@ -1,0 +1,33 @@
+[Unit]
+Description=Integritas OpenClaw managed operator browser
+Requires=openclaw-gateway.service
+After=openclaw-gateway.service network-online.target
+PartOf=openclaw-gateway.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=openclaw
+Group=openclaw
+Environment=HOME=/var/lib/openclaw
+Environment=OPENCLAW_HOME=/var/lib/openclaw
+Environment=OPENCLAW_STATE_DIR=/var/lib/openclaw
+Environment=OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-gateway.json
+ExecStart=/opt/openclaw/bin/openclaw browser --browser-profile openclaw start
+ExecStartPost=/opt/openclaw/bin/openclaw browser --browser-profile openclaw doctor
+ExecStop=/opt/openclaw/bin/openclaw browser --browser-profile openclaw stop
+TimeoutStartSec=60
+TimeoutStopSec=30
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/openclaw
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
