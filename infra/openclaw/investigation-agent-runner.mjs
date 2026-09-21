@@ -401,8 +401,8 @@ function parsePlan(stdout) {
     ? envelope.toolSummary.tools.filter((tool) => RESEARCH_TOOLS.has(tool))
     : [];
   if (researchTools.length) throw new Error('planner must not perform external research');
-  plan = filterSyntheticExternalResearchLanes(plan, isTrustedSyntheticValidationManifest(manifest));
   plan = applyEvidenceDrivenSpecialistRouting(plan, manifest);
+  plan = filterSyntheticExternalResearchLanes(plan, isTrustedSyntheticValidationManifest(manifest));
   return { envelope, plan };
 }
 
