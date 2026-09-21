@@ -37,12 +37,23 @@ const OPENROUTER_LING = 'integritas-openrouter/inclusionai/ling-3.0-flash-fin:fr
 const OPENROUTER_LAGUNA = 'integritas-openrouter/poolside/laguna-xs-2.1:free';
 const OPENROUTER_ULTRA = 'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free';
 const OPENROUTER_FREE = 'integritas-openrouter/openrouter/free';
+const ZEN_BIG_PICKLE = 'integritas-opencode-zen/big-pickle';
+const ZEN_ULTRA = 'integritas-opencode-zen/nemotron-3-ultra-free';
+const ZEN_DEEPSEEK = 'integritas-opencode-zen/deepseek-v4-flash-free';
+const ZEN_MIMO = 'integritas-opencode-zen/mimo-v2.5-free';
+const ZEN_LING = 'integritas-opencode-zen/ling-3.0-flash-fin-free';
+const ZEN_LIGHTNING = 'integritas-opencode-zen/nemotron-3.5-lightning-free';
+const ZEN_FREE_MODELS = new Set([
+  ZEN_BIG_PICKLE, ZEN_ULTRA, ZEN_DEEPSEEK, ZEN_MIMO, ZEN_LING, ZEN_LIGHTNING,
+]);
 const FREE_OPENROUTER_MODELS = new Set([
   OPENROUTER_SUPER, OPENROUTER_NEX, OPENROUTER_NORTH, OPENROUTER_LING,
   OPENROUTER_LAGUNA, OPENROUTER_ULTRA, OPENROUTER_FREE,
 ]);
 const MAX_OPENROUTER_FREE_USES = 4;
+const MAX_ZEN_FREE_USES = 4;
 let openRouterFallbackUses = 0;
+let zenFallbackUses = 0;
 
 const SECTION_HEADINGS = Object.freeze({
   '01': ['# MASTER SUMMARY — READ THIS FIRST', '## DIRECT NEXT STEPS — WHAT TO DO NOW', '## Master Issue Dashboard'],
@@ -94,8 +105,12 @@ function toolResult(tool, status, summary) { return { tool, status, summary: Str
 function candidates(role, synthetic) {
   const nvidia = !!process.env.NVIDIA_API_KEY;
   const openrouter = !!process.env.OPENROUTER_API_KEY;
+  const zen = !!process.env.OPENCODE_ZEN_API_KEY;
   if (!synthetic) {
-    const healthyFree = [OPENROUTER_SUPER, OPENROUTER_NEX, OPENROUTER_NORTH, OPENROUTER_LING, OPENROUTER_LAGUNA, OPENROUTER_ULTRA, OPENROUTER_FREE];
+    const healthyFree = [
+      ...(zen ? [ZEN_BIG_PICKLE, ZEN_ULTRA, ZEN_DEEPSEEK, ZEN_MIMO, ZEN_LING, ZEN_LIGHTNING] : []),
+      OPENROUTER_SUPER, OPENROUTER_NEX, OPENROUTER_NORTH, OPENROUTER_LING, OPENROUTER_LAGUNA, OPENROUTER_ULTRA, OPENROUTER_FREE,
+    ];
     const rows = {
       shard: [openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, ...healthyFree],
       plan: [openrouter && GLM_53, openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, ...healthyFree],
@@ -107,6 +122,7 @@ function candidates(role, synthetic) {
     return uniq(rows);
   }
   const rows = [nvidia && NVIDIA_ULTRA];
+  if (zen) rows.push(ZEN_BIG_PICKLE, ZEN_ULTRA, ZEN_DEEPSEEK, ZEN_MIMO, ZEN_LING, ZEN_LIGHTNING);
   if (openrouter) rows.push(
     OPENROUTER_SUPER, OPENROUTER_NEX, OPENROUTER_NORTH,
     OPENROUTER_LING, OPENROUTER_LAGUNA, OPENROUTER_ULTRA, OPENROUTER_FREE,
@@ -117,7 +133,7 @@ function timeoutFor(role) {
   return { shard: 300, plan: 420, analysis: 600, lane: 720, critic: 480, report: 480 }[role] ?? 600;
 }
 function agentEnv() {
-  const providerNames = ['NVIDIA_API_KEY', 'OPENROUTER_API_KEY'];
+  const providerNames = ['NVIDIA_API_KEY', 'OPENROUTER_API_KEY', 'OPENCODE_ZEN_API_KEY'];
   return {
     HOME: '/var/lib/openclaw',
     OPENCLAW_HOME: '/var/lib/openclaw',
@@ -199,6 +215,11 @@ async function validated({
   const models = candidates(role, synthetic);
   if (!models.length) throw new Error(`${id}: no configured provider candidate available`);
   for (const [index, model] of models.entries()) {
+    if (ZEN_FREE_MODELS.has(model) && zenFallbackUses >= MAX_ZEN_FREE_USES) {
+      failures.push({ model, error: 'skipped because per-investigation OpenCode Zen free fallback budget is exhausted' });
+      continue;
+    }
+    if (ZEN_FREE_MODELS.has(model)) zenFallbackUses += 1;
     if (FREE_OPENROUTER_MODELS.has(model) && openRouterFallbackUses >= MAX_OPENROUTER_FREE_USES) {
       failures.push({ model, error: 'skipped because per-investigation OpenRouter free fallback budget is exhausted' });
       continue;
