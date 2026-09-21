@@ -95,6 +95,7 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.match(large, /provider: 'integritas', model: 'deterministic-large-assembly-v2'/, 'final canonical bundle must be assembled deterministically rather than by a model');
   assert.match(large, /failed every validated model route/, 'schema-invalid model output must trigger application-level model failover');
   assert.match(large, /readFile\(path\.join\(jobDir, execName\)/, 'validated phase artifacts must be reused on retry');
+  assert.ok(large.includes("const NVIDIA_ULTRA = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b';"), 'large investigations must use the explicit verified NVIDIA Ultra route');
   assert.ok(large.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';"), 'large research lanes must expose DeepSeek V4.1 Flash');
   assert.ok(large.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';"), 'large planning and critic lanes must expose GLM 5.3');
   assert.ok(large.includes("const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash';"), 'large investigations must expose the low-cost GLM fallback');
@@ -117,7 +118,7 @@ test('investigation profile uses only required provider SecretRefs and keeps the
     'integritas-openrouter/deepseek/deepseek-v4.1-flash',
     'integritas-openrouter/z-ai/glm-5.3',
     'integritas-openrouter/z-ai/glm-5.3-flash',
-    'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b',
+    'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b',
   ]) {
     assert.ok(config.includes(`"${model}"`), `model policy must allow ${model}`);
   }
@@ -133,8 +134,8 @@ test('investigation profile uses only required provider SecretRefs and keeps the
   for (const model of [
     'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
     'integritas-openrouter/openrouter/free',
-    'nvidia/nvidia/nemotron-3-ultra-550b-a55b',
-    'nvidia/nvidia/nemotron-3.5-lightning-30b-a3b',
+    'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b',
+    'integritas-openrouter/nvidia/nemotron-3-super-120b-a12b:free',
   ]) {
     assert.ok(config.includes(`"${model}"`), `missing routed model allowlist entry: ${model}`);
   }
