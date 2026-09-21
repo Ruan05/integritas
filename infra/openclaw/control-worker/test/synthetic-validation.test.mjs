@@ -10,8 +10,26 @@ const trusted = {
   },
 };
 
+const qaTrusted = {
+  case: {
+    title: '[SYNTHETIC QA] Conflicting Nimbus case',
+    purpose: 'Authorized synthetic quality assurance only',
+    authorized_scope: 'Two synthetic documents and public-source planning; no real-person decision',
+  },
+};
+
 test('recognizes only explicitly trusted synthetic production-validation metadata', () => {
   assert.equal(isTrustedSyntheticValidationManifest(trusted), true);
+  assert.equal(isTrustedSyntheticValidationManifest(qaTrusted), true);
+  assert.equal(isTrustedSyntheticValidationManifest({
+    case: { ...qaTrusted.case, title: '[SYNTHETIC QA] Other case' },
+  }), false);
+  assert.equal(isTrustedSyntheticValidationManifest({
+    case: { ...qaTrusted.case, purpose: 'Customer due diligence' },
+  }), false);
+  assert.equal(isTrustedSyntheticValidationManifest({
+    case: { ...qaTrusted.case, authorized_scope: 'Real-person decision' },
+  }), false);
   assert.equal(isTrustedSyntheticValidationManifest({
     case: { ...trusted.case, title: 'Real counterparty investigation' },
   }), false);
