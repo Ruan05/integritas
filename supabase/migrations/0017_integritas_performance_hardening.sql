@@ -1,5 +1,3 @@
-\set ON_ERROR_STOP on
-
 create index if not exists integritas_case_job_checkpoints_case_id_idx
   on public.integritas_case_job_checkpoints(case_id);
 
