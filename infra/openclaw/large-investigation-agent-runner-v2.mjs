@@ -195,6 +195,8 @@ const ZEN_ENABLED = !!process.env.OPENCODE_ZEN_API_KEY && existsSync(ZEN_ENABLE_
 const ACTIVE_CONFIG_PATH = ZEN_ENABLED ? ZEN_CONFIG_PATH : BASE_CONFIG_PATH;
 const LARGE_PLANNER_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_PLANNER === 'true';
 const LARGE_MODEL_ANALYSIS_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_MODEL_ANALYSIS === 'true';
+const LARGE_MODEL_CRITIC_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_MODEL_CRITIC === 'true';
+const LARGE_MODEL_REPORT_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_MODEL_REPORT === 'true';
 const NVIDIA_ULTRA = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b';
 const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';
 const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';
@@ -308,7 +310,7 @@ function candidates(role, synthetic) {
   return uniq(rows);
 }
 function timeoutFor(role) {
-  return { shard: 240, plan: 240, analysis: 360, lane: 480, critic: 300, report: 300 }[role] ?? 360;
+  return { shard: 180, plan: 180, analysis: 240, lane: 120, critic: 180, report: 180 }[role] ?? 180;
 }
 
 function isPaidOpenRouterModel(model) {
@@ -1158,7 +1160,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
       'completed',
       `Deterministic synthetic critic verdict ${critic.verdict}; ${critic.issues.length} issue(s), ${critic.missing_document_ids.length} missing document(s).`,
     ));
-  } else {
+  } else if (LARGE_MODEL_CRITIC_ENABLED) {
     try {
       criticResult = await validated({
         jobDir, id: 'large-critic', role: 'critic', task: criticTask(false),
@@ -1178,6 +1180,20 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
       };
       executionTools.push(toolResult('integritas_provider_fallback_v1', 'completed', 'Independent critic routes were unavailable; the report remains explicitly revision-required.'));
     }
+  } else {
+    critic = providerBlockedCritic();
+    criticResult = {
+      envelope: {
+        ok: true, status: 'ok', final: '', provider: 'integritas',
+        model: 'deterministic-review-gate-v1', sessionId: jobId,
+        toolSummary: { tools: [], calls: 0, failures: 0 },
+      },
+      value: critic,
+      reused: true,
+      blocked: true,
+      fallback: true,
+      failures: [],
+    };
   }
   phases.push({ phase: 'large-critic', ...criticResult });
   await writeAtomic(jobDir, 'large-critic.json', `${JSON.stringify(critic, null, 2)}\n`);
@@ -1205,25 +1221,37 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
         const value = reportValidator(spec)(front + '\n\n' + rest + padding);
         return { envelope: { toolSummary: { tools: [] } }, value, reused: true, failures: [] };
       })()
-      : await (async () => {
-        try {
-          return await validated({
-            jobDir, id: `report-${spec.id}`, role: 'report', task: reportTask(spec),
-            execName: `large-v2-report-${spec.id}-exec.json`, synthetic, allowExternal: false,
-            validator: reportValidator(spec),
-            progressState: { stage: 'drafting_report', progress: 76, phase: 'large_sectioned_report' },
-          });
-        } catch (error) {
-          const value = reportValidator(spec)(deterministicProviderReportSection(spec, reviewed, critic));
-          return {
-            envelope: { toolSummary: { tools: [], calls: 0, failures: 1 } },
-            value,
-            reused: false,
-            blocked: true,
-            failures: [{ model: 'validated-provider-routes', error: String(error?.message ?? error).slice(0, 500) }],
-          };
-        }
-      })();
+      : LARGE_MODEL_REPORT_ENABLED
+        ? await (async () => {
+          try {
+            return await validated({
+              jobDir, id: `report-${spec.id}`, role: 'report', task: reportTask(spec),
+              execName: `large-v2-report-${spec.id}-exec.json`, synthetic, allowExternal: false,
+              validator: reportValidator(spec),
+              progressState: { stage: 'drafting_report', progress: 76, phase: 'large_sectioned_report' },
+            });
+          } catch (error) {
+            const value = reportValidator(spec)(deterministicProviderReportSection(spec, reviewed, critic));
+            return {
+              envelope: { toolSummary: { tools: [], calls: 0, failures: 1 } },
+              value,
+              reused: false,
+              blocked: true,
+              failures: [{ model: 'validated-provider-routes', error: String(error?.message ?? error).slice(0, 500) }],
+            };
+          }
+        })()
+        : {
+          envelope: {
+            ok: true, status: 'ok', final: '', provider: 'integritas',
+            model: 'deterministic-report-section-v1', sessionId: jobId,
+            toolSummary: { tools: [], calls: 0, failures: 0 },
+          },
+          value: reportValidator(spec)(deterministicProviderReportSection(spec, reviewed, critic)),
+          reused: true,
+          fallback: true,
+          failures: [],
+        };
     phases.push({ phase: `report-${spec.id}`, ...result });
     await progress(jobDir, 'drafting_report', 76 + Math.round(((index + 1) / 4) * 10), 'large_sectioned_report', `section ${index + 1}/4`);
     return [spec.id, result.value];
