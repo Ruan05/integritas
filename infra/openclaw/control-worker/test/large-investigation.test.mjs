@@ -88,6 +88,12 @@ test('document shard parser requires exact expected document ids', () => {
   const parsed=parseDocumentShardFinal(final,[DOC1,DOC2]);
   assert.equal(parsed.documents.length,2);
   assert.throws(()=>parseDocumentShardFinal(final,[DOC1]),/exactly once|invalid/);
+  const oversized = JSON.stringify({ documents: [{
+    document_id: DOC1, document_type: 'offer', issuer_claim: 'Issuer A', parties: [], identifiers: [],
+    material_terms: [], risk_flags: [], instruction_like_text: false, evidence_excerpt: 'x'.repeat(501),
+  }] });
+  const bounded = parseDocumentShardFinal(oversized, [DOC1]);
+  assert.equal(bounded.documents[0].evidence_excerpt.length, 500);
 });
 
 
