@@ -97,6 +97,28 @@ test('document shard parser requires exact expected document ids', () => {
   assert.equal(bounded.documents[0].evidence_excerpt.length, 500);
 });
 
+test('document shard parser normalizes bounded rich vision-model objects without discarding extraction', () => {
+  const final=JSON.stringify({documents:[{
+    document_id:DOC1,
+    document_type:'invoice',
+    issuer_claim:'Shell Trading International Limited',
+    parties:[{name:'GLOBAL A1 LLC',role:'Buyer',representative:'Harald Spitzer',contact:{email:['buyer@example.test']}}],
+    identifiers:[{type:'IBAN',value:'NL91ABNA0793164363'},{type:'BIC',value:'ABNANL2A'}],
+    material_terms:[{commodity:'D6',quantity:'100,000,000 gallons',unit_price:'USD 1.03',total:'USD 103,000,000'}],
+    risk_flags:[{type:'authority',detail:'Representative authority requires independent confirmation.'}],
+    instruction_like_text:false,
+    page_references:['p.1: buyer and invoice total','p.3: beneficiary and bank details'],
+    evidence_excerpt:'Invoice evidence.'
+  }]});
+  const parsed=parseDocumentShardFinal(final,[DOC1]);
+  assert.match(parsed.documents[0].parties[0],/name=GLOBAL A1 LLC/);
+  assert.match(parsed.documents[0].parties[0],/role=Buyer/);
+  assert.match(parsed.documents[0].identifiers.join(' '),/NL91ABNA0793164363/);
+  assert.match(parsed.documents[0].material_terms[0],/100,000,000 gallons/);
+  assert.match(parsed.documents[0].material_terms[0],/USD 103,000,000/);
+});
+
+
 
 test('bounded large plan stays compact and builds compatible planner metadata', () => {
   const plan=parseLargePlanFinal(JSON.stringify({
