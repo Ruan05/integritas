@@ -720,5 +720,3 @@
     deny: ["write", "edit", "exec", "apply_patch", "process", "code_execution", "terminal", "screen", "dashboard", "portal", "sessions", "sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents", "secrets"],
   },
 }
-
-[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

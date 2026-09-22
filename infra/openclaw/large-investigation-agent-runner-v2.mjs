@@ -998,8 +998,6 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
     sections.set(headings[2], `### Control totals\n\n${markdownTable(['Metric', 'Value'], [
       ['Submitted documents', submittedSources.length],
       ['External research sources', externalSources.length],
-
-[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
       ['Entities', entities.length],
       ['Findings', findings.length],
       ['Relationships', relationships.length],
@@ -1542,5 +1540,3 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
   await writeAtomic(jobDir, 'report.md', reportMarkdown);
   await progress(jobDir, 'drafting_report', 82, 'ready_for_deterministic_qa', 'large-case deterministic assembly complete');
 }
-
-[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

@@ -79,5 +79,3 @@ test('deterministic structural checks become source-linked canonical findings an
   assert.match(iban.claim, /remainder 35/i);
   assert.match(bundle.checks.find((row) => row.check_type === 'iban_checksum').outcome, /requires remainder 1/i);
 });
-
-[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

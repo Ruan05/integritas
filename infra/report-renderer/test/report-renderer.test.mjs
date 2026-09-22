@@ -141,5 +141,3 @@ test('renderer refuses markdown that does not match the canonical bundle report'
     /bundle\/report markdown mismatch/,
   );
 });
-
-[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

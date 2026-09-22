@@ -80,5 +80,3 @@ printf '%s\n' "${TARGET_VERSION}" >"${CURRENT_FILE}"
 chown openclaw:openclaw "${CURRENT_FILE}"
 chmod 0600 "${CURRENT_FILE}"
 echo "OpenClaw ${TARGET_VERSION} installed with Docker-backed sandboxing."
-
-[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

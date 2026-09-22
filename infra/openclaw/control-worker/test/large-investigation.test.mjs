@@ -308,5 +308,3 @@ test('critic/report parsing and deterministic final assembly stay bounded', () =
   assert.match(bundle.report.markdown,/MASTER SUMMARY/);
   assert.doesNotThrow(() => validateInvestigationBundle(bundle,m,report));
 });
-
-[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
