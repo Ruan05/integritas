@@ -10,7 +10,7 @@ export const CHECKPOINT_METADATA_KEYS = new Set([
   'branch_count', 'unresolved_branches', 'evidence_count', 'source_count', 'check_count',
   'output_refs', 'limitations_count', 'message', 'document_count', 'bundle_sha256',
   'report_sha256', 'pdf_sha256', 'render_status', 'renderer_trace', 'renderer_template_version',
-  'qa_summary', 'commit_summary', 'milestones',
+  'qa_summary', 'commit_summary', 'milestones', 'phase', 'detail', 'heartbeat_at', 'watchdog',
 ]);
 
 export const INVESTIGATION_OUTPUT_TYPES = new Set(['bundle', 'report_markdown', 'report_html', 'report_pdf', 'evidence', 'execution_log']);
