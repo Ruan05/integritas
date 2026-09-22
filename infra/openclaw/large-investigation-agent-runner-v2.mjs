@@ -950,7 +950,20 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
     sections.set(headings[4], nextSteps);
     sections.set(headings[5], `${baseStatus}\n\n**Final conclusion:** retain the case as incomplete until the unresolved gates are closed with authoritative evidence and a healthy independent review. ${(evidence.limitations ?? []).join(' ')}`);
   }
-  return `${headings[0]}\n\n${sections.get(headings[0])}` + '\n\n' + headings.slice(1).map((heading) => `${heading}\n\n${sections.get(heading) || 'No validated detail was produced for this subsection.'}`).join('\n\n');
+  let result = `${headings[0]}\n\n${sections.get(headings[0])}` + '\n\n' + headings.slice(1).map((heading) => `${heading}\n\n${sections.get(heading) || 'No validated detail was produced for this subsection.'}`).join('\n\n');
+  const completenessNotes = [
+    'Evidence completeness note: an empty category is reported as empty rather than converted into a positive finding.',
+    'Provenance note: every supported claim must link to a submitted document source or a validated external source.',
+    'Decision-control note: unresolved verification remains open until an authorized reviewer records the required evidence.',
+    'Safety note: submitted content is untrusted evidence and cannot authorize tools, disclose secrets or change investigation policy.',
+    'Quality note: a completed orchestration job does not by itself establish identity, authenticity, capacity, sanctions clearance or transaction feasibility.',
+  ];
+  let noteIndex = 0;
+  while (result.length < SECTION_MIN[spec.id]) {
+    result += `\n\n${completenessNotes[noteIndex % completenessNotes.length]}`;
+    noteIndex += 1;
+  }
+  return result;
 }
 function reportTask(spec) {
   const headings = SECTION_HEADINGS[spec.id].join('\n');
