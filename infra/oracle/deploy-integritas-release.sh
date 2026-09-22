@@ -43,6 +43,60 @@ if [[ -n "${FAULT_INJECT_PHASE}" && "${ROLLBACK_TEST}" != "1" ]]; then
   exit 8
 fi
 
+smoke_investigation_runtime() {
+  local smoke_dir="/var/lib/integritas-runner/deploy-smoke.$$"
+  local smoke_out="${smoke_dir}/output.json"
+  local smoke_err="${smoke_dir}/stderr.log"
+  install -d -o openclaw -g integritas-openclaw -m 0770 "${smoke_dir}"
+  cat >"${smoke_dir}/task.md" <<'EOF'
+This is a bounded Integritas deployment preflight. Use web_search exactly once with a harmless query for the official OpenClaw documentation. Do not use browser, web_fetch, files, or shell tools. Return exactly one raw JSON object with {"ok":true}. Do not include credentials or environment information.
+EOF
+  chown openclaw:integritas-openclaw "${smoke_dir}/task.md"
+  chmod 0640 "${smoke_dir}/task.md"
+  : >"${smoke_out}"
+  : >"${smoke_err}"
+  chown openclaw:integritas-openclaw "${smoke_out}" "${smoke_err}"
+  chmod 0640 "${smoke_out}" "${smoke_err}"
+  set -a
+  # shellcheck disable=SC1091
+  . /etc/integritas/provider-secrets.env
+  set +a
+  if ! /usr/sbin/runuser --preserve-environment -u openclaw -- /usr/bin/env \
+      HOME=/var/lib/openclaw OPENCLAW_HOME=/var/lib/openclaw OPENCLAW_STATE_DIR=/var/lib/openclaw \
+      /opt/openclaw/bin/openclaw agent exec \
+      --config /etc/openclaw/integritas-investigation.json \
+      --cwd "${smoke_dir}" --message-file "${smoke_dir}/task.md" \
+      --json --code-mode direct \
+      --model integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b --timeout 180 \
+      >"${smoke_out}" 2>"${smoke_err}"; then
+    rm -rf "${smoke_dir}"
+    echo "Integritas provider/search smoke failed." >&2
+    return 1
+  fi
+  if ! /usr/bin/python3 - "${smoke_out}" <<'PYSMOKE'
+import json, sys
+from pathlib import Path
+p = Path(sys.argv[1])
+try:
+    row = json.loads(p.read_text(encoding='utf-8'))
+except Exception as exc:
+    raise SystemExit(f'invalid smoke envelope: {type(exc).__name__}')
+summary = row.get('toolSummary') if isinstance(row, dict) else None
+tools = summary.get('tools', []) if isinstance(summary, dict) else []
+calls = summary.get('calls', 0) if isinstance(summary, dict) else 0
+failures = summary.get('failures', 0) if isinstance(summary, dict) else 0
+if row.get('status') != 'ok' or 'web_search' not in tools or not isinstance(calls, int) or calls < 1 or failures != 0:
+    raise SystemExit('provider/search smoke did not produce a successful observed web_search call')
+PYSMOKE
+  then
+    rm -rf "${smoke_dir}"
+    echo "Integritas provider/search smoke validation failed." >&2
+    return 1
+  fi
+  rm -rf "${smoke_dir}"
+  echo "Integritas provider/search smoke passed."
+}
+
 snapshot_managed_files() {
   ROLLBACK_STATE="$(/usr/bin/mktemp -d /var/tmp/integritas-release-rollback.XXXXXX)"
   chmod 0700 "${ROLLBACK_STATE}"
@@ -172,6 +226,10 @@ fi
 /usr/bin/systemctl is-active --quiet "${GATEWAY}"
 /usr/bin/systemctl restart openclaw-browser.service
 /usr/bin/systemctl is-active --quiet openclaw-browser.service
+# Keep the job-accepting worker stopped until a real model + external-search turn
+# proves the isolated investigation runtime is usable. Any failure triggers the
+# existing rollback trap before a new investigation can be leased.
+smoke_investigation_runtime
 /usr/bin/systemctl restart "${WORKER}"
 worker_stopped=0
 /usr/bin/systemctl is-active --quiet "${WORKER}"
@@ -190,3 +248,5 @@ trap - ERR
 
 echo "Integritas release ${SHA} deployed successfully."
 echo "Worker and OpenClaw Gateway are active. Public-site configuration was not modified."
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
