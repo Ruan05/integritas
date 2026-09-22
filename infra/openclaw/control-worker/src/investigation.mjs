@@ -417,8 +417,9 @@ async function runAgentWithRecovery({
     }
 
     const heartbeatAge = now - lastHeartbeatAt;
+    const stallThreshold = agentProgress ? AGENT_STALL_NOTICE_MS : AGENT_STARTUP_WATCHDOG_MS;
     if (typeof onProgress === 'function'
-      && heartbeatAge >= AGENT_STALL_NOTICE_MS
+      && heartbeatAge >= stallThreshold
       && now - lastWatchdogNoticeAt >= AGENT_WATCHDOG_NOTICE_INTERVAL_MS) {
       const stage = agentProgress?.stage ?? 'analyzing_documents';
       const progress = Math.max(16, agentProgress?.progress ?? 16);
