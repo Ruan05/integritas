@@ -106,7 +106,7 @@ validate_openclaw_with_provider_env() {
   '
 }
 
-for required in /usr/bin/node /usr/bin/systemctl /usr/bin/systemd-analyze /usr/bin/getent /usr/bin/env /usr/bin/bash /usr/bin/grep /usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/sbin/runuser; do
+for required in /usr/bin/node /usr/bin/python3 /usr/bin/pdftotext /usr/bin/pdfinfo /usr/bin/pdftoppm /usr/bin/tesseract /usr/bin/systemctl /usr/bin/systemd-analyze /usr/bin/getent /usr/bin/env /usr/bin/bash /usr/bin/grep /usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/sbin/runuser; do
   [[ -x "$required" ]] || { echo "Missing required executable: $required" >&2; exit 1; }
 done
 for required in "$SERVICE_SRC" "$GATEWAY_SERVICE_SRC" "$BROWSER_SERVICE_SRC" "$BROWSER_HELPER_SRC" "$RUNNER_SERVICE_SRC" "$DEPLOY_SERVICE_SRC" "$CONTROLLED_DEPLOY_SRC" "$RUNNER_SCRIPT_SRC" "$GATEWAY_CONFIG_SRC" "$RUNNER_CONFIG_SRC" "$ZEN_CONFIG_SRC" "$ZEN_TOOL_SRC" "$POLKIT_SRC"; do
