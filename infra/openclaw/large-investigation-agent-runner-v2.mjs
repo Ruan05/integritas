@@ -1464,7 +1464,21 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
     ? criticIssues.map((row) => `${row.severity}: ${row.description} Correction: ${row.recommended_correction}`).join(' ')
     : 'No independent critic issue was recorded.';
   const sections = new Map();
-  sections.set(headings[0], `Executive Decision Summary\n\n**Decision status:** ${status.toUpperCase()}\n\n${baseStatus}\n\nThe current evidence supports only the claims explicitly listed in the finding ledger below. Identity, authenticity, authority, capacity, sanctions status and transaction performance remain unverified unless a finding is linked to an appropriate source.\n\n**Subjects currently isolated by the evidence model:** ${entityNames}.\n\n**Finding status:** ${statusSummary}. **Materiality:** ${materialitySummary}.\n\n**Research coverage:** ${noExternal}`);
+  sections.set(headings[0], spec.id === '01'
+    ? `Executive Decision Summary
+
+**Decision status:** ${status.toUpperCase()}
+
+${baseStatus}
+
+The current evidence supports only the claims explicitly listed in the finding ledger below. Identity, authenticity, authority, capacity, sanctions status and transaction performance remain unverified unless a finding is linked to an appropriate source.
+
+**Subjects currently isolated by the evidence model:** ${entityNames}.
+
+**Finding status:** ${statusSummary}. **Materiality:** ${materialitySummary}.
+
+**Research coverage:** ${noExternal}`
+    : `This section addresses ${spec.focus}. It is derived from the current submitted evidence, structured findings, canonical source records and explicit unresolved gates. Claims remain bounded by their linked evidence and are not transaction clearance.`);
   if (spec.id === '01') {
     sections.set(headings[1], `Complete the following before any approval or release:\n\n${nextSteps}\n\nThe independent review result was ${critic?.verdict || 'revise'}. ${criticSummary}`);
     sections.set(headings[2], `### Control totals\n\n${markdownTable(['Metric', 'Value'], [
@@ -1478,7 +1492,7 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
       ['Unresolved gates', unresolved.length],
     ])}\n\n### Finding status distribution\n\n${markdownTable(['Evidence status', 'Count'], [...statusCounts.entries()])}`);
   } else if (spec.id === '02') {
-    sections.set(headings[1], `${baseStatus}\n\nThe evidence model keeps same-name entities separate unless corroborating identifiers or authoritative records justify a merge. No entity should be treated as verified solely because a document names it.`);
+    sections.set(headings[1], `The evidence model keeps same-name entities separate unless corroborating identifiers or authoritative records justify a merge. No entity should be treated as verified solely because a document names it. This section records identity and relationship evidence only.`);
     sections.set(headings[2], `The intake contains ${submittedSources.length} submitted document(s). The deterministic pre-pass preserved each document as a separate source, retained hashes and forensic indicators, and linked findings back to source keys. The following register is the source of truth for the submitted package.`);
     sections.set(headings[3], documentTable);
     sections.set(headings[4], `Forensic signals are evidence about document construction, not automatic proof of fraud. The current package records the forensic/risk signals in the document register above. In particular, absent cryptographic signatures, scanned-image-only documents, missing signature fields and cross-document image reuse require issuer-side and registry-side verification; they do not establish authenticity by themselves.`);
@@ -1491,7 +1505,7 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
     sections.set(headings[11], findingTable);
     sections.set(headings[12], `Namesake controls: ${entities.filter((row) => row.match_status === 'conflicting' || row.match_status === 'proposed').length} entity record(s) remain proposed or conflicting. Do not merge by display name alone. ${(evidence.limitations ?? []).join(' ')}`);
   } else if (spec.id === '03') {
-    sections.set(headings[1], `${baseStatus}\n\nImmediate disposition: hold for human review. ${noExternal}`);
+    sections.set(headings[1], `Immediate disposition: hold for human review. ${noExternal} This section records transaction, research and contradiction evidence without granting clearance.`);
     sections.set(headings[2], `No banking-specific finding or payment instrument was validated in the current bundle. This is not a banking clearance; obtain bank, payment, beneficiary and authority evidence before relying on the transaction.`);
     sections.set(headings[3], `The submitted package contains the product/transaction terms recorded in the document register. The current structured findings are reproduced below; product capability, title, custody, storage and delivery remain unresolved without authoritative operator and logistics evidence.\n\n${findingTable}`);
     sections.set(headings[4], 'No independently validated price, margin, volume-capacity or economic benchmark was committed in this run. Do not infer commercial feasibility from document formatting or stated terms alone.');
@@ -1508,7 +1522,7 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
     sections.set(headings[2], sourceTable);
     sections.set(headings[3], `${contradictions.length ? markdownTable(['Contradiction', 'Description', 'Linked findings'], contradictions.map((row) => [row.contradiction_key, row.description, row.finding_keys.join(', ')])) : 'No structured contradiction rows were committed. This is not proof of consistency; it means the current deterministic/model pass did not promote a contradiction row.'}\n\n### Unresolved gates\n\n${gateTable}`);
     sections.set(headings[4], nextSteps);
-    sections.set(headings[5], `${baseStatus}\n\n**Final conclusion:** retain the case as incomplete until the unresolved gates are closed with authoritative evidence and a healthy independent review. ${(evidence.limitations ?? []).join(' ')}`);
+    sections.set(headings[5], `**Final conclusion:** retain the case as incomplete until the unresolved gates are closed with authoritative evidence and a healthy independent review. ${(evidence.limitations ?? []).join(' ')} This conclusion is limited to the evidence and gates recorded in this bundle.`);
   }
   const rows = headings.map((heading) => sections.get(heading) || 'No validated detail was produced for this subsection.');
   const blocks = rows.map((content, index) => `${headings[index]}\n\n${content}`);
