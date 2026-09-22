@@ -1275,7 +1275,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
         'completed',
         `Shard ${shard.shard_id} model routes were unavailable; preserved document content from trusted deterministic page extraction instead of failing the case.`,
       ));
-      await writeAtomic(jobDir, `large-v2-shard-${shard.shard_id}-exec.json`, JSON.stringify(envelope) + '\\n');
+      await writeAtomic(jobDir, `large-v2-shard-${shard.shard_id}-exec.json`, JSON.stringify(envelope) + '\n');
     }
     phases.push({ phase: `shard-${shard.shard_id}`, ...result });
     await progress(jobDir, 'extracting', 18 + Math.round(((index + 1) / shards.length) * 18), 'large_document_shards', `shard ${index + 1}/${shards.length}`);
@@ -1404,7 +1404,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
         'completed',
         'Optional model planner routes were unavailable; the evidence-driven deterministic multi-lane scheduler preserved the investigation route.'
       ));
-      await writeAtomic(jobDir, 'large-v2-plan-exec.json', JSON.stringify(planResult.envelope) + '\\n');
+      await writeAtomic(jobDir, 'large-v2-plan-exec.json', JSON.stringify(planResult.envelope) + '\n');
     }
   } else {
     planResult = {
@@ -1418,7 +1418,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
       failures: [],
       planner_mode: 'deterministic_evidence_scheduler_v2',
     };
-    await writeAtomic(jobDir, 'large-v2-plan-exec.json', JSON.stringify(planResult.envelope) + '\\n');
+    await writeAtomic(jobDir, 'large-v2-plan-exec.json', JSON.stringify(planResult.envelope) + '\n');
   }
   phases.push({ phase: 'large-plan', ...planResult });
   let plan = buildCompatiblePlan(documentSummaries, planResult.value);
@@ -1487,7 +1487,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
       fallback: true,
       failures: [],
     };
-    await writeAtomic(jobDir, 'large-v2-case-analysis-exec.json', JSON.stringify(analysisResult.envelope) + '\\n');
+    await writeAtomic(jobDir, 'large-v2-case-analysis-exec.json', JSON.stringify(analysisResult.envelope) + '\n');
   }
   phases.push({ phase: 'large-case-analysis', ...analysisResult });
   await writeAtomic(jobDir, 'large-case-analysis.json', `${JSON.stringify(caseAnalysis, null, 2)}\n`);
