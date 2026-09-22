@@ -1461,6 +1461,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
         execName: 'large-v2-case-analysis-exec.json', synthetic: false, allowExternal: false,
         validator: (final) => parseCaseAnalysisFinal(final, docSourceKeys),
         progressState: { stage: 'analyzing_documents', progress: 45, phase: 'large_case_analysis' },
+        maxModelAttempts: 1,
       });
       caseAnalysis = analysisResult.value;
     } catch (error) {
@@ -1601,6 +1602,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
         execName: 'large-v2-critic-exec.json', synthetic: false, allowExternal: false,
         validator: (final) => parseCriticIssuesFinal(final),
         progressState: { stage: 'independent_review', progress: 68, phase: 'large_independent_critic' },
+        maxModelAttempts: 1,
       });
       critic = criticResult.value;
     } catch (error) {
@@ -1658,6 +1660,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
               execName: `large-v2-report-${spec.id}-exec.json`, synthetic, allowExternal: false,
               validator: reportValidator(spec),
               progressState: { stage: 'drafting_report', progress: 76, phase: 'large_sectioned_report' },
+              maxModelAttempts: 1,
             });
           } catch (error) {
             const value = reportValidator(spec, { requireMinimum: false })(deterministicProviderReportSection(spec, reviewed, critic));
