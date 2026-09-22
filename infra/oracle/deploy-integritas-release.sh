@@ -164,7 +164,8 @@ for required in \
   infra/openclaw/integritas-release-deploy@.service \
   infra/oracle/deploy-integritas-controlled.sh \
   tools/dd/quality_v1.py \
-  tools/dd/forensics_v1.py; do
+  tools/dd/forensics_v1.py \
+  tools/dd/page_extract_v1.py; do
   [[ -f "${NEW}/${required}" ]] || { echo "Release is missing ${required}." >&2; exit 6; }
 done
 
