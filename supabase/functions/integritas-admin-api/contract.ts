@@ -3,6 +3,8 @@ const ACTIONS = new Set([
   "create_case",
   "snapshot",
   "upload",
+  "reserve_upload",
+  "finalize_upload",
   "start_analysis",
   "sync_job",
   "cancel_job",
