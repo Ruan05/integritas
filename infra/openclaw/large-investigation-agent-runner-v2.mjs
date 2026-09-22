@@ -552,7 +552,7 @@ function timeoutFor(role) {
   // The deterministic v2 scheduler is a safe planner fallback. Keep optional
   // model planning short so provider stalls cannot consume the investigation
   // budget needed for evidence analysis, research, critic and report synthesis.
-  return { shard: 300, plan: 90, analysis: 300, lane: 360, critic: 300, report: 300 }[role] ?? 240;
+  return { shard: 120, plan: 90, analysis: 300, lane: 360, critic: 300, report: 300 }[role] ?? 240;
 }
 
 function isPaidOpenRouterModel(model) {
