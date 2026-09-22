@@ -126,7 +126,8 @@ assert.ok(!investigationRunner.includes("model: 'integritas-openrouter/openroute
 assert.ok(!investigationRunner.includes('opencode-go/deepseek-v4-pro'), 'DeepSeek Pro must not be a default investigation fallback');
 assert.ok(!investigationRunner.includes("'integritas-groq/openai/gpt-oss-20b'"), 'Groq 20B is not approved for production investigation routing');
 assert.ok(!investigationRunner.includes('shell: true'), 'runner must never execute through a shell');
-assert.match(investigationConfig, /\$include:\s*["']\.\/openclaw\.json["']/, 'investigation config must inherit the pinned OpenClaw config');
+assert.doesNotMatch(investigationConfig, /\\$include:\\s*["']\\.\\/openclaw\\.json["']/, 'investigation config must not inherit operator Gateway config');
+assert.match(investigationConfig, /memory:\\s*\\{[\\s\\S]*search:\\s*\\{[\\s\\S]*enabled:\\s*false/, 'investigation config must disable persistent memory for case workers');
 assert.match(investigationConfig, /workspaceAccess:\s*["']ro["']/, 'investigation evidence workspace must remain read-only');
 assert.match(investigationConfig, /profile:\s*["']minimal["']/, 'investigation agent must start from the minimal tool profile');
 assert.match(investigationConfig, /modelPolicy:\s*\{[\s\S]*allow:/, 'investigation overlay must own its model allowlist');
