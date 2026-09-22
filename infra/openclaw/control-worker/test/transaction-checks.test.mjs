@@ -61,6 +61,29 @@ test('transaction checks preserve document provenance and detect repeated candid
 });
 
 
+test('transaction checks extract labeled IBAN and BIC candidates from rich document summaries', () => {
+  const docId = '33333333-3333-4333-8333-333333333333';
+  const result = buildDeterministicChecks({
+    document_profiles: [{
+      document_id: docId,
+      material_identifiers: [
+        'type=IBAN; value=NL91ABNA0793164363',
+        'p.2: SWIFT/BIC: ABNANL2A',
+        'type=Bank Name; value=ABN AMRO Bank N.V.',
+      ],
+    }],
+  });
+  assert.deepEqual(result.iban_checks, [{
+    document_id: docId,
+    value: 'NL91ABNA0793164363',
+    mod97_remainder: 35,
+    checksum_valid: false,
+  }]);
+  assert.equal(result.bic_format_checks.length, 1);
+  assert.equal(result.bic_format_checks[0].document_id, docId);
+  assert.equal(result.bic_format_checks[0].value, 'ABNANL2A');
+});
+
 test('deterministic structural checks become source-linked canonical findings and checks', () => {
   const docId = '11111111-1111-4111-8111-111111111111';
   const bundle = { findings: [], checks: [] };
