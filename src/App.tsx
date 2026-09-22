@@ -496,6 +496,7 @@ export function App() {
             <InvestigationMilestones
               checkpoints={liveCheckpoints.length > 0 ? liveCheckpoints : (results?.checkpoints ?? [])}
               checks={results?.checks ?? []}
+              jobStage={job.stage}
               jobProgress={job.progress ?? 0}
             />
           )}

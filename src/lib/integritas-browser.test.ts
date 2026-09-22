@@ -217,7 +217,7 @@ describe('live investigation milestones', () => {
       { id: 'c-1', check_key: 'lane.registry', check_type: 'registry', description: 'Verify legal entity in official registry', status: 'complete', outcome: 'Matched official record' },
       { id: 'c-2', check_key: 'lane.bank', check_type: 'bank', description: 'Confirm beneficiary account independently', status: 'blocked', outcome: 'Direct bank confirmation required' },
     ] as any;
-    const rows = deriveInvestigationMilestones(checkpoints, checks);
+    const rows = deriveInvestigationMilestones(checkpoints, checks, 'completed', 100);
     expect(rows.find((row) => row.id === 'lane.registry')?.status).toBe('complete');
     expect(rows.find((row) => row.id === 'lane.bank')?.status).toBe('manual');
     expect(rows.find((row) => row.id === 'core.plan')?.status).toBe('complete');
@@ -227,10 +227,25 @@ describe('live investigation milestones', () => {
     const rows = deriveInvestigationMilestones(
       [{ id: 'cp-old', stage: 'verifying', progress: 80, safe_metadata: {}, created_at: '2026-09-19T20:00:00Z' }] as any,
       [{ id: 'c-1', check_key: 'lane.sanctions', check_type: 'screening', description: 'Run sanctions screening', status: 'complete', outcome: 'No attributable hit' }] as any,
+      'completed',
+      100,
     );
     expect(rows).toEqual([
       { id: 'lane.sanctions', label: 'Run sanctions screening', status: 'complete', priority: 'medium' },
     ]);
+  });
+
+  it('does not let stale persisted checks mark an active retry complete', () => {
+    const rows = deriveInvestigationMilestones(
+      [{
+        id: 'cp-live', stage: 'researching', progress: 57, created_at: '2026-09-22T19:00:00Z',
+        safe_metadata: { milestones: [{ id: 'module.research_lanes', label: 'Bounded parallel specialist research', status: 'active', priority: 'medium' }] },
+      }] as any,
+      [{ id: 'c-old', check_key: 'lane.registry', check_type: 'registry', description: 'Old registry result', status: 'complete', outcome: 'Old run' }] as any,
+      'researching',
+      57,
+    );
+    expect(rows).toEqual([{ id: 'module.research_lanes', label: 'Bounded parallel specialist research', status: 'active', priority: 'medium' }]);
   });
 });
 

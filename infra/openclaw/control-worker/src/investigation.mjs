@@ -354,6 +354,16 @@ const CORE_MILESTONE_DEFS = Object.freeze([
   ['core.qa', 'Deterministic quality checks'],
   ['core.persist', 'Findings and report safely saved'],
 ]);
+const WORKFLOW_MODULE_DEFS = Object.freeze([
+  ['module.document_shards', 'Page extraction, OCR and visual coverage'],
+  ['module.adaptive_plan', 'Adaptive evidence-led route selection'],
+  ['module.case_analysis', 'Entity, role and transaction normalization'],
+  ['module.research_lanes', 'Bounded parallel specialist research'],
+  ['module.critic', 'Independent critic and revision gate'],
+  ['module.report', 'Structured dossier assembly'],
+  ['module.semantic_qa', 'Semantic and deterministic release QA'],
+  ['module.private_artifact', 'Private PDF render and atomic artifact commit'],
+]);
 
 function safeMilestone(row) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
@@ -383,17 +393,48 @@ function sanitizeMilestones(value) {
   return rows;
 }
 
-function initialMilestones(phase) {
-  const status = new Map(CORE_MILESTONE_DEFS.map(([id]) => [id, 'waiting']));
-  if (phase === 'extracting') status.set('core.evidence', 'active');
-  if (phase === 'analyzing_documents') {
-    status.set('core.evidence', 'complete');
-    status.set('core.forensics', 'complete');
-    status.set('core.classification', 'active');
+function runtimeMilestones(stage, phase = '', prior = []) {
+  const existing = new Map(sanitizeMilestones(prior).map((row) => [row.id, row]));
+  const status = new Map([...CORE_MILESTONE_DEFS, ...WORKFLOW_MODULE_DEFS].map(([id]) => [id, 'waiting']));
+  const complete = (...ids) => ids.forEach((id) => status.set(id, 'complete'));
+  const active = (...ids) => ids.forEach((id) => status.set(id, 'active'));
+  if (stage === 'extracting') {
+    active('core.evidence', 'module.document_shards');
+  } else if (stage === 'mapping_entities' || phase === 'large_bounded_plan') {
+    complete('core.evidence', 'core.forensics', 'core.classification', 'module.document_shards');
+    active('core.plan', 'module.adaptive_plan');
+  } else if (stage === 'analyzing_documents') {
+    complete('core.evidence', 'core.forensics', 'module.document_shards');
+    active('core.classification', 'module.case_analysis');
+  } else if (stage === 'planning_research') {
+    complete('core.evidence', 'core.forensics', 'core.classification', 'module.document_shards', 'module.case_analysis');
+    active('core.plan', 'module.adaptive_plan');
+  } else if (stage === 'researching') {
+    complete('core.evidence', 'core.forensics', 'core.classification', 'core.plan', 'module.document_shards', 'module.adaptive_plan', 'module.case_analysis');
+    active('core.research', 'module.research_lanes');
+  } else if (stage === 'independent_review' || phase === 'large_independent_critic') {
+    complete('core.evidence', 'core.forensics', 'core.classification', 'core.plan', 'core.research', 'module.document_shards', 'module.adaptive_plan', 'module.case_analysis', 'module.research_lanes');
+    active('core.crosscheck', 'core.review', 'module.critic');
+  } else if (stage === 'drafting_report') {
+    complete('core.evidence', 'core.forensics', 'core.classification', 'core.plan', 'core.research', 'core.crosscheck', 'core.review', 'module.document_shards', 'module.adaptive_plan', 'module.case_analysis', 'module.research_lanes', 'module.critic');
+    if (phase === 'ready_for_deterministic_qa') active('core.qa', 'module.semantic_qa');
+    else active('module.report');
+  } else if (stage === 'verifying' || stage === 'cross_checking') {
+    complete('core.evidence', 'core.forensics', 'core.classification', 'core.plan', 'core.research', 'core.crosscheck', 'core.review', 'module.document_shards', 'module.adaptive_plan', 'module.case_analysis', 'module.research_lanes', 'module.critic', 'module.report');
+    active('core.qa', 'module.semantic_qa');
   }
-  return CORE_MILESTONE_DEFS.map(([id, label]) => ({
-    id, label, status: status.get(id), priority: 'high',
+  const defined = [...CORE_MILESTONE_DEFS, ...WORKFLOW_MODULE_DEFS].map(([id, label]) => ({
+    id,
+    label,
+    status: status.get(id),
+    priority: id.startsWith('core.') ? 'high' : 'medium',
   }));
+  const extras = [...existing.values()].filter((row) => !status.has(row.id));
+  return [...defined, ...extras];
+}
+
+function initialMilestones(stage) {
+  return runtimeMilestones(stage);
 }
 
 function advanceMilestones(value, updates) {
@@ -609,17 +650,25 @@ export async function executeInvestigation(command, {
     const rejoiningActiveUnit = !['inactive', 'failed'].includes(initialUnitState);
     let currentProgress = manifest.job_progress;
     let currentStage = manifest.job_stage;
+    let currentMilestones = initialMilestones(currentStage);
     const checkpoint = async (stage, progress, safeMetadata = {}) => {
       const currentIndex = STAGE_ORDER.indexOf(currentStage);
       const nextIndex = STAGE_ORDER.indexOf(stage);
       if (progress < currentProgress) return null;
       if (progress === currentProgress && currentIndex >= 0 && nextIndex >= 0 && nextIndex < currentIndex) return null;
+      const suppliedMilestones = sanitizeMilestones(safeMetadata.milestones);
+      const milestoneInput = suppliedMilestones.length ? suppliedMilestones : currentMilestones;
+      const effectiveMilestones = TERMINAL_STAGES.has(stage)
+        ? milestoneInput
+        : runtimeMilestones(stage, typeof safeMetadata.phase === 'string' ? safeMetadata.phase : '', milestoneInput);
+      const effectiveMetadata = { ...safeMetadata, milestones: effectiveMilestones };
       const result = await retryTransientFetch(
-        () => client.checkpoint(command.id, jobId, revision, stage, progress, safeMetadata),
+        () => client.checkpoint(command.id, jobId, revision, stage, progress, effectiveMetadata),
         Math.min(statePollMs, 1000),
       );
       currentProgress = Math.max(currentProgress, progress);
       currentStage = stage;
+      currentMilestones = effectiveMilestones;
       return result;
     };
     const localDocuments = manifest.documents.map((document) => {
@@ -782,6 +831,7 @@ export async function executeInvestigation(command, {
     if (bundle.includes('/storage/v1/object/sign/') || report.includes('/storage/v1/object/sign/')) throw new Error('signed URL leaked into investigation output');
     const latestAgentProgress = await readAgentProgress(jobDir);
     let finalMilestones = sanitizeMilestones(latestAgentProgress?.milestones);
+    if (finalMilestones.length === 0) finalMilestones = currentMilestones;
     if (finalMilestones.length === 0) finalMilestones = initialMilestones('analyzing_documents');
     finalMilestones = advanceMilestones(finalMilestones, {
       'core.evidence': 'complete',
@@ -792,6 +842,13 @@ export async function executeInvestigation(command, {
       'core.crosscheck': 'complete',
       'core.review': 'complete',
       'core.qa': 'active',
+      'module.document_shards': 'complete',
+      'module.adaptive_plan': 'complete',
+      'module.case_analysis': 'complete',
+      'module.research_lanes': 'complete',
+      'module.critic': 'complete',
+      'module.report': 'complete',
+      'module.semantic_qa': 'active',
     });
     await checkpoint('verifying', 80, { milestones: finalMilestones });
     const qa = await qaRunner({
@@ -805,6 +862,8 @@ export async function executeInvestigation(command, {
     finalMilestones = advanceMilestones(finalMilestones, {
       'core.qa': 'complete',
       'core.persist': 'active',
+      'module.semantic_qa': 'complete',
+      'module.private_artifact': 'active',
     });
     await checkpoint('drafting_report', 90, { milestones: finalMilestones });
     const bundleSha = createHash('sha256').update(bundle).digest('hex');
@@ -872,7 +931,7 @@ export async function executeInvestigation(command, {
       }
     }
 
-    finalMilestones = advanceMilestones(finalMilestones, { 'core.persist': 'complete' });
+    finalMilestones = advanceMilestones(finalMilestones, { 'core.persist': 'complete', 'module.private_artifact': 'complete' });
     await checkpoint(terminalOutcome, 100, {
       bundle_sha256: bundleSha,
       report_sha256: reportSha,

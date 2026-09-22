@@ -243,6 +243,14 @@ export type InvestigationMilestone = {
   status: InvestigationMilestoneStatus;
   priority: InvestigationMilestonePriority;
 };
+export type InvestigationMilestoneSnapshot = {
+  rows: InvestigationMilestone[];
+  stage: string;
+  progress: number;
+  phase: string;
+  message: string;
+  isLive: boolean;
+};
 export type CheckpointRow = { id: string; stage: string; progress: number; safe_metadata: Record<string, unknown>; created_at: string };
 export type EntityResultRow = { id: string; entity_key: string; entity_type: string; display_name: string; match_status: string; match_confidence: number | null; identifiers: Record<string, unknown>; aliases: string[] };
 export type RelationshipResultRow = { id: string; relationship_key: string; from_entity_id: string; to_entity_id: string; relationship_type: string; claim: string; evidence_status: string; confidence: number | null };
@@ -289,16 +297,28 @@ function checkStatusToMilestone(status: string): InvestigationMilestoneStatus {
   return 'waiting';
 }
 
-export function deriveInvestigationMilestones(
-  checkpoints: CheckpointRow[],
-  checks: CheckResultRow[],
-): InvestigationMilestone[] {
-  const ordered = [...checkpoints].sort((a, b) => {
+const terminalMilestoneStages = new Set(['completed', 'incomplete', 'failed', 'cancelled', 'research_limit_reached']);
+
+function orderedCheckpoints(checkpoints: CheckpointRow[]) {
+  return [...checkpoints].sort((a, b) => {
     const at = Date.parse(a.created_at || '') || 0;
     const bt = Date.parse(b.created_at || '') || 0;
     return at - bt || a.progress - b.progress;
   });
+}
+
+export function deriveInvestigationMilestoneSnapshot(
+  checkpoints: CheckpointRow[],
+  checks: CheckResultRow[],
+  jobStage?: string,
+  jobProgress?: number,
+): InvestigationMilestoneSnapshot {
+  const ordered = orderedCheckpoints(checkpoints);
+  const latest = ordered.at(-1);
   const latestWithMilestones = [...ordered].reverse().find((checkpoint) => Array.isArray(checkpoint.safe_metadata?.milestones));
+  const stage = jobStage || latest?.stage || '';
+  const progress = Number.isFinite(jobProgress) ? Number(jobProgress) : (latest?.progress ?? 0);
+  const isLive = !terminalMilestoneStages.has(stage);
   const raw = Array.isArray(latestWithMilestones?.safe_metadata?.milestones)
     ? latestWithMilestones.safe_metadata.milestones
     : [];
@@ -311,25 +331,45 @@ export function deriveInvestigationMilestones(
     rows.push(normalized);
   }
 
-  const byId = new Map(rows.map((row) => [row.id, row]));
-  for (const check of checks) {
-    if (!check.check_key.startsWith('lane.')) continue;
-    const existing = byId.get(check.check_key);
-    const status = checkStatusToMilestone(check.status);
-    if (existing) {
-      if (existing.status !== 'manual') existing.status = status;
-      continue;
+  // Check rows are durable final outcomes. During a retry they can belong to a
+  // previous attempt, so they must never overwrite the live runner checkpoint.
+  if (!isLive) {
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    for (const check of checks) {
+      if (!check.check_key.startsWith('lane.')) continue;
+      const existing = byId.get(check.check_key);
+      const status = checkStatusToMilestone(check.status);
+      if (existing) {
+        if (existing.status !== 'manual') existing.status = status;
+        continue;
+      }
+      const added: InvestigationMilestone = {
+        id: check.check_key,
+        label: check.description || check.check_key,
+        status,
+        priority: 'medium',
+      };
+      rows.push(added);
+      byId.set(added.id, added);
     }
-    const added: InvestigationMilestone = {
-      id: check.check_key,
-      label: check.description || check.check_key,
-      status,
-      priority: 'medium',
-    };
-    rows.push(added);
-    byId.set(added.id, added);
   }
-  return rows;
+  return {
+    rows,
+    stage,
+    progress: Math.max(0, Math.min(100, progress || 0)),
+    phase: typeof latest?.safe_metadata?.phase === 'string' ? latest.safe_metadata.phase : '',
+    message: typeof latest?.safe_metadata?.message === 'string' ? latest.safe_metadata.message : '',
+    isLive,
+  };
+}
+
+export function deriveInvestigationMilestones(
+  checkpoints: CheckpointRow[],
+  checks: CheckResultRow[],
+  jobStage?: string,
+  jobProgress?: number,
+): InvestigationMilestone[] {
+  return deriveInvestigationMilestoneSnapshot(checkpoints, checks, jobStage, jobProgress).rows;
 }
 
 export function isInvestigationResultStale(caseRevision: number, jobRevision: number, reportRevision: number | null) {

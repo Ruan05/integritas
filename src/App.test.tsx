@@ -30,30 +30,31 @@ describe('Integritas Command Center', () => {
 });
 
 describe('live investigation milestone presentation', () => {
-  it('shows checked, active and manual research milestones without pretending blocked work is complete', () => {
+  it('shows worker-driven submodules and truthful active-run progress', () => {
     render(
       <InvestigationMilestones
+        jobStage="cross_checking"
         jobProgress={60}
         checkpoints={[{
           id: 'cp-1', stage: 'cross_checking', progress: 60, created_at: '2026-09-19T20:00:00Z',
           safe_metadata: {
             milestones: [
               { id: 'core.research', label: 'External and browser research', status: 'complete', priority: 'high' },
-              { id: 'lane.registry', label: 'Verify company registry', status: 'complete', priority: 'critical' },
-              { id: 'lane.bank', label: 'Confirm bank beneficiary', status: 'manual', priority: 'critical' },
-              { id: 'lane.media', label: 'Review adverse media', status: 'active', priority: 'high' },
+              { id: 'module.research_lanes', label: 'Bounded parallel specialist research', status: 'active', priority: 'medium' },
             ],
+            phase: 'large_research_lanes',
+            message: 'Lane 5 of 9 is collecting authoritative sources.',
           },
         }]}
         checks={[]}
       />,
     );
     expect(screen.getByRole('heading', { name: /live investigation milestones/i })).toBeInTheDocument();
-    expect(screen.getByText('Verify company registry')).toBeInTheDocument();
+    expect(screen.getByText('Bounded parallel specialist research')).toBeInTheDocument();
+    expect(screen.getByText('Current submodule')).toBeInTheDocument();
+    expect(screen.getByText(/60% live progress/i)).toBeInTheDocument();
     expect(screen.getAllByText('Complete').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Manual check').length).toBeGreaterThan(0);
     expect(screen.getAllByText('In progress').length).toBeGreaterThan(0);
-    expect(screen.getByText(/1 check still needs manual verification or is blocked/i)).toBeInTheDocument();
   });
 });
 
