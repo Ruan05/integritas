@@ -79,7 +79,10 @@
     },
   },
   plugins: {
+    enabled: true,
+    load: { paths: ["/opt/openclaw-source/extensions/parallel"] },
     entries: {
+      parallel: { enabled: true },
       "active-memory": {
         enabled: true,
         config: {
@@ -100,6 +103,17 @@
           dreaming: { enabled: true },
         },
       },
+    },
+  },
+  tools: {
+    web: {
+      search: {
+        enabled: true,
+        provider: "parallel-free",
+        maxResults: 8,
+        timeoutSeconds: 45,
+      },
+      fetch: { enabled: true },
     },
   },
 }
