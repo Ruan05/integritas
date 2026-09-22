@@ -1406,6 +1406,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
           return parsed;
         },
         progressState: { stage: 'extracting', progress: 18, phase: 'large_document_shards' },
+        maxModelAttempts: 1,
       });
     } catch (error) {
       const value = deterministicShardSummaryFromTrustedContext(shard, trustedContext, error);
