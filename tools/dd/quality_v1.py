@@ -588,7 +588,10 @@ def validate_semantic_maximum(bundle, manifest, report_text, errors, plan=None, 
         identifiers = row.get('identifiers') if isinstance(row.get('identifiers'), dict) else {}
         if identifiers.get('role') not in {
             'client', 'buyer', 'buyer_client', 'seller', 'representative', 'intermediary', 'bank',
-            'terminal', 'logistics', 'vessel_owner', 'related_party', 'counterparty', 'unknown'
+            'terminal', 'logistics', 'vessel_owner', 'related_party', 'counterparty',
+            'buyer_representative', 'buyer_logistics', 'buyer_logistics_representative',
+            'seller_counterparty', 'seller_representative', 'seller_logistics', 'seller_logistics_representative',
+            'unknown'
         } or identifiers.get('subject_scope') not in {'in_scope', 'context_only', 'unknown'}:
             missing_roles.append(str(row.get('entity_key', 'unknown')))
     if missing_roles:
