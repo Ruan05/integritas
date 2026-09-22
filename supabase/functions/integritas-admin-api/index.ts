@@ -12,6 +12,7 @@ import {
   sha256Bytes,
 } from "./contract.ts";
 const URL = Deno.env.get("SUPABASE_URL") || "",
+  TUS_ENDPOINT = "https://leuixjgmlueptefintgo.storage.supabase.co/storage/v1/upload/resumable",
   SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const CRM_BACKEND_TOKEN_SHA256 = "f9bcc215afc326b4fbbc90aafe3880894751f3863a700bddcd5ee70e3fac623f";
 const CRM_USER_ID = "0b34575b-ae33-4e08-9ccb-4ac22380b69d";
@@ -412,6 +413,129 @@ async function upload(uid: string, form: FormData) {
     pageCount,
   };
 }
+async function reserveUpload(uid: string, body: any) {
+  const cid = String(body.caseId || "");
+  await access(uid, cid, ["owner", "analyst"]);
+  const idempotencyKey = String(body.idempotencyKey || "").trim();
+  if (!/^[A-Za-z0-9._:-]{8,160}$/.test(idempotencyKey))
+    throw Object.assign(new Error("A valid upload idempotency key is required"), { status: 400 });
+  const v = validateUpload(body.name, body.mime, body.size);
+  const existing = await admin.from("integritas_upload_reservations")
+    .select("id,case_id,created_by,name,mime_type,size_bytes,storage_path,status,expires_at,document_id")
+    .eq("created_by", uid).eq("idempotency_key", idempotencyKey).maybeSingle();
+  if (existing.error) throw existing.error;
+  if (existing.data) {
+    const same = existing.data.case_id === cid &&
+      existing.data.name === v.name &&
+      existing.data.mime_type === v.mime &&
+      Number(existing.data.size_bytes) === v.size;
+    if (!same) throw Object.assign(new Error("Upload idempotency key was reused with different file metadata"), { status: 409 });
+    if (existing.data.status === "finalized")
+      return { reservationId: existing.data.id, finalized: true, documentId: existing.data.document_id };
+    if (Date.parse(existing.data.expires_at) <= Date.now())
+      throw Object.assign(new Error("Upload reservation expired; start a new upload"), { status: 409 });
+    const signed = await admin.storage.from("integritas-case-files").createSignedUploadUrl(existing.data.storage_path);
+    if (signed.error || !signed.data) throw signed.error || new Error("Could not create signed upload capability");
+    return {
+      reservationId: existing.data.id,
+      bucket: "integritas-case-files",
+      objectPath: existing.data.storage_path,
+      uploadToken: signed.data.token,
+      expiresAt: existing.data.expires_at,
+      resumableEndpoint: TUS_ENDPOINT,
+    };
+  }
+  const count = await admin.from("integritas_documents").select("id", { count: "exact", head: true }).eq("case_id", cid);
+  if (count.error) throw count.error;
+  if ((count.count || 0) >= 20) throw Object.assign(new Error("A case can contain no more than 20 documents"), { status: 409 });
+  const reservationId = crypto.randomUUID();
+  const path = `${cid}/uploads/${reservationId}`;
+  const expiresAt = new Date(Date.now() + 20 * 60 * 1000).toISOString();
+  const inserted = await admin.from("integritas_upload_reservations").insert({
+    id: reservationId, case_id: cid, created_by: uid, idempotency_key: idempotencyKey,
+    name: v.name, mime_type: v.mime, size_bytes: v.size, storage_path: path, expires_at: expiresAt,
+  }).select("id,case_id,name,mime_type,size_bytes,storage_path,status,expires_at").single();
+  if (inserted.error) {
+    if (String((inserted.error as any)?.code || "") === "23505") return reserveUpload(uid, body);
+    throw inserted.error;
+  }
+  const signed = await admin.storage.from("integritas-case-files").createSignedUploadUrl(path);
+  if (signed.error || !signed.data) {
+    await admin.from("integritas_upload_reservations").delete().eq("id", reservationId);
+    throw signed.error || new Error("Could not create signed upload capability");
+  }
+  await audit(cid, uid, "document_upload_reserved", {
+    reservationId, name: v.name, size: v.size, mime: v.mime, expiresAt,
+  });
+  return {
+    reservationId,
+    bucket: "integritas-case-files",
+    objectPath: path,
+    uploadToken: signed.data.token,
+    expiresAt,
+    resumableEndpoint: TUS_ENDPOINT,
+  };
+}
+
+async function finalizeUpload(uid: string, body: any) {
+  const reservationId = String(body.reservationId || "");
+  if (!/^[0-9a-f-]{36}$/i.test(reservationId))
+    throw Object.assign(new Error("Invalid upload reservation"), { status: 400 });
+  const q = await admin.from("integritas_upload_reservations")
+    .select("id,case_id,created_by,name,mime_type,size_bytes,storage_path,status,expires_at,document_id")
+    .eq("id", reservationId).maybeSingle();
+  if (q.error || !q.data) throw Object.assign(new Error("Upload reservation not found"), { status: 404 });
+  const r = q.data;
+  await access(uid, r.case_id, ["owner", "analyst"]);
+  if (r.status === "finalized" && r.document_id) return { documentId: r.document_id, duplicate: false, finalized: true };
+  if (r.status !== "reserved") throw Object.assign(new Error("Upload reservation is not available"), { status: 409 });
+  if (Date.parse(r.expires_at) <= Date.now()) {
+    await admin.from("integritas_upload_reservations").update({ status: "expired", updated_at: new Date().toISOString() }).eq("id", r.id);
+    throw Object.assign(new Error("Upload reservation expired"), { status: 409 });
+  }
+  const downloaded = await admin.storage.from("integritas-case-files").download(r.storage_path);
+  if (downloaded.error || !downloaded.data) throw Object.assign(new Error("Uploaded object is not available yet"), { status: 409 });
+  const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
+  if (bytes.length !== Number(r.size_bytes)) throw Object.assign(new Error("Uploaded object size does not match reservation"), { status: 400 });
+  if (r.mime_type === "application/pdf" && !prefix(bytes, "%PDF-"))
+    throw Object.assign(new Error("Invalid PDF"), { status: 400 });
+  if (r.mime_type !== "application/pdf" && bytes.some((x) => x === 0))
+    throw Object.assign(new Error("Invalid text file"), { status: 400 });
+  const hash = await sha256Bytes(bytes);
+  const duplicate = await admin.from("integritas_documents").select("id").eq("case_id", r.case_id).eq("sha256", hash).maybeSingle();
+  if (duplicate.error) throw duplicate.error;
+  if (duplicate.data?.id) {
+    await admin.from("integritas_upload_reservations").update({
+      status: "finalized", document_id: duplicate.data.id, sha256: hash, updated_at: new Date().toISOString(),
+    }).eq("id", r.id).eq("status", "reserved");
+    await admin.storage.from("integritas-case-files").remove([r.storage_path]);
+    return { documentId: duplicate.data.id, duplicate: true, finalized: true };
+  }
+  const documentId = crypto.randomUUID();
+  const ins = await admin.from("integritas_documents").insert({
+    id: documentId, case_id: r.case_id, name: r.name, mime_type: r.mime_type,
+    size_bytes: Number(r.size_bytes), sha256: hash, storage_path: r.storage_path,
+    extracted_text: "", extraction_status: "pending", extraction_error: "", page_count: null,
+    technical_metadata: { uploadMode: "signed-direct", verifiedBytes: bytes.length, verifiedSha256: true },
+  });
+  if (ins.error) {
+    if (String((ins.error as any)?.code || "") === "23505") {
+      const concurrent = await admin.from("integritas_documents").select("id").eq("case_id", r.case_id).eq("sha256", hash).maybeSingle();
+      if (concurrent.data?.id) return { documentId: concurrent.data.id, duplicate: true, finalized: true };
+    }
+    throw ins.error;
+  }
+  const updated = await admin.from("integritas_upload_reservations").update({
+    status: "finalized", document_id: documentId, sha256: hash, updated_at: new Date().toISOString(),
+  }).eq("id", r.id).eq("status", "reserved").select("id").maybeSingle();
+  if (updated.error) throw updated.error;
+  await audit(r.case_id, uid, "document_upload_finalized", {
+    reservationId: r.id, documentId, name: r.name, size: Number(r.size_bytes), sha256: hash,
+    extractionStatus: "pending", ingestion: "oracle-openclaw-document-queue",
+  });
+  return { documentId, duplicate: false, finalized: true, extractionStatus: "pending" };
+}
+
 function branchSpecs(depth: string) {
   const all = [
     [
@@ -1241,6 +1365,10 @@ Deno.serve(async (req) => {
       await audit(id, who.userId, "case_created", {});
       return json(req, { caseId: id }, 201);
     }
+    if (a === "reserve_upload")
+      return json(req, await reserveUpload(who.userId, b), 201);
+    if (a === "finalize_upload")
+      return json(req, await finalizeUpload(who.userId, b));
     if (a === "snapshot")
       return json(req, await snapshot(who.userId, String(b.caseId || "")));
     if (a === "start_analysis") return json(req, await start(who.userId, b));
