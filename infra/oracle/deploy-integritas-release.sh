@@ -248,5 +248,3 @@ trap - ERR
 
 echo "Integritas release ${SHA} deployed successfully."
 echo "Worker and OpenClaw Gateway are active. Public-site configuration was not modified."
-
-[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
