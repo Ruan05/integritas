@@ -75,6 +75,67 @@ function buildDeterministicLargePlan(documentSummaries, manifest) {
   };
 }
 
+function buildDeterministicCaseAnalysis(documentSummaries) {
+  const sourceKey = (documentId) => `doc.${String(documentId).replaceAll('-', '')}`;
+  const entityRows = [];
+  const entityByName = new Map();
+  const findings = [];
+  for (const summary of documentSummaries) {
+    const sourceKeys = [sourceKey(summary.document_id)];
+    for (const party of Array.isArray(summary.parties) ? summary.parties : []) {
+      if (typeof party !== 'string' || !party.trim()) continue;
+      const displayName = party.trim();
+      const normalized = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'unnamed';
+      const entityKey = `entity.${normalized}`;
+      if (!entityByName.has(displayName)) {
+        entityByName.set(displayName, entityKey);
+        entityRows.push({
+          entity_key: entityKey,
+          entity_type: 'organization',
+          display_name: displayName,
+          aliases: [],
+          identifiers: {},
+          match_status: 'proposed',
+          confidence: 0.35,
+        });
+      }
+    }
+    const materialSignals = [
+      ...(Array.isArray(summary.risk_flags) ? summary.risk_flags : []),
+      ...(Array.isArray(summary.material_terms) ? summary.material_terms.slice(0, 8) : []),
+    ].filter((value) => typeof value === 'string' && value.trim()).slice(0, 12);
+    for (const signal of materialSignals) {
+      findings.push({
+        finding_key: `evidence.${String(findings.length + 1).padStart(2, '0')}`,
+        entity_key: null,
+        finding_type: 'submitted_evidence_signal',
+        claim: signal.trim(),
+        evidence_status: 'uncertain',
+        materiality: 'medium',
+        reliability: 'unknown',
+        evidence_excerpt: String(summary.evidence_excerpt ?? '').slice(0, 800),
+        source_keys: sourceKeys,
+      });
+      if (findings.length >= 60) break;
+    }
+  }
+  return {
+    entities: entityRows,
+    relationships: [],
+    findings,
+    contradictions: [],
+    unresolved_checks: [{
+      unresolved_key: 'analysis.deterministic_review',
+      description: 'Model-assisted entity and claim synthesis was unavailable; deterministic document evidence was preserved without asserting verification.',
+      reason: 'The bounded model-analysis routes did not return a validated result within their route budget.',
+      attempted_methods: ['Deterministic document shard reconciliation', 'Evidence-derived entity and signal extraction'],
+      blocker: 'Independent model-assisted synthesis remains unavailable for this run.',
+      next_manual_action: 'Review proposed entities and evidence-linked signals, then rerun model-assisted analysis when a healthy provider is available.',
+    }],
+    limitations: ['Deterministic fallback preserved submitted evidence signals; it does not establish identity, authenticity or external verification.'],
+  };
+}
+
 function runBoundedOpenClaw(args, { cwd, env, timeoutSeconds, maxBuffer }) {
   return new Promise((resolve, reject) => {
     const child = spawn('/opt/openclaw/bin/openclaw', args, {
@@ -133,6 +194,7 @@ const ZEN_ENABLE_MARKER = '/etc/openclaw/zen-enabled';
 const ZEN_ENABLED = !!process.env.OPENCODE_ZEN_API_KEY && existsSync(ZEN_ENABLE_MARKER);
 const ACTIVE_CONFIG_PATH = ZEN_ENABLED ? ZEN_CONFIG_PATH : BASE_CONFIG_PATH;
 const LARGE_PLANNER_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_PLANNER === 'true';
+const LARGE_MODEL_ANALYSIS_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_MODEL_ANALYSIS === 'true';
 const NVIDIA_ULTRA = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b';
 const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';
 const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';
@@ -957,14 +1019,40 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
       'completed',
       `Trusted synthetic fixture deterministically produced ${caseAnalysis.entities.length} entities and ${caseAnalysis.findings.length} findings without external research.`,
     ));
+  } else if (LARGE_MODEL_ANALYSIS_ENABLED) {
+    try {
+      analysisResult = await validated({
+        jobDir, id: 'large-case-analysis', role: 'analysis', task: analysisTask(false),
+        execName: 'large-v2-case-analysis-exec.json', synthetic: false, allowExternal: false,
+        validator: (final) => parseCaseAnalysisFinal(final, docSourceKeys),
+        progressState: { stage: 'analyzing_documents', progress: 45, phase: 'large_case_analysis' },
+      });
+      caseAnalysis = analysisResult.value;
+    } catch (error) {
+      caseAnalysis = buildDeterministicCaseAnalysis(documentSummaries);
+      analysisResult = {
+        envelope: { toolSummary: { tools: [], calls: 0, failures: 1 } },
+        value: caseAnalysis,
+        reused: false,
+        blocked: true,
+        fallback: true,
+        failures: [{ model: 'validated-provider-routes', error: String(error?.message ?? error).slice(0, 500) }],
+      };
+    }
   } else {
-    analysisResult = await validated({
-      jobDir, id: 'large-case-analysis', role: 'analysis', task: analysisTask(false),
-      execName: 'large-v2-case-analysis-exec.json', synthetic: false, allowExternal: false,
-      validator: (final) => parseCaseAnalysisFinal(final, docSourceKeys),
-      progressState: { stage: 'analyzing_documents', progress: 45, phase: 'large_case_analysis' },
-    });
-    caseAnalysis = analysisResult.value;
+    caseAnalysis = buildDeterministicCaseAnalysis(documentSummaries);
+    analysisResult = {
+      envelope: {
+        ok: true, status: 'ok', final: '', provider: 'integritas',
+        model: 'deterministic-evidence-analysis-v1', sessionId: jobId,
+        toolSummary: { tools: [], calls: 0, failures: 0 },
+      },
+      value: caseAnalysis,
+      reused: true,
+      fallback: true,
+      failures: [],
+    };
+    await writeAtomic(jobDir, 'large-v2-case-analysis-exec.json', JSON.stringify(analysisResult.envelope) + '\\n');
   }
   phases.push({ phase: 'large-case-analysis', ...analysisResult });
   await writeAtomic(jobDir, 'large-case-analysis.json', `${JSON.stringify(caseAnalysis, null, 2)}\n`);
