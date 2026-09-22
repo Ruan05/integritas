@@ -18,7 +18,7 @@ import {
   parseReportSectionFinal,
   shouldUseLargeInvestigation,
 } from '../../large-investigation.mjs';
-import { deterministicSyntheticCaseAnalysis, deterministicSyntheticCritic, deterministicProviderReportSection, providerBlockedCritic, providerBlockedLane } from '../../large-investigation-agent-runner-v2.mjs';
+import { buildDeterministicCaseAnalysis, deterministicSyntheticCaseAnalysis, deterministicSyntheticCritic, deterministicProviderReportSection, providerBlockedCritic, providerBlockedLane } from '../../large-investigation-agent-runner-v2.mjs';
 
 const CASE_ID='11111111-1111-4111-8111-111111111111';
 const JOB_ID='22222222-2222-4222-8222-222222222222';
@@ -196,6 +196,47 @@ test('large plan normalizes structured planner tests and specialist checks', () 
     ...parsed,
     specialist_checks:[{check_id:'bad',specialist:'X',required_action:'Y',trigger_condition:'Z',unexpected:'no'}],
   }),{allowZeroLanes:true}),/unknown field/);
+});
+
+test('deterministic case-analysis fallback creates only explicit parties with role and client scope', () => {
+  const result=buildDeterministicCaseAnalysis([
+    {
+      document_id:DOC1,
+      parties:[
+        'p.1: for the release and loading of the cargo onto the Buyer’s nominated vessel, with all logistical coordination',
+        'name=SHELL TRADING INTERNATIONAL LIMITED; role=Seller/Exporter; representative=Mr. Oscar de Vries (Managing Director)',
+        'name=GLOBAL A1 LLC; role=Buyer/Consignee; contact_person=Harald Spitzer; contact_title=CEO',
+        'name=GREY SHIPPING B.V.; role=Seller Logistics; representative=Jansen De Jong (Managing Director)',
+      ],
+      identifiers:['type=IBAN; value=NL91ABNA0793164363'],
+      material_terms:['field=Quantity; value=100,000 MT'],
+      risk_flags:[],
+      evidence_excerpt:'Submitted transaction evidence.',
+    },
+    {
+      document_id:DOC2,
+      parties:[
+        'p.2: Seller’s Logistics Company GREY SHIPPING B.V.',
+        'p.2: Buyer’s Company Name Global A1 LLC',
+        'p.3: Labco Marine Ltd confirms that a suitable vessel will be positioned at the nominated terminal',
+      ],
+      identifiers:[],
+      material_terms:['field=Port of Loading; value=Houston'],
+      risk_flags:[],
+      evidence_excerpt:'Submitted logistics evidence.',
+    },
+  ]);
+  assert.ok(result.entities.length <= 8, 'prose fragments must not become entities');
+  assert.equal(result.entities.some((row)=>/release and loading/i.test(row.display_name)),false);
+  const shell=result.entities.find((row)=>row.display_name==='SHELL TRADING INTERNATIONAL LIMITED');
+  assert.equal(shell.identifiers.role,'seller_counterparty');
+  assert.equal(shell.identifiers.subject_scope,'in_scope');
+  const buyer=result.entities.find((row)=>row.display_name==='GLOBAL A1 LLC');
+  assert.equal(buyer.identifiers.role,'buyer_client');
+  assert.equal(buyer.identifiers.subject_scope,'context_only');
+  const jansen=result.entities.find((row)=>row.display_name==='Jansen De Jong');
+  assert.equal(jansen.identifiers.role,'seller_logistics_representative');
+  assert.equal(result.relationships.filter((row)=>row.relationship_type==='represented_by').length,3);
 });
 
 test('trusted synthetic case analysis deterministically separates conflicting same-name identities', () => {
