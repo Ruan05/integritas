@@ -1,8 +1,7 @@
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { filterSyntheticExternalResearchLanes } from './planner-output.mjs';
 import { isTrustedSyntheticValidationManifest } from './synthetic-validation.mjs';
 import { buildDeterministicChecks } from './transaction-checks.mjs';
@@ -26,7 +25,56 @@ import {
   parseReportSectionFinal,
 } from './large-investigation.mjs';
 
-const execFileAsync = promisify(execFile);
+function runBoundedOpenClaw(args, { cwd, env, timeoutSeconds, maxBuffer }) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('/opt/openclaw/bin/openclaw', args, {
+      cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    let timedOut = false;
+    let timeoutTimer = null;
+    let killTimer = null;
+    const killGroup = (signal) => {
+      if (!Number.isInteger(child.pid)) return;
+      try { process.kill(-child.pid, signal); } catch {}
+    };
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (killTimer) clearTimeout(killTimer);
+      if (error) reject(error);
+      else resolve(value);
+    };
+    timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      killGroup('SIGTERM');
+      killTimer = setTimeout(() => {
+        killGroup('SIGKILL');
+        finish(new Error(`OpenClaw route timed out after ${timeoutSeconds}s`));
+      }, 5_000);
+      killTimer.unref?.();
+    }, timeoutSeconds * 1_000);
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+      if (Buffer.byteLength(stdout) > maxBuffer && !timedOut) {
+        killGroup('SIGKILL');
+        finish(new Error('OpenClaw agent envelope exceeded the bounded output limit'));
+      }
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString().slice(0, 4_000);
+    });
+    child.on('error', (error) => finish(error));
+    child.on('close', (code, signal) => {
+      if (timedOut) return finish(new Error(`OpenClaw route timed out after ${timeoutSeconds}s`));
+      if (code !== 0) return finish(new Error(`OpenClaw exited with code ${code ?? 'unknown'}${signal ? ` signal ${signal}` : ''}: ${stderr.trim().slice(0, 800)}`));
+      finish(null, stdout);
+    });
+  });
+}
 const MAX_AGENT_ENVELOPE_BYTES = 8 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
 const BASE_CONFIG_PATH = '/etc/openclaw/integritas-investigation.json';
@@ -147,7 +195,7 @@ function candidates(role, synthetic) {
   return uniq(rows);
 }
 function timeoutFor(role) {
-  return { shard: 300, plan: 420, analysis: 600, lane: 720, critic: 480, report: 480 }[role] ?? 600;
+  return { shard: 240, plan: 240, analysis: 360, lane: 480, critic: 300, report: 300 }[role] ?? 360;
 }
 
 function isPaidOpenRouterModel(model) {
@@ -159,7 +207,7 @@ function timeoutForModel(role, model) {
   // account must not hold an investigation for the full phase timeout. The next
   // validated route (direct NVIDIA or a bounded free model) is the recovery path.
   if (isPaidOpenRouterModel(model)) return Math.min(timeoutFor(role), 120);
-  if (FREE_OPENROUTER_MODELS.has(model) || ZEN_FREE_MODELS.has(model)) return Math.min(timeoutFor(role), 240);
+  if (FREE_OPENROUTER_MODELS.has(model) || ZEN_FREE_MODELS.has(model)) return Math.min(timeoutFor(role), 150);
   return timeoutFor(role);
 }
 
@@ -226,14 +274,9 @@ async function invoke(jobDir, messageFile, model, timeoutSeconds, synthetic) {
     '--cwd', jobDir, '--message-file', path.join(jobDir, messageFile),
     '--json', '--code-mode', 'direct', '--model', model, '--timeout', String(timeoutSeconds),
   ];
-  const result = await execFileAsync('/opt/openclaw/bin/openclaw', args, {
-    cwd: jobDir,
-    env: agentEnv(),
-    timeout: (timeoutSeconds + 60) * 1000,
-    maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
-    killSignal: 'SIGTERM',
+  return await runBoundedOpenClaw(args, {
+    cwd: jobDir, env: agentEnv(), timeoutSeconds, maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
   });
-  return result.stdout;
 }
 async function validated({
   jobDir, id, role, task, execName, validator, synthetic, allowExternal = false, progressState = null,
