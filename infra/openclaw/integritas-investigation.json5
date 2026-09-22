@@ -587,15 +587,23 @@
       },
     },
   },
+  // The pinned OpenClaw source checkout contains the official Parallel plugin.
+  // Load it explicitly so standalone investigation turns get key-free web_search
+  // without mutating the shared Gateway plugin registry.
+  plugins: {
+    enabled: true,
+    load: { paths: ["/opt/openclaw-source/extensions/parallel"] },
+    entries: { parallel: { enabled: true } },
+  },
   tools: {
-    // Pin web_search to the official Perplexity provider. The service already
-    // passes OPENROUTER_API_KEY into isolated investigation turns, which the
-    // provider supports directly; this avoids Gateway SecretRef resolution in
-    // standalone agent executions while preserving browser/web_fetch fallbacks.
+    // Pin web_search to OpenClaw's key-free Parallel Search provider. This avoids
+    // coupling due-diligence research to paid OpenRouter search credits or to
+    // Gateway SecretRef resolution in standalone agent executions. Browser and
+    // web_fetch remain independent fallbacks for source opening and dynamic sites.
     web: {
       search: {
         enabled: true,
-        provider: "perplexity",
+        provider: "parallel-free",
         maxResults: 8,
         timeoutSeconds: 45,
       },
@@ -606,3 +614,5 @@
     deny: ["write", "edit", "exec", "apply_patch", "process", "code_execution", "terminal", "screen", "dashboard", "portal", "sessions", "sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents", "secrets"],
   },
 }
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
