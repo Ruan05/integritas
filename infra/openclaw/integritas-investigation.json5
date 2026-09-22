@@ -1,5 +1,11 @@
 {
-  $include: "./openclaw.json",
+  // Deliberately isolated from the operator config. Case evidence must never inherit
+  // personal-admin agents, operational memory, Gateway state, or operator credentials.
+  memory: {
+    search: {
+      enabled: false,
+    },
+  },
   models: {
     mode: "merge",
     providers: {
