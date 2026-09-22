@@ -159,13 +159,19 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
     const role = clean(roleText, 160).toLowerCase();
     const name = clean(displayName, 240).toLowerCase();
     if (/\bglobal\s*a1(?:\s+llc)?\b/i.test(name) || /\b(?:buyer|consignee|client|requester)\b/.test(role)) {
-      if (/\b(?:logistics|shipping)\b/.test(role)) return { role: 'buyer_logistics', subject_scope: 'in_scope', entity_type: 'company' };
-      if (/\brepresentative\b/.test(role)) return { role: 'buyer_representative', subject_scope: 'context_only', entity_type: 'person' };
+      const logistics = /\b(?:logistics|shipping)\b/.test(role);
+      const representative = /\brepresentative\b/.test(role);
+      if (logistics && representative) return { role: 'buyer_logistics_representative', subject_scope: 'context_only', entity_type: 'person' };
+      if (representative) return { role: 'buyer_representative', subject_scope: 'context_only', entity_type: 'person' };
+      if (logistics) return { role: 'buyer_logistics', subject_scope: 'in_scope', entity_type: 'company' };
       return { role: 'buyer_client', subject_scope: 'context_only', entity_type: 'company' };
     }
     if (/\b(?:seller|exporter|title\s*holder|refinery)\b/.test(role)) {
-      if (/\b(?:logistics|shipping)\b/.test(role)) return { role: 'seller_logistics', subject_scope: 'in_scope', entity_type: 'company' };
-      if (/\brepresentative\b/.test(role)) return { role: 'seller_representative', subject_scope: 'in_scope', entity_type: 'person' };
+      const logistics = /\b(?:logistics|shipping)\b/.test(role);
+      const representative = /\brepresentative\b/.test(role);
+      if (logistics && representative) return { role: 'seller_logistics_representative', subject_scope: 'in_scope', entity_type: 'person' };
+      if (representative) return { role: 'seller_representative', subject_scope: 'in_scope', entity_type: 'person' };
+      if (logistics) return { role: 'seller_logistics', subject_scope: 'in_scope', entity_type: 'company' };
       return { role: 'seller_counterparty', subject_scope: 'in_scope', entity_type: 'company' };
     }
     if (/\b(?:logistics|shipping)\b/.test(role)) return { role: 'logistics_party', subject_scope: 'in_scope', entity_type: 'company' };
@@ -206,13 +212,17 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
       if (name) rows.push({ name, role: roleText || 'unknown' });
       if (representative) {
         const parentRole = classifyRole(roleText, name).role;
-        const repRole = parentRole.startsWith('buyer_')
-          ? 'Buyer Representative'
-          : parentRole.startsWith('seller_')
-            ? 'Seller Representative'
-            : parentRole.includes('logistics')
-              ? 'Logistics Representative'
-              : 'Representative';
+        const repRole = parentRole === 'buyer_logistics'
+          ? 'Buyer Logistics Representative'
+          : parentRole === 'seller_logistics'
+            ? 'Seller Logistics Representative'
+            : parentRole.startsWith('buyer_')
+              ? 'Buyer Representative'
+              : parentRole.startsWith('seller_')
+                ? 'Seller Representative'
+                : parentRole.includes('logistics')
+                  ? 'Logistics Representative'
+                  : 'Representative';
         rows.push({ name: cleanPerson(representative), role: repRole, person: true, represented_name: name });
       }
       return rows;
