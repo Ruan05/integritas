@@ -240,7 +240,9 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
     if (!displayName || displayName.length < 2) return null;
     // Reject obvious prose fragments and document labels. Deterministic fallback
     // creates entities only from explicit structured or labelled party records.
-    if (/[.!?]\s*$/.test(displayName) && displayName.split(/\s+/).length > 8) return null;
+    const displayWords = displayName.split(/\s+/).filter(Boolean);
+    if (/[.!?]\s*$/.test(displayName) && displayWords.length >= 5) return null;
+    if (/^(?:for|to|and|the|this|that|of|with|by|from|under|as|onto|into|upon)\b/i.test(displayName) && displayWords.length >= 4) return null;
     if (/^(?:seller|buyer|company|address|email|phone|website|representative|represented by|agreed by|signed|logistics company)\s*:?$/i.test(displayName)) return null;
     const canonical = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '');
     if (!canonical) return null;
@@ -802,7 +804,15 @@ function deterministicShardSummaryFromTrustedContext(shard, trustedContext, erro
       for (const { page, line } of lines) {
         const addParty = (name, role) => {
           const cleaned = clean(name, 240).replace(/[|]+$/g, '').trim();
-          if (cleaned && cleaned.length <= 240) partyLines.push(`name=${cleaned}; role=${role}; source_page=p.${page}`);
+          const words = cleaned.split(/\s+/).filter(Boolean);
+          const narrativeFragment = /^(?:for|to|and|the|this|that|of|with|by|from|under|as|onto|into|upon)\b/i.test(cleaned)
+            && words.length >= 4;
+          const sentenceFragment = /[.!?]$/.test(cleaned)
+            && words.length >= 5
+            && !/\b(?:ltd|limited|llc|inc|corp|corporation|company|co|bv|b\.v\.|plc|bank|marine|shipping|logistics)\.?$/i.test(cleaned);
+          if (cleaned && cleaned.length <= 240 && !narrativeFragment && !sentenceFragment) {
+            partyLines.push(`name=${cleaned}; role=${role}; source_page=p.${page}`);
+          }
         };
         let match;
         if ((match = line.match(/Seller\s+Company\s+Name\s*:?[\s]+(.+)$/i))) addParty(match[1], 'Seller / Title Holder');
