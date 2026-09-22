@@ -164,7 +164,9 @@ assert.ok(largeInvestigationRunner.includes("FREE_OPENROUTER_MODELS.has(model)")
 assert.ok(largeInvestigationRunner.includes("const MAX_OPENROUTER_FREE_USES = 4"), 'large-case free-router usage must be globally bounded per investigation');
 assert.ok(largeInvestigationRunner.includes("const MAX_ZEN_FREE_USES = 4"), 'large-case Zen free usage must be bounded per investigation');
 assert.match(largeInvestigationRunner, /buildDocumentShards\(manifest, 1\)/, 'large-case runner must isolate each document so PDF-tool provenance is attributable');
-assert.match(investigationConfig, /provider:\s*\"perplexity\"/, 'investigation web search must use the explicit Perplexity/OpenRouter route');
+assert.match(investigationConfig, /provider:\s*\"parallel-free\"/, 'investigation web search must use the explicit key-free Parallel route');
+assert.match(investigationConfig, /load:\s*\{\s*paths:\s*\[\"\/opt\/openclaw-source\/extensions\/parallel\"\]/, 'investigation config must load the pinned official Parallel plugin source');
+assert.match(investigationConfig, /entries:\s*\{\s*parallel:\s*\{\s*enabled:\s*true/, 'investigation config must explicitly enable the Parallel plugin');
 assert.match(largeInvestigationRunner, /mapLimit\(shards, 4/, 'document shard concurrency must remain bounded at four');
 assert.match(largeInvestigationRunner, /mapLimit\(plan\.research_lanes, 4/, 'research lane concurrency must remain bounded at four');
 assert.match(largeInvestigationRunner, /failed every validated model route/, 'large-case runner must fail over on validation failure, not only transport failure');
@@ -225,3 +227,5 @@ for (const file of [commands, worker, client, service, edge, investigationRunner
 }
 
 console.log('Integritas control bridge policy checks passed');
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
