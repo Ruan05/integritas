@@ -167,7 +167,7 @@ assert.match(largeInvestigationRunner, /buildDocumentShards\(manifest, 1\)/, 'la
 assert.match(investigationConfig, /provider:\s*\"parallel-free\"/, 'investigation web search must use the explicit key-free Parallel route');
 assert.match(investigationConfig, /load:\s*\{\s*paths:\s*\[\"\/opt\/openclaw-source\/extensions\/parallel\"\]/, 'investigation config must load the pinned official Parallel plugin source');
 assert.match(investigationConfig, /entries:\s*\{\s*parallel:\s*\{\s*enabled:\s*true/, 'investigation config must explicitly enable the Parallel plugin');
-assert.match(largeInvestigationRunner, /mapLimit\(shards, 4/, 'document shard concurrency must remain bounded at four');
+assert.match(largeInvestigationRunner, /mapLimit\(shards, 2/, 'document shard concurrency must remain bounded at two to reduce provider-rate-limit cascades');
 assert.match(largeInvestigationRunner, /mapLimit\(plan\.research_lanes, 4/, 'research lane concurrency must remain bounded at four');
 assert.match(largeInvestigationRunner, /failed every validated model route/, 'large-case runner must fail over on validation failure, not only transport failure');
 assert.match(largeInvestigationRunner, /validateInvestigationBundle\(finalBundle, manifest, reportMarkdown\)/, 'large-case deterministic assembly must pass canonical validation');
