@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { ControlClient } from './client.mjs';
@@ -112,9 +113,16 @@ while (!stopping) {
         ? await executeInvestigation(validated, {
           client,
           repoRoot: process.env.INTEGRITAS_REPO_ROOT || '/opt/integritas/current',
+          retainWorkspace: true,
         })
         : await executeCommand(validated);
-      if (!result?.cancelled && !result?.paused) await client.complete(command.id, result);
+      if (!result?.cancelled && !result?.paused) {
+        if (result?.terminal_outcome && result.terminal_outcome !== 'completed') {
+          await client.fail(command.id, `investigation_${result.terminal_outcome}`, JSON.stringify({ terminal_outcome: result.terminal_outcome }).slice(0, 1000));
+        } else {
+          await client.complete(command.id, result);
+        }
+      }
     } catch (error) {
       await client.fail(command.id, 'execution_failed', String(error.message || error).slice(0, 1000));
     } finally {
