@@ -236,7 +236,14 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
   const signalMap = new Map();
 
   const upsertEntity = (candidate) => {
-    const displayName = clean(candidate?.name);
+    const rawDisplayName = clean(candidate?.name);
+    if (!rawDisplayName || rawDisplayName.length < 2) return null;
+    const initialRole = classifyRole(candidate.role, rawDisplayName);
+    const displayName = (candidate?.person || initialRole.entity_type === 'person')
+      ? cleanPerson(rawDisplayName)
+        .replace(/\s+(?:REPRESENTED\s+BY|REPRESENTATIVE)\s*:\s*.+$/i, '')
+        .trim()
+      : rawDisplayName;
     if (!displayName || displayName.length < 2) return null;
     // Reject obvious prose fragments and document labels. Deterministic fallback
     // creates entities only from explicit structured or labelled party records.
