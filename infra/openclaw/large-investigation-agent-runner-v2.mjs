@@ -904,7 +904,7 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
     ? criticIssues.map((row) => `${row.severity}: ${row.description} Correction: ${row.recommended_correction}`).join(' ')
     : 'No independent critic issue was recorded.';
   const sections = new Map();
-  sections.set(headings[0], `**Decision status:** ${status.toUpperCase()}\n\n${baseStatus}\n\nThe current evidence supports only the claims explicitly listed in the finding ledger below. Identity, authenticity, authority, capacity, sanctions status and transaction performance remain unverified unless a finding is linked to an appropriate source.\n\n**Subjects currently isolated by the evidence model:** ${entityNames}.\n\n**Finding status:** ${statusSummary}. **Materiality:** ${materialitySummary}.\n\n**Research coverage:** ${noExternal}`);
+  sections.set(headings[0], `Executive Decision Summary\n\n**Decision status:** ${status.toUpperCase()}\n\n${baseStatus}\n\nThe current evidence supports only the claims explicitly listed in the finding ledger below. Identity, authenticity, authority, capacity, sanctions status and transaction performance remain unverified unless a finding is linked to an appropriate source.\n\n**Subjects currently isolated by the evidence model:** ${entityNames}.\n\n**Finding status:** ${statusSummary}. **Materiality:** ${materialitySummary}.\n\n**Research coverage:** ${noExternal}`);
   if (spec.id === '01') {
     sections.set(headings[1], `Complete the following before any approval or release:\n\n${nextSteps}\n\nThe independent review result was ${critic?.verdict || 'revise'}. ${criticSummary}`);
     sections.set(headings[2], `### Control totals\n\n${markdownTable(['Metric', 'Value'], [
