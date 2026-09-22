@@ -410,7 +410,10 @@ function candidates(role, synthetic) {
   return uniq(rows);
 }
 function timeoutFor(role) {
-  return { shard: 300, plan: 240, analysis: 300, lane: 360, critic: 300, report: 300 }[role] ?? 240;
+  // The deterministic v2 scheduler is a safe planner fallback. Keep optional
+  // model planning short so provider stalls cannot consume the investigation
+  // budget needed for evidence analysis, research, critic and report synthesis.
+  return { shard: 300, plan: 90, analysis: 300, lane: 360, critic: 300, report: 300 }[role] ?? 240;
 }
 
 function isPaidOpenRouterModel(model) {
@@ -494,7 +497,7 @@ async function invoke(jobDir, messageFile, model, timeoutSeconds, synthetic) {
   });
 }
 async function validated({
-  jobDir, id, role, task, execName, validator, synthetic, allowExternal = false, progressState = null,
+  jobDir, id, role, task, execName, validator, synthetic, allowExternal = false, progressState = null, maxModelAttempts = null,
 }) {
   const taskName = `large-v2-task-${safePart(id)}.md`;
   await writeAtomic(jobDir, taskName, task);
@@ -507,7 +510,10 @@ async function validated({
   } catch (error) {
     failures.push({ model: 'retained', error: String(error?.message ?? error).slice(0, 500) });
   }
-  const models = candidates(role, synthetic);
+  const configuredModels = candidates(role, synthetic);
+  const models = Number.isInteger(maxModelAttempts) && maxModelAttempts > 0
+    ? configuredModels.slice(0, maxModelAttempts)
+    : configuredModels;
   if (!models.length) throw new Error(`${id}: no configured provider candidate available`);
   let localOpenRouterFallbackUses = 0;
   let localZenFallbackUses = 0;
@@ -1282,6 +1288,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
           parseLargePlanFinal(final, { allowZeroLanes: synthetic }), synthetic,
         ),
         progressState: { stage: 'mapping_entities', progress: 38, phase: 'large_bounded_plan' },
+        maxModelAttempts: 1,
       });
       planResult = { ...planResult, planner_mode: 'optional_model_planner_v1' };
     } catch (error) {
