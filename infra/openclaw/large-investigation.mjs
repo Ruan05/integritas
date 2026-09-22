@@ -104,6 +104,43 @@ export function buildDocumentShards(manifest, shardSize = 4) {
   return shards;
 }
 
+function flattenShardEvidenceValue(value, maxLength, path = '', depth = 0) {
+  const clean = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (value == null) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    const leaf = clean(value);
+    return (path ? `${path}=${leaf}` : leaf).slice(0, maxLength);
+  }
+  if (depth >= 3) {
+    const fallback = clean(JSON.stringify(value));
+    return (path ? `${path}=${fallback}` : fallback).slice(0, maxLength);
+  }
+  if (Array.isArray(value)) {
+    const rows = value.map((item, index) => flattenShardEvidenceValue(item, maxLength, path ? `${path}[${index}]` : '', depth + 1))
+      .filter(Boolean);
+    return rows.join('; ').slice(0, maxLength);
+  }
+  if (typeof value === 'object') {
+    const rows = Object.entries(value).flatMap(([key, item]) => {
+      const next = path ? `${path}.${key}` : key;
+      const text = flattenShardEvidenceValue(item, maxLength, next, depth + 1);
+      return text ? [text] : [];
+    });
+    return rows.join('; ').slice(0, maxLength);
+  }
+  return '';
+}
+
+function normalizeShardEvidenceArray(value, label, maxItems, maxLength) {
+  if (!Array.isArray(value)) fail(`${label} must be an array`);
+  const normalized = value.slice(0, maxItems).map((item) => flattenShardEvidenceValue(item, maxLength))
+    .map((item) => item.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .map((item) => item.slice(0, maxLength));
+  if (normalized.length > maxItems) fail(`${label} exceeds maximum items`);
+  return normalized;
+}
+
 export function parseDocumentShardFinal(finalText, expectedDocumentIds) {
   const parsed = obj(parseSingleJsonObject(finalText, 'document shard final response'), 'document shard');
   allowedKeys(parsed, new Set(['documents']), 'document shard');
@@ -123,10 +160,17 @@ export function parseDocumentShardFinal(finalText, expectedDocumentIds) {
     seen.add(row.document_id);
     str(row.document_type, 'document_type', 160);
     str(row.issuer_claim, 'issuer_claim', 500, true);
-    stringArray(row.parties, 'parties', 30, 240);
-    stringArray(row.identifiers, 'identifiers', 60, 300);
-    stringArray(row.material_terms, 'material_terms', 40, 500);
-    stringArray(row.risk_flags, 'risk_flags', 30, 500);
+    // Some capable vision models return richer JSON objects despite the compact-string
+    // contract. Normalize those bounded structures deterministically rather than
+    // discarding a successful page-level extraction and exhausting provider fallbacks.
+    row.parties = normalizeShardEvidenceArray(row.parties, 'parties', 30, 500);
+    row.identifiers = normalizeShardEvidenceArray(row.identifiers, 'identifiers', 60, 500);
+    row.material_terms = normalizeShardEvidenceArray(row.material_terms, 'material_terms', 40, 700);
+    row.risk_flags = normalizeShardEvidenceArray(row.risk_flags, 'risk_flags', 30, 700);
+    stringArray(row.parties, 'parties', 30, 500);
+    stringArray(row.identifiers, 'identifiers', 60, 500);
+    stringArray(row.material_terms, 'material_terms', 40, 700);
+    stringArray(row.risk_flags, 'risk_flags', 30, 700);
     if (typeof row.instruction_like_text !== 'boolean') fail('instruction_like_text is invalid');
     // Provider output is untrusted and may exceed the requested bound. Keep the
     // evidence excerpt useful while enforcing the canonical bundle size deterministically.
