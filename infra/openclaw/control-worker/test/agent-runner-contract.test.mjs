@@ -115,7 +115,9 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.match(large, /deterministic_evidence_scheduler_v2/, 'large investigations must retain a multi-lane deterministic fallback plan');
   assert.match(large, /applyEvidenceDrivenSpecialistRouting\(plan, manifest\)/, 'large plans must use the same evidence-driven specialist router');
   assert.match(large, /parseDocumentShardFinal/, 'document shards must validate exact coverage');
-  assert.match(large, /PDF evidence extraction requires an observed OpenClaw pdf tool call/, 'PDF shards must prove substantive pdf-tool use');
+  assert.match(large, /shardTrustedContext/, 'PDF shards must receive trusted deterministic forensic and page-extraction context directly');
+  assert.match(large, /shardNeedsPdfVisualReview/, 'PDF visual tool use must be evidence-proportional rather than mandatory for native-text pages');
+  assert.match(large, /PDF visual review is required because deterministic page extraction was incomplete or non-native/, 'OCR or incomplete PDF extraction must still require an observed pdf-tool visual review');
   assert.match(large, /parseLaneFinal/, 'research lanes must use a bounded schema');
   assert.match(large, /validateInvestigationBundle\(finalBundle, manifest, reportMarkdown\)/, 'deterministic assembly must pass the canonical bundle validator');
   assert.match(large, /provider: 'integritas', model: 'deterministic-large-assembly-v2'/, 'final canonical bundle must be assembled deterministically rather than by a model');
