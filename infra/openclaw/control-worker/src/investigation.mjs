@@ -525,7 +525,7 @@ async function readBounded(filePath, maxBytes = MAX_OUTPUT_BYTES) {
   return readFile(filePath);
 }
 
-const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
+const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser', 'browser_search']);
 
 async function readObservedResearchSummary(jobDir) {
   const raw = await readBounded(path.join(jobDir, 'agent-exec.json'));
