@@ -27,8 +27,10 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.ok(source.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';"));
   assert.ok(source.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';"));
   assert.ok(source.includes("const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash';"));
-  assert.ok(source.includes('planner: { model: GLM_53'));
-  assert.ok(source.includes('research: { model: DEEPSEEK_FLASH'));
+  assert.match(source, /const PAID_PROVIDER_ENABLED = process\.env\.INTEGRITAS_ALLOW_PAID_PROVIDER === 'true'/);
+  assert.match(source, /const REAL_PRIMARY = PAID_PROVIDER_ENABLED \? DEEPSEEK_FLASH : NVIDIA_PRIMARY/);
+  assert.match(source, /const REAL_PLANNER_PRIMARY = PAID_PROVIDER_ENABLED \? GLM_53 : NVIDIA_PRIMARY/);
+  assert.match(source, /QUALITY_FALLBACKS = PAID_PROVIDER_ENABLED/);
   assert.match(source, /integritas-openrouter\/nvidia\/nemotron-3-ultra-550b-a55b:free/);
   assert.match(source, /integritas-openrouter\/nvidia\/nemotron-3-super-120b-a12b:free/);
   assert.match(source, /integritas-openrouter\/nex-agi\/nex-n2\.5-pro:free/);
