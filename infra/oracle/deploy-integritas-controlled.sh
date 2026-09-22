@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# Single-flight deployment guard: release switching and service restarts must never overlap.
+DEPLOY_LOCK=/run/lock/integritas-release-deploy.lock
+install -d -m 0755 /run/lock
+exec 9>"${DEPLOY_LOCK}"
+flock -n 9 || {
+  echo "Another Integritas deployment is already running; refusing concurrent release mutation." >&2
+  exit 9
+}
+
 SHA="${1:-}"
 SOURCE_URL=https://github.com/Ruan05/integritas.git
 APPROVED_BRANCH=integritas-command-center-foundation
