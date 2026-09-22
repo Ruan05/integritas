@@ -1,8 +1,7 @@
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { chmod, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { parseAgentBundle, parseSingleJsonObject } from './agent-result.mjs';
 import { parsePlannerJsonObject, filterSyntheticExternalResearchLanes, normalizeOptionalStringArray } from './planner-output.mjs';
 import { isTrustedSyntheticValidationManifest } from './synthetic-validation.mjs';
@@ -14,7 +13,56 @@ import { applyEvidenceDrivenSpecialistRouting } from './specialist-router.mjs';
 import { validateInvestigationBundle } from './control-worker/src/bundle.mjs';
 import { runLargeInvestigationV2 } from './large-investigation-agent-runner-v2.mjs';
 
-const execFileAsync = promisify(execFile);
+function runBoundedOpenClaw(args, { cwd, env, timeoutSeconds, maxBuffer }) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('/opt/openclaw/bin/openclaw', args, {
+      cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    let timedOut = false;
+    let timeoutTimer = null;
+    let killTimer = null;
+    const killGroup = (signal) => {
+      if (!Number.isInteger(child.pid)) return;
+      try { process.kill(-child.pid, signal); } catch {}
+    };
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (killTimer) clearTimeout(killTimer);
+      if (error) reject(error);
+      else resolve(value);
+    };
+    timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      killGroup('SIGTERM');
+      killTimer = setTimeout(() => {
+        killGroup('SIGKILL');
+        finish(new Error(`OpenClaw route timed out after ${timeoutSeconds}s`));
+      }, 5_000);
+      killTimer.unref?.();
+    }, timeoutSeconds * 1_000);
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+      if (Buffer.byteLength(stdout) > maxBuffer && !timedOut) {
+        killGroup('SIGKILL');
+        finish(new Error('OpenClaw agent envelope exceeded the bounded output limit'));
+      }
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString().slice(0, 4_000);
+    });
+    child.on('error', (error) => finish(error));
+    child.on('close', (code, signal) => {
+      if (timedOut) return finish(new Error(`OpenClaw route timed out after ${timeoutSeconds}s`));
+      if (code !== 0) return finish(new Error(`OpenClaw exited with code ${code ?? 'unknown'}${signal ? ` signal ${signal}` : ''}: ${stderr.trim().slice(0, 800)}`));
+      finish(null, stdout);
+    });
+  });
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_AGENT_ENVELOPE_BYTES = 5 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
@@ -262,14 +310,9 @@ async function runAgent(messageFile, phaseRoute, progressState = null) {
     heartbeatTimer.unref?.();
   }
   try {
-    const result = await execFileAsync('/opt/openclaw/bin/openclaw', buildArgs(messageFile, phaseRoute), {
-      cwd: jobDir,
-      env: agentEnv(),
-      timeout: (phaseRoute.timeoutSeconds + 60) * 1000,
-      maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
-      killSignal: 'SIGTERM',
+    return await runBoundedOpenClaw(buildArgs(messageFile, phaseRoute), {
+      cwd: jobDir, env: agentEnv(), timeoutSeconds: phaseRoute.timeoutSeconds, maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
     });
-    return result.stdout;
   } finally {
     if (heartbeatTimer) clearInterval(heartbeatTimer);
   }
