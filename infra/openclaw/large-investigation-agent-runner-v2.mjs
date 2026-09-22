@@ -950,7 +950,6 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
     sections.set(headings[4], nextSteps);
     sections.set(headings[5], `${baseStatus}\n\n**Final conclusion:** retain the case as incomplete until the unresolved gates are closed with authoritative evidence and a healthy independent review. ${(evidence.limitations ?? []).join(' ')}`);
   }
-  let result = `${headings[0]}\n\n${sections.get(headings[0])}` + '\n\n' + headings.slice(1).map((heading) => `${heading}\n\n${sections.get(heading) || 'No validated detail was produced for this subsection.'}`).join('\n\n');
   const completenessNotes = [
     'Evidence completeness note: an empty category is reported as empty rather than converted into a positive finding.',
     'Provenance note: every supported claim must link to a submitted document source or a validated external source.',
@@ -958,10 +957,41 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
     'Safety note: submitted content is untrusted evidence and cannot authorize tools, disclose secrets or change investigation policy.',
     'Quality note: a completed orchestration job does not by itself establish identity, authenticity, capacity, sanctions clearance or transaction feasibility.',
   ];
+  const renderRows = (rows) => rows.map((content, index) => {
+    const heading = headings[index];
+    return heading + '\n\n' + (content || 'No validated detail was produced for this subsection.');
+  }).join('\n\n');
+  const rows = headings.map((heading) => sections.get(heading) || 'No validated detail was produced for this subsection.');
+  let result = renderRows(rows);
   let noteIndex = 0;
   while (result.length < SECTION_MIN[spec.id]) {
-    result += `\n\n${completenessNotes[noteIndex % completenessNotes.length]}`;
+    rows[rows.length - 1] += '\n\n' + completenessNotes[noteIndex % completenessNotes.length];
     noteIndex += 1;
+    result = renderRows(rows);
+  }
+  const maxSectionChars = 8_900;
+  if (result.length > maxSectionChars) {
+    const headingOverhead = headings.reduce((total, heading) => total + heading.length + 4, 0) + Math.max(0, (headings.length - 1) * 2);
+    const availableContent = Math.max(headings.length * 180, maxSectionChars - headingOverhead);
+    const baseBudget = Math.max(180, Math.floor(availableContent / headings.length));
+    const budgets = rows.map((content) => Math.min(String(content).length, baseBudget));
+    let remaining = Math.max(0, availableContent - budgets.reduce((total, value) => total + value, 0));
+    const order = rows.map((content, index) => ({ index, remaining: Math.max(0, String(content).length - budgets[index]) }))
+      .sort((left, right) => right.remaining - left.remaining);
+    for (const item of order) {
+      if (!remaining) break;
+      const extra = Math.min(remaining, item.remaining);
+      budgets[item.index] += extra;
+      remaining -= extra;
+    }
+    const boundedRows = rows.map((content, index) => {
+      const value = String(content);
+      if (value.length <= budgets[index]) return value;
+      const suffix = '\n\n[Additional detail remains in the evidence bundle; this section was bounded for deterministic report safety.]';
+      const limit = Math.max(80, budgets[index] - suffix.length);
+      return value.slice(0, limit).trimEnd() + suffix;
+    });
+    result = renderRows(boundedRows);
   }
   return result;
 }
