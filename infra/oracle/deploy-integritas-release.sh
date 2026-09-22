@@ -47,33 +47,32 @@ smoke_investigation_runtime() {
   local smoke_dir="/var/lib/integritas-runner/deploy-smoke.$$"
   local smoke_out="${smoke_dir}/output.json"
   local smoke_err="${smoke_dir}/stderr.log"
+  local attempt
   install -d -o openclaw -g integritas-openclaw -m 0770 "${smoke_dir}"
   cat >"${smoke_dir}/task.md" <<'EOF'
-This is a bounded Integritas deployment preflight. Use web_search exactly once with a harmless query for the official OpenClaw documentation. Do not use browser, web_fetch, files, or shell tools. Return exactly one raw JSON object with {"ok":true}. Do not include credentials or environment information.
+This is a bounded Integritas deployment preflight. This is specifically a tool-compliance test, not a knowledge question. You MUST call web_search exactly once with a harmless query for the official OpenClaw documentation. If you do not call web_search, return {"ok":false}. Do not use browser, web_fetch, files, or shell tools. After the successful web_search call, return exactly one raw JSON object with {"ok":true}. Do not include credentials or environment information.
 EOF
   chown openclaw:integritas-openclaw "${smoke_dir}/task.md"
   chmod 0640 "${smoke_dir}/task.md"
-  : >"${smoke_out}"
-  : >"${smoke_err}"
-  chown openclaw:integritas-openclaw "${smoke_out}" "${smoke_err}"
-  chmod 0640 "${smoke_out}" "${smoke_err}"
   set -a
   # shellcheck disable=SC1091
   . /etc/integritas/provider-secrets.env
   set +a
-  if ! /usr/sbin/runuser --preserve-environment -u openclaw -- /usr/bin/env \
-      HOME=/var/lib/openclaw OPENCLAW_HOME=/var/lib/openclaw OPENCLAW_STATE_DIR=/var/lib/openclaw \
-      /opt/openclaw/bin/openclaw agent exec \
-      --config /etc/openclaw/integritas-investigation.json \
-      --cwd "${smoke_dir}" --message-file "${smoke_dir}/task.md" \
-      --json --code-mode direct \
-      --model integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b --timeout 180 \
-      >"${smoke_out}" 2>"${smoke_err}"; then
-    rm -rf "${smoke_dir}"
-    echo "Integritas provider/search smoke failed." >&2
-    return 1
-  fi
-  if ! /usr/bin/python3 - "${smoke_out}" <<'PYSMOKE'
+
+  for attempt in 1 2 3; do
+    : >"${smoke_out}"
+    : >"${smoke_err}"
+    chown openclaw:integritas-openclaw "${smoke_out}" "${smoke_err}"
+    chmod 0640 "${smoke_out}" "${smoke_err}"
+    if /usr/sbin/runuser --preserve-environment -u openclaw -- /usr/bin/env \
+        HOME=/var/lib/openclaw OPENCLAW_HOME=/var/lib/openclaw OPENCLAW_STATE_DIR=/var/lib/openclaw \
+        /opt/openclaw/bin/openclaw agent exec \
+        --config /etc/openclaw/integritas-investigation.json \
+        --cwd "${smoke_dir}" --message-file "${smoke_dir}/task.md" \
+        --json --code-mode direct \
+        --model integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b --timeout 180 \
+        >"${smoke_out}" 2>"${smoke_err}" \
+      && /usr/bin/python3 - "${smoke_out}" <<'PYSMOKE'
 import json, sys
 from pathlib import Path
 p = Path(sys.argv[1])
@@ -88,13 +87,18 @@ failures = summary.get('failures', 0) if isinstance(summary, dict) else 0
 if row.get('status') != 'ok' or 'web_search' not in tools or not isinstance(calls, int) or calls < 1 or failures != 0:
     raise SystemExit('provider/search smoke did not produce a successful observed web_search call')
 PYSMOKE
-  then
-    rm -rf "${smoke_dir}"
-    echo "Integritas provider/search smoke validation failed." >&2
-    return 1
-  fi
+    then
+      rm -rf "${smoke_dir}"
+      echo "Integritas provider/search smoke passed on attempt ${attempt}."
+      return 0
+    fi
+    echo "Integritas provider/search smoke attempt ${attempt}/3 did not prove a successful observed web_search call." >&2
+    /usr/bin/sleep 2
+  done
+
   rm -rf "${smoke_dir}"
-  echo "Integritas provider/search smoke passed."
+  echo "Integritas provider/search smoke failed after 3 bounded attempts." >&2
+  return 1
 }
 
 snapshot_managed_files() {
