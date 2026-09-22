@@ -128,6 +128,9 @@ export function parseDocumentShardFinal(finalText, expectedDocumentIds) {
     stringArray(row.material_terms, 'material_terms', 40, 500);
     stringArray(row.risk_flags, 'risk_flags', 30, 500);
     if (typeof row.instruction_like_text !== 'boolean') fail('instruction_like_text is invalid');
+    // Provider output is untrusted and may exceed the requested bound. Keep the
+    // evidence excerpt useful while enforcing the canonical bundle size deterministically.
+    if (typeof row.evidence_excerpt === 'string') row.evidence_excerpt = row.evidence_excerpt.slice(0, 500);
     str(row.evidence_excerpt, 'evidence_excerpt', 500, true);
   }
   return { documents: rows };
