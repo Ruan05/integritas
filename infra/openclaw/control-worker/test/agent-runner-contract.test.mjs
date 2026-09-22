@@ -133,6 +133,8 @@ test('large investigations shard before legacy planning and assemble the canonic
 test('investigation profile uses only required provider SecretRefs and keeps the evidence workspace read-only', async () => {
   const config = await readFile(new URL('../../integritas-investigation.json5', import.meta.url), 'utf8');
   const zenConfig = await readFile(new URL('../../integritas-investigation-zen.json5', import.meta.url), 'utf8');
+  assert.doesNotMatch(config, /\\$include:\\s*["']\\.\\/openclaw\\.json["']/, 'case workers must not inherit the operator config');
+  assert.match(config, /memory:\\s*\\{[\\s\\S]*search:\\s*\\{[\\s\\S]*enabled:\\s*false/, 'case-worker memory must be disabled to preserve case isolation');
   assert.match(config, /workspaceAccess: "ro"/);
   assert.match(config, /profile: "minimal"/);
   assert.match(config, /modelPolicy:\s*\{[\s\S]*allow:/, 'investigation overlay must carry its own model policy');
