@@ -323,7 +323,7 @@ Deno.serve(async (req) => {
         const retrievedAt = typeof body.retrieved_at === 'string' ? body.retrieved_at : '';
         const toolSummary = isObject(body.tool_summary) ? body.tool_summary : {};
         const tools = Array.isArray(toolSummary.tools)
-          ? toolSummary.tools.filter((tool): tool is string => typeof tool === 'string' && ['web_search', 'web_fetch', 'browser'].includes(tool)).slice(0, 8)
+          ? toolSummary.tools.filter((tool): tool is string => typeof tool === 'string' && ['web_search', 'web_fetch', 'browser', 'browser_search'].includes(tool)).slice(0, 8)
           : [];
         const calls = Number(toolSummary.calls);
         const failures = Number(toolSummary.failures);
