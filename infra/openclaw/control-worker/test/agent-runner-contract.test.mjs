@@ -111,7 +111,7 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.match(large, /buildDeterministicCaseAnalysis/, 'large investigations must retain an evidence-only analysis fallback');
   assert.match(large, /const LARGE_MODEL_CRITIC_ENABLED = process\.env\.INTEGRITAS_ENABLE_LARGE_MODEL_CRITIC !== 'false'/, 'large critic must be on by default');
   assert.match(large, /const LARGE_MODEL_REPORT_ENABLED = process\.env\.INTEGRITAS_ENABLE_LARGE_MODEL_REPORT !== 'false'/, 'large report synthesis must be on by default');
-  assert.match(large, /lane: 360/, 'maximum-depth research lanes must have a bounded but practical provider budget');
+  assert.match(large, /lane: 180/, 'maximum-depth research lanes must use the bounded latency budget before deterministic recovery');
   assert.match(large, /deterministic_evidence_scheduler_v2/, 'large investigations must retain a multi-lane deterministic fallback plan');
   assert.match(large, /applyEvidenceDrivenSpecialistRouting\(plan, manifest\)/, 'large plans must use the same evidence-driven specialist router');
   assert.match(large, /parseDocumentShardFinal/, 'document shards must validate exact coverage');
