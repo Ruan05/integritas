@@ -34,6 +34,7 @@ export class ControlClient {
   lease() { return this.call('worker_lease'); }
   touch(commandId) { return this.call('worker_touch', { command_id: commandId }); }
   complete(commandId, result) { return this.call('worker_complete', { command_id: commandId, result_summary: result }); }
+  incomplete(commandId, result) { return this.call('worker_incomplete', { command_id: commandId, result_summary: result }); }
   fail(commandId, code, summary) { return this.call('worker_fail', { command_id: commandId, error_code: code, error_summary: summary }); }
   storageSelfTest(commandId) { return this.call('worker_storage_selftest', { command_id: commandId }); }
   manifest(commandId, caseJobId) { return this.call('worker_manifest', { command_id: commandId, case_job_id: caseJobId }); }
