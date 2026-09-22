@@ -34,6 +34,16 @@ export function bicFormat(candidate) {
   };
 }
 
+function structuralCandidateFragments(value) {
+  const raw = String(value ?? '').trim();
+  const fragments = [raw];
+  const compactIban = raw.match(/\b[A-Z]{2}[0-9]{2}[A-Z0-9]{10,30}\b/gi) ?? [];
+  fragments.push(...compactIban);
+  const bic = raw.match(/(?:SWIFT(?:\/BIC)?|BIC)[\s:;=/-]*(?:VALUE[\s:;=-]*)?([A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)/i);
+  if (bic?.[1]) fragments.push(bic[1]);
+  return [...new Set(fragments.filter(Boolean))];
+}
+
 export function buildDeterministicChecks(plan) {
   const candidates = [];
   for (const profile of plan?.document_profiles ?? []) {
@@ -52,12 +62,20 @@ export function buildDeterministicChecks(plan) {
       rows.push(candidate.document_id);
       repeated.set(normalized, rows);
     }
-    const iban = ibanChecksum(candidate.value);
-    if (iban) ibans.push({ document_id: candidate.document_id, ...iban });
+    for (const fragment of structuralCandidateFragments(candidate.value)) {
+      const iban = ibanChecksum(fragment);
+      if (iban && !ibans.some((row) => row.document_id === candidate.document_id && row.value === iban.value)) {
+        ibans.push({ document_id: candidate.document_id, ...iban });
+      }
+      const bic = bicFormat(fragment);
+      if (bic && !bicCandidates.some((row) => row.document_id === candidate.document_id && row.value === bic.value)) {
+        bicCandidates.push({ document_id: candidate.document_id, ...bic });
+      }
+    }
     const imo = imoChecksum(candidate.value);
-    if (imo) imoNumbers.push({ document_id: candidate.document_id, ...imo });
-    const bic = bicFormat(candidate.value);
-    if (bic) bicCandidates.push({ document_id: candidate.document_id, ...bic });
+    if (imo && !imoNumbers.some((row) => row.document_id === candidate.document_id && row.value === imo.value)) {
+      imoNumbers.push({ document_id: candidate.document_id, ...imo });
+    }
   }
   return {
     schema_version: 1,
