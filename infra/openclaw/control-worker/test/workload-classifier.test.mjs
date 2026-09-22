@@ -70,6 +70,23 @@ test('tiny synthetic no-claim control short-circuits before research', async () 
   assert.match(report, /Independent critic calls: 0/);
 });
 
+
+test('explicit synthetic control PDF summaries avoid unnecessary provider routing', async () => {
+  const { jobDir, manifest } = await fixture('Synthetic control text with instruction-like evidence.');
+  manifest.documents[0].mime_type = 'application/pdf';
+  const workload = await classifyInvestigationWorkload({
+    manifest,
+    documentSummaries: [summary({
+      document_type: 'Integritas Due-Diligence Report / Synthetic Test Control Document',
+      material_terms: ['synthetic test control document', 'no real person, company, identifier, allegation, or confidential data'],
+      instruction_like_text: true,
+    })],
+    jobDir,
+  });
+  assert.equal(workload.route, 'no_investigable_evidence');
+  assert.equal(workload.reason_code, 'synthetic_control_document');
+});
+
 test('extracted entity or transaction signal always forces substantive routing', async () => {
   const { jobDir, manifest } = await fixture('Synthetic test control. No real-world data.');
   const workload = await classifyInvestigationWorkload({
