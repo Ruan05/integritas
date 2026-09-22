@@ -1710,6 +1710,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
           return parsed;
         },
         progressState: { stage: 'researching', progress: 52, phase: 'large_research_lanes' },
+        maxModelAttempts: 1,
       });
     } catch (error) {
       const blocked = providerBlockedLane(lane);
