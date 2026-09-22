@@ -331,6 +331,94 @@ def validate_forensics(bundle, manifest, forensics, errors):
     return {'documents': len(seen)}
 
 
+def validate_page_extraction(bundle, manifest, page_extraction, errors):
+    if page_extraction is None:
+        return {
+            'documents': 0, 'pages': 0, 'unreadable_pages': 0,
+            'visual_review_pages': 0, 'truncated_documents': 0, 'complete': False,
+        }
+    if not isinstance(page_extraction, dict) or page_extraction.get('schema_version') != 1 or page_extraction.get('tool') != 'integritas_page_extract_v1':
+        errors.append('page extraction: invalid trusted result')
+        return {
+            'documents': 0, 'pages': 0, 'unreadable_pages': 0,
+            'visual_review_pages': 0, 'truncated_documents': 0, 'complete': False,
+        }
+    reports = page_extraction.get('reports')
+    if not isinstance(reports, list):
+        errors.append('page extraction: reports must be an array')
+        return {
+            'documents': 0, 'pages': 0, 'unreadable_pages': 0,
+            'visual_review_pages': 0, 'truncated_documents': 0, 'complete': False,
+        }
+    manifest_docs = {
+        row.get('id'): row for row in manifest.get('documents', [])
+        if isinstance(row, dict) and isinstance(row.get('id'), str)
+    }
+    seen = set()
+    page_total = 0
+    unreadable = 0
+    visual_review_pages = 0
+    truncated_documents = 0
+    for index, row in enumerate(reports):
+        if not isinstance(row, dict):
+            errors.append(f'page extraction report {index}: invalid')
+            continue
+        document_id = row.get('document_id')
+        expected = manifest_docs.get(document_id)
+        if expected is None:
+            errors.append(f'page extraction report {index}: unknown document_id')
+            continue
+        if document_id in seen:
+            errors.append(f'page extraction report {index}: duplicate document_id')
+        seen.add(document_id)
+        if row.get('sha256') != expected.get('sha256'):
+            errors.append(f'page extraction report {index}: sha256 mismatch')
+        if row.get('size_bytes') != expected.get('size_bytes'):
+            errors.append(f'page extraction report {index}: size mismatch')
+        if row.get('original_name') != expected.get('name'):
+            errors.append(f'page extraction report {index}: original name mismatch')
+        pages = row.get('pages')
+        page_count = row.get('page_count')
+        if not isinstance(page_count, int) or page_count < 1 or not isinstance(pages, list) or len(pages) != page_count:
+            errors.append(f'page extraction report {index}: invalid page coverage')
+            continue
+        if row.get('truncated_to_page_limit') is True:
+            truncated_documents += 1
+        for page_index, page in enumerate(pages, 1):
+            if not isinstance(page, dict) or page.get('page') != page_index:
+                errors.append(f'page extraction report {index}: non-contiguous page coverage')
+                continue
+            method = page.get('method')
+            if method not in {'native_text', 'native_sparse', 'ocr_tesseract', 'unreadable'}:
+                errors.append(f'page extraction report {index}: invalid extraction method')
+            text = page.get('text')
+            if not isinstance(text, str) or len(text) > 8000:
+                errors.append(f'page extraction report {index}: invalid page text')
+            is_unreadable = page.get('unreadable') is True or not isinstance(text, str) or not text.strip()
+            if is_unreadable:
+                unreadable += 1
+            if is_unreadable or method not in {'native_text', 'native_sparse'}:
+                visual_review_pages += 1
+            page_total += 1
+    missing = sorted(set(manifest_docs) - seen)
+    if missing:
+        errors.append('page extraction: missing manifest documents: ' + ','.join(missing))
+    complete = (
+        not missing
+        and len(seen) == len(manifest_docs)
+        and unreadable == 0
+        and truncated_documents == 0
+    )
+    return {
+        'documents': len(seen),
+        'pages': page_total,
+        'unreadable_pages': unreadable,
+        'visual_review_pages': visual_review_pages,
+        'truncated_documents': truncated_documents,
+        'complete': complete,
+    }
+
+
 def validate_report_front_matter(report_text, errors):
     master = re.search(
         r'(?im)^#{1,6}\s*MASTER\s+(?:ISSUE\s+)?SUMMARY(?:\s*[—-]\s*READ\s+THIS\s+FIRST)?\s*$',
@@ -438,7 +526,7 @@ def normalized_paragraphs(report_text):
     return rows
 
 
-def validate_semantic_maximum(bundle, manifest, report_text, errors, plan=None, agent_exec=None):
+def validate_semantic_maximum(bundle, manifest, report_text, errors, plan=None, agent_exec=None, page_extraction_summary=None):
     if bundle.get('depth') != 'maximum' or evidence_proportional_no_evidence(bundle):
         return {
             'research_lanes': 0, 'external_sources': 0, 'source_anchor_ratio': 1.0,
@@ -469,9 +557,16 @@ def validate_semantic_maximum(bundle, manifest, report_text, errors, plan=None, 
     if isinstance(agent_exec, dict):
         summary = agent_exec.get('toolSummary') if isinstance(agent_exec.get('toolSummary'), dict) else {}
         observed_tools.update(x for x in summary.get('tools', []) if isinstance(x, str))
+    extraction = page_extraction_summary if isinstance(page_extraction_summary, dict) else {}
+    deterministic_native_complete = (
+        extraction.get('complete') is True
+        and extraction.get('visual_review_pages', 0) == 0
+        and extraction.get('truncated_documents', 0) == 0
+    )
+    pdf_tool_required = bool(pdf_docs) and not deterministic_native_complete
     pdf_tool_observed = agent_exec is None or not pdf_docs or 'pdf' in observed_tools
-    if not pdf_tool_observed:
-        errors.append('semantic QA: maximum PDF evidence was not substantively inspected with the OpenClaw pdf tool')
+    if pdf_tool_required and not pdf_tool_observed:
+        errors.append('semantic QA: maximum PDF evidence requires either complete trusted native page extraction or an observed OpenClaw pdf visual-review tool call')
     submitted_by_document = {
         row.get('document_id'): row for row in submitted
         if isinstance(row, dict) and isinstance(row.get('document_id'), str)
@@ -543,6 +638,8 @@ def validate_semantic_maximum(bundle, manifest, report_text, errors, plan=None, 
         'source_anchor_ratio': (len(mentioned) / len(source_keys)) if source_keys else 1.0,
         'duplicate_paragraph_ratio': round(duplicate_ratio, 4),
         'pdf_tool_observed': pdf_tool_observed,
+        'pdf_tool_required': pdf_tool_required,
+        'page_extraction_complete': deterministic_native_complete,
     }
 
 def validate_execution(bundle, errors):
@@ -584,7 +681,7 @@ def validate_execution(bundle, errors):
         errors.append('execution: maximum-depth investigation must record completed integritas_forensics_v1')
 
 
-def validate(bundle, manifest, report_text, current_revision, forensics=None, plan=None, agent_exec=None):
+def validate(bundle, manifest, report_text, current_revision, forensics=None, plan=None, agent_exec=None, page_extraction=None):
     errors = []
     if not isinstance(bundle, dict):
         return ['bundle: must be an object'], {}
@@ -606,9 +703,13 @@ def validate(bundle, manifest, report_text, current_revision, forensics=None, pl
     if not isinstance(limitations, list) or len(limitations) > 100 or any(not isinstance(x, str) or len(x) > 4000 for x in limitations):
         errors.append('limitations: invalid')
     forensics_summary = validate_forensics(bundle, manifest, forensics, errors)
+    page_extraction_summary = validate_page_extraction(bundle, manifest, page_extraction, errors)
     front_matter = validate_report_front_matter(report_text, errors)
     prototype1 = validate_maximum_report(bundle, report_text, errors)
-    semantic = validate_semantic_maximum(bundle, manifest, report_text, errors, plan=plan, agent_exec=agent_exec)
+    semantic = validate_semantic_maximum(
+        bundle, manifest, report_text, errors,
+        plan=plan, agent_exec=agent_exec, page_extraction_summary=page_extraction_summary
+    )
     validate_execution(bundle, errors)
     execution = bundle.get('execution') if isinstance(bundle.get('execution'), dict) else {}
     if execution.get('terminal_outcome') == 'completed':
@@ -629,6 +730,9 @@ def validate(bundle, manifest, report_text, current_revision, forensics=None, pl
         'prototype1_missing_lanes': prototype1.get('missing_lanes', []),
         'prototype1_missing_features': prototype1.get('missing_features', []),
         'forensic_documents': forensics_summary.get('documents', 0),
+        'page_extraction_documents': page_extraction_summary.get('documents', 0),
+        'page_extraction_pages': page_extraction_summary.get('pages', 0),
+        'page_extraction_unreadable_pages': page_extraction_summary.get('unreadable_pages', 0),
         'front_matter_valid': front_matter.get('valid', False),
         'semantic_quality': semantic,
     }
@@ -657,10 +761,15 @@ def main():
         sibling = args.bundle.parent
         plan_path = sibling / 'investigation-plan.json'
         exec_path = sibling / 'agent-exec.json'
+        page_extraction_path = sibling / 'page-extraction.json'
         plan = json.loads(plan_path.read_text(encoding='utf-8')) if plan_path.exists() else None
         agent_exec = json.loads(exec_path.read_text(encoding='utf-8')) if exec_path.exists() else None
+        page_extraction = json.loads(page_extraction_path.read_text(encoding='utf-8')) if page_extraction_path.exists() else None
         revision = args.current_revision if args.current_revision is not None else manifest.get('case_revision')
-        errors, summary = validate(bundle, manifest, report_text, revision, forensics, plan=plan, agent_exec=agent_exec)
+        errors, summary = validate(
+            bundle, manifest, report_text, revision, forensics,
+            plan=plan, agent_exec=agent_exec, page_extraction=page_extraction
+        )
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         errors, summary = [f'input: {type(exc).__name__}'], {}
     print(json.dumps({'valid': not errors, 'errors': errors, 'summary': summary}, sort_keys=True))
