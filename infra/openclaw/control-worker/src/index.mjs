@@ -116,7 +116,11 @@ while (!stopping) {
         })
         : await executeCommand(validated);
       if (!result?.cancelled && !result?.paused) {
-        if (result?.terminal_outcome && result.terminal_outcome !== 'completed') {
+        if (result?.terminal_outcome === 'incomplete') {
+          // An incomplete investigation is a successful bounded run that produced
+          // a reviewable draft with unresolved gates; it is not a worker failure.
+          await client.incomplete(command.id, result);
+        } else if (result?.terminal_outcome && result.terminal_outcome !== 'completed') {
           await client.fail(command.id, `investigation_${result.terminal_outcome}`, JSON.stringify({ terminal_outcome: result.terminal_outcome }).slice(0, 1000));
         } else {
           await client.complete(command.id, result);
