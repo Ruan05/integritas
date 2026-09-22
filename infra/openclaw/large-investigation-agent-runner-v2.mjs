@@ -76,7 +76,7 @@ function buildDeterministicLargePlan(documentSummaries, manifest) {
 }
 
 function buildDeterministicCaseAnalysis(documentSummaries) {
-  const sourceKey = (documentId) => \`doc.\${String(documentId).replaceAll('-', '')}\`;
+  const sourceKey = (documentId) => `doc.${String(documentId).replaceAll('-', '')}`;
   const entityRows = [];
   const entityByName = new Map();
   const signalMap = new Map();
@@ -86,7 +86,7 @@ function buildDeterministicCaseAnalysis(documentSummaries) {
       if (typeof party !== 'string' || !party.trim()) continue;
       const displayName = party.trim();
       const normalized = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'unnamed';
-      const entityKey = \`entity.\${normalized}\`;
+      const entityKey = `entity.${normalized}`;
       if (!entityByName.has(displayName.toLowerCase())) {
         entityByName.set(displayName.toLowerCase(), entityKey);
         entityRows.push({
@@ -126,7 +126,7 @@ function buildDeterministicCaseAnalysis(documentSummaries) {
     }
   }
   const findings = [...signalMap.values()].slice(0, 80).map((row, index) => ({
-    finding_key: \`evidence.\${String(index + 1).padStart(2, '0')}\`,
+    finding_key: `evidence.${String(index + 1).padStart(2, '0')}`,
     entity_key: row.entity_keys.size === 1 ? [...row.entity_keys][0] : null,
     finding_type: /no_|image_reuse|scanned|signature|acroform/i.test(row.claim) ? 'document_forensic_signal' : 'submitted_evidence_signal',
     claim: row.claim,
