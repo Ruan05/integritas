@@ -1343,8 +1343,17 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
     sections.set(headings[5], `${baseStatus}\n\n**Final conclusion:** retain the case as incomplete until the unresolved gates are closed with authoritative evidence and a healthy independent review. ${(evidence.limitations ?? []).join(' ')}`);
   }
   const rows = headings.map((heading) => sections.get(heading) || 'No validated detail was produced for this subsection.');
-  const result = rows.map((content, index) => `${headings[index]}\n\n${content}`).join('\n\n');
-  return result.slice(0, SECTION_MAX);
+  const blocks = rows.map((content, index) => `${headings[index]}\n\n${content}`);
+  const result = blocks.join('\n\n');
+  if (result.length <= SECTION_MAX) return result;
+  // Preserve the complete heading contract under very large evidence ledgers.
+  // Truncate subsection bodies proportionally instead of slicing the assembled
+  // Markdown and accidentally deleting required trailing sections.
+  const headingChars = headings.reduce((sum, heading) => sum + heading.length + 2, 0)
+    + Math.max(0, headings.length - 1) * 2;
+  const bodyBudget = Math.max(120 * headings.length, SECTION_MAX - headingChars);
+  const perBody = Math.max(120, Math.floor(bodyBudget / headings.length));
+  return rows.map((content, index) => `${headings[index]}\n\n${String(content).slice(0, perBody)}`).join('\n\n').slice(0, SECTION_MAX);
 }
 function reportTask(spec) {
   const headings = SECTION_HEADINGS[spec.id].join('\n');
