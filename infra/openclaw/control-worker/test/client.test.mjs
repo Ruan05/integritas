@@ -44,12 +44,13 @@ test('investigation methods use bounded worker actions without embedding credent
     { calls: 2, failures: 0, tools: ['web_fetch'] },
   );
   await client.commitBundle('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 4, 'a'.repeat(64), 'b'.repeat(64), { schema_version: 1 });
+  await client.incomplete('11111111-1111-4111-8111-111111111111', { terminal_outcome: 'incomplete' });
   await client.jobState('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222');
   await client.acknowledgeCancel('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222');
 
   assert.deepEqual(bodies.map((body) => body.action), [
     'worker_storage_selftest', 'worker_manifest', 'worker_checkpoint', 'worker_publish_output', 'worker_register_research_source',
-    'worker_commit_bundle', 'worker_job_state', 'worker_cancel_ack',
+    'worker_commit_bundle', 'worker_incomplete', 'worker_job_state', 'worker_cancel_ack',
   ]);
   assert.ok(bodies.every((body) => body.worker_id === 'oracle-primary'));
   assert.ok(bodies.every((body) => !JSON.stringify(body).includes('top-secret')));
