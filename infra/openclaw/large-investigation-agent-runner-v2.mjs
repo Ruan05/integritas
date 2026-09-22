@@ -114,7 +114,16 @@ function buildDeterministicCaseAnalysis(documentSummaries) {
         entity_keys: new Set(),
       };
       existing.source_keys.add(currentSourceKey);
-      if (summary.evidence_excerpt && existing.excerpts.length < 3) existing.excerpts.push(summary.evidence_excerpt);
+      const structuredExcerpt = [
+        summary.evidence_excerpt,
+        Array.isArray(summary.parties) && summary.parties.length ? \`Parties: \${summary.parties.join('; ')}\` : '',
+        Object.values(summary.identifiers ?? {}).filter((value) => typeof value === 'string' && value.trim()).length
+          ? \`Identifiers: \${Object.values(summary.identifiers ?? {}).filter((value) => typeof value === 'string' && value.trim()).join('; ')}\`
+          : '',
+        Array.isArray(summary.material_terms) && summary.material_terms.length ? \`Material terms: \${summary.material_terms.join('; ')}\` : '',
+        Array.isArray(summary.risk_flags) && summary.risk_flags.length ? \`Risk/forensic signals: \${summary.risk_flags.join('; ')}\` : '',
+      ].filter(Boolean).join(' | ').replace(/\\s+/g, ' ').slice(0, 1200);
+      if (structuredExcerpt && existing.excerpts.length < 3) existing.excerpts.push(structuredExcerpt);
       const signalLower = normalizedClaim;
       for (const party of Array.isArray(summary.parties) ? summary.parties : []) {
         if (typeof party === 'string' && signalLower.includes(party.toLowerCase())) {
