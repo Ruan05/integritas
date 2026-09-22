@@ -99,7 +99,8 @@ assert.match(controlledDeploy, /git -C "\$\{SOURCE_REPO\}" archive "\$\{SHA\}"/,
 assert.ok(!controlledDeploy.match(/\b(eval|curl|wget)\b/), 'controlled deployment must not evaluate strings or download executable content');
 
 assert.match(investigationRunner, /const args = \[\s*'agent', 'exec'/, 'runner arguments must begin with OpenClaw agent exec');
-assert.match(investigationRunner, /execFileAsync\('\/opt\/openclaw\/bin\/openclaw', buildArgs\(messageFile, phaseRoute\)/, 'runner must execute only the fixed OpenClaw binary with bounded phase arguments');
+assert.match(investigationRunner, /spawn\('\/opt\/openclaw\/bin\/openclaw'/, 'runner must execute only the fixed OpenClaw binary');
+assert.match(investigationRunner, /runBoundedOpenClaw\(buildArgs\(messageFile, phaseRoute\)/, 'runner must execute bounded phase arguments through the process-group wrapper');
 assert.match(investigationRunner, /--config/, 'runner must pin the dedicated exec config');
 assert.ok(!investigationRunner.includes("'--state-dir'"), 'runner must use OpenClaw isolated temporary exec state while the Gateway owns persistent state');
 assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/, 'runner may discover existing provider credentials only through the bounded OpenClaw environment');
