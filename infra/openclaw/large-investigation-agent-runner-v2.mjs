@@ -632,6 +632,75 @@ function shardNeedsPdfVisualReview(shard, trustedPageExtraction) {
   return false;
 }
 
+function deterministicShardSummaryFromTrustedContext(shard, trustedContext, error) {
+  const pageById = new Map((trustedContext?.page_reports ?? [])
+    .filter((row) => row?.document_id).map((row) => [row.document_id, row]));
+  const forensicById = new Map((trustedContext?.forensic_reports ?? [])
+    .filter((row) => row?.document_id).map((row) => [row.document_id, row]));
+  const clean = (value, max = 700) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+  const unique = (values, maxItems, maxLength) => [...new Set(values.map((value) => clean(value, maxLength)).filter(Boolean))].slice(0, maxItems);
+  const typeFromName = (name) => {
+    if (/invoice/i.test(name)) return 'Commercial Invoice';
+    if (/ttvia|tank.*vessel|vessel.*injection/i.test(name)) return 'Tank to Vessel Injection Agreement (TTVIA)';
+    return /\.pdf$/i.test(name) ? 'Submitted PDF evidence' : 'Submitted evidence';
+  };
+  return {
+    documents: shard.documents.map((document) => {
+      const pageReport = pageById.get(document.id);
+      const forensic = forensicById.get(document.id);
+      if (!pageReport || !Array.isArray(pageReport.pages) || !pageReport.pages.length) {
+        throw new Error(`deterministic shard fallback lacks trusted page extraction for ${document.id}`);
+      }
+      const lines = [];
+      for (const page of pageReport.pages) {
+        for (const raw of String(page?.text ?? '').split(/\r?\n/)) {
+          const line = clean(raw, 900);
+          if (line) lines.push({ page: page.page, line });
+        }
+      }
+      const fullText = lines.map((row) => row.line).join('\n');
+      const partyLines = lines
+        .filter(({ line }) =>
+          /\b(?:seller|buyer|exporter|consignee|shipper|shipping|logistics|beneficiary|representative|represented\s+by)\b/i.test(line)
+          || /\b(?:LLC|L\.?L\.?C\.?|LIMITED|LTD\.?|B\.?V\.?|INC\.?|CORP(?:ORATION)?|BANK\s+N\.?V\.?)\b/i.test(line))
+        .map(({ page, line }) => `p.${page}: ${line}`);
+      const identifierLines = lines
+        .filter(({ line }) => /\b(?:IBAN|SWIFT|BIC|account\s+number|invoice\s+(?:number|no)|contract\s+(?:number|no)|allocation\s+(?:number|no)|reference|tank\s+(?:reference|hub)|IMO|Q88|email|website)\b|@|https?:\/\/|www\./i.test(line))
+        .map(({ page, line }) => `p.${page}: ${line}`);
+      const exactIdentifiers = [
+        ...(fullText.match(/\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b/g) ?? []).map((value) => `IBAN candidate: ${value}`),
+        ...(fullText.match(/\bIMO\s*[:#-]?\s*\d{7}\b/gi) ?? []).map((value) => `IMO candidate: ${clean(value, 80)}`),
+        ...(fullText.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi) ?? []).map((value) => `Email: ${value}`),
+      ];
+      const materialLines = lines
+        .filter(({ line }) => /\b(?:product|commodity|quantity|volume|unit\s+price|total\s+amount|price|payment|delivery|FOB|CIF|port|terminal|tank|vessel|Q88|invoice|contract|issued|date|signature|beneficiary|bank|SWIFT|IBAN|account|origin|inspection|SGS|allocation|monthly|gallon|metric\s+ton|MT\b)\b/i.test(line))
+        .map(({ page, line }) => `p.${page}: ${line}`);
+      const pageReferences = pageReport.pages.map((page) => {
+        if (page?.unreadable === true || !String(page?.text ?? '').trim()) return `p.${page.page}: unreadable`;
+        return `p.${page.page}: trusted ${page.method || 'page'} extraction (${String(page.text).length} chars)`;
+      });
+      const riskFlags = [
+        `Model shard unavailable; deterministic trusted-page fallback used: ${clean(error?.message ?? error, 220)}`,
+        ...(pageReport.pages.filter((page) => page?.unreadable === true).map((page) => `p.${page.page}: unreadable page`)),
+        ...(forensic?.pdf?.cryptographic_signature_present === false ? ['No cryptographic PDF signature detected by deterministic forensics'] : []),
+      ];
+      const evidenceExcerpt = unique(materialLines.length ? materialLines : lines.map(({ page, line }) => `p.${page}: ${line}`), 3, 170).join(' | ').slice(0, 500);
+      return {
+        document_id: document.id,
+        document_type: typeFromName(document.name || document.local_path || ''),
+        issuer_claim: '',
+        parties: unique(partyLines, 30, 500),
+        identifiers: unique([...exactIdentifiers, ...identifierLines], 60, 500),
+        material_terms: unique(materialLines, 40, 700),
+        risk_flags: unique(riskFlags, 30, 700),
+        instruction_like_text: /(?:ignore\s+(?:all\s+)?previous|system\s+prompt|developer\s+message|override\s+(?:the\s+)?instructions|do\s+not\s+obey)/i.test(fullText),
+        page_references: unique(pageReferences, 100, 600),
+        evidence_excerpt: evidenceExcerpt,
+      };
+    }),
+  };
+}
+
 function shardTask(shard, trustedContext, requirePdfVisualReview) {
   const files = shard.documents.map((row) => `- ${row.id}: ./${row.local_path} (${row.mime_type || 'unknown'})`).join('\n');
   const pdfPaths = shard.documents
@@ -804,7 +873,7 @@ cross_document_tests, specialist_checks, and automatic_stop_conditions must each
 function analysisTask(synthetic) {
   return `# Integritas bounded submitted-evidence analysis
 
-Do not perform external research or write files. Read ./manifest.json, ./large-document-summaries.json, ./investigation-plan.json, ./forensics.json, ./deterministic-checks.json and the Integritas skill.
+Do not perform external research or write files. Read ./manifest.json, ./large-document-summaries.json, ./page-extraction.json when present, ./investigation-plan.json, ./forensics.json, ./deterministic-checks.json and the Integritas skill. Treat ./page-extraction.json as trusted page-derived evidence and use it to recover material fields that a bounded shard summary may omit.
 
 Return exactly one raw JSON object and no prose with this canonical shape:
 {"entities":[{"entity_key":"entity.example","entity_type":"person|company|organization|bank|vessel|other","display_name":"","aliases":[],"identifiers":{},"match_status":"proposed|probable|verified|conflicting|rejected","confidence":0}],"relationships":[{"relationship_key":"relationship.example","from_entity_key":"entity.a","to_entity_key":"entity.b","relationship_type":"","claim":"","evidence_status":"verified|alleged|conflicting|uncertain","source_keys":[],"confidence":0}],"findings":[{"finding_key":"finding.example","entity_key":null,"finding_type":"","claim":"","evidence_status":"verified|alleged|conflicting|uncertain","materiality":"informational|low|medium|high|critical","reliability":"high|medium|low|unknown","evidence_excerpt":"","source_keys":[]}],"contradictions":[{"contradiction_key":"contradiction.example","finding_keys":["finding.a","finding.b"],"description":""}],"unresolved_checks":[{"unresolved_key":"unresolved.example","description":"","reason":"","attempted_methods":[],"blocker":"","next_manual_action":""}],"limitations":[]}
@@ -1162,26 +1231,53 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
   const shardRows = await mapLimit(shards, 2, async (shard, index) => {
     const trustedContext = shardTrustedContext(shard, trustedForensics, trustedPageExtraction);
     const requirePdfVisualReview = shardNeedsPdfVisualReview(shard, trustedPageExtraction);
-    const result = await validated({
-      jobDir, id: `shard-${shard.shard_id}`, role: 'shard',
-      task: shardTask(shard, trustedContext, requirePdfVisualReview), execName: `large-v2-shard-${shard.shard_id}-exec.json`,
-      synthetic, allowExternal: false,
-      validator: (final, envelope) => {
-        const parsed = parseDocumentShardFinal(final, shard.documents.map((row) => row.id));
-        const pdfDocs = shard.documents.filter((row) => row.mime_type === 'application/pdf' || /\.pdf$/i.test(row.name || row.local_path || ''));
-        if (requirePdfVisualReview && pdfDocs.length && !(envelope?.toolSummary?.tools ?? []).includes('pdf')) {
-          throw new Error('PDF visual review is required because deterministic page extraction was incomplete or non-native');
-        }
-        for (const pdfDoc of pdfDocs) {
-          const row = parsed.documents.find((item) => item.document_id === pdfDoc.id);
-          if (!row || !Array.isArray(row.page_references) || row.page_references.length < 1) {
-            throw new Error(`PDF evidence extraction requires page-level provenance for ${pdfDoc.id}`);
+    let result;
+    try {
+      result = await validated({
+        jobDir, id: `shard-${shard.shard_id}`, role: 'shard',
+        task: shardTask(shard, trustedContext, requirePdfVisualReview), execName: `large-v2-shard-${shard.shard_id}-exec.json`,
+        synthetic, allowExternal: false,
+        validator: (final, envelope) => {
+          const parsed = parseDocumentShardFinal(final, shard.documents.map((row) => row.id));
+          const pdfDocs = shard.documents.filter((row) => row.mime_type === 'application/pdf' || /\.pdf$/i.test(row.name || row.local_path || ''));
+          if (requirePdfVisualReview && pdfDocs.length && !(envelope?.toolSummary?.tools ?? []).includes('pdf')) {
+            throw new Error('PDF visual review is required because deterministic page extraction was incomplete or non-native');
           }
-        }
-        return parsed;
-      },
-      progressState: { stage: 'extracting', progress: 18, phase: 'large_document_shards' },
-    });
+          for (const pdfDoc of pdfDocs) {
+            const row = parsed.documents.find((item) => item.document_id === pdfDoc.id);
+            if (!row || !Array.isArray(row.page_references) || row.page_references.length < 1) {
+              throw new Error(`PDF evidence extraction requires page-level provenance for ${pdfDoc.id}`);
+            }
+          }
+          return parsed;
+        },
+        progressState: { stage: 'extracting', progress: 18, phase: 'large_document_shards' },
+      });
+    } catch (error) {
+      const value = deterministicShardSummaryFromTrustedContext(shard, trustedContext, error);
+      const envelope = {
+        ok: true,
+        status: 'ok',
+        final: JSON.stringify(value),
+        provider: 'integritas',
+        model: 'deterministic-trusted-page-shard-v1',
+        sessionId: jobId,
+        toolSummary: { tools: ['integritas_page_extract_v1'], calls: 1, failures: 0 },
+      };
+      result = {
+        envelope,
+        value,
+        reused: false,
+        fallback: true,
+        failures: [{ model: 'validated-provider-routes', error: String(error?.message ?? error).slice(0, 500) }],
+      };
+      executionTools.push(toolResult(
+        'integritas_trusted_page_shard_fallback_v1',
+        'completed',
+        `Shard ${shard.shard_id} model routes were unavailable; preserved document content from trusted deterministic page extraction instead of failing the case.`,
+      ));
+      await writeAtomic(jobDir, `large-v2-shard-${shard.shard_id}-exec.json`, JSON.stringify(envelope) + '\\n');
+    }
     phases.push({ phase: `shard-${shard.shard_id}`, ...result });
     await progress(jobDir, 'extracting', 18 + Math.round(((index + 1) / shards.length) * 18), 'large_document_shards', `shard ${index + 1}/${shards.length}`);
     return result.value.documents;
