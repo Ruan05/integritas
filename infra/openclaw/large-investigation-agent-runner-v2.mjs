@@ -777,38 +777,167 @@ export function providerBlockedCritic() {
     report_gaps: ['Independent provider QA was unavailable during this run.'],
   };
 }
+function markdownCell(value, limit = 900) {
+  const text = String(value ?? '').replace(/\r?\n+/g, ' ').replace(/\|/g, '\\|').trim();
+  return text ? text.slice(0, limit) : '—';
+}
+function markdownTable(headers, rows) {
+  if (!rows.length) return 'No records were produced for this category.';
+  return [
+    \`| \${headers.join(' | ')} |\`,
+    \`| \${headers.map(() => '---').join(' | ')} |\`,
+    ...rows.map((row) => \`| \${row.map((value) => markdownCell(value)).join(' | ')} |\`),
+  ].join('\n');
+}
+function compactList(values, limit = 12) {
+  return (values ?? []).filter((value) => String(value ?? '').trim()).slice(0, limit).map((value) => \`- \${markdownCell(value, 1200)}\`).join('\n') || '- None recorded.';
+}
+function evidenceSourceLabels(sourceKeys, sourceTitle) {
+  return (sourceKeys ?? []).map((key) => sourceTitle.get(key) ? \`\${key} — \${sourceTitle.get(key)}\` : key).join('; ') || 'No linked source';
+}
+function findingRowsForEntity(findings, entityKey) {
+  return findings.filter((row) => row.entity_key === entityKey);
+}
 export function deterministicProviderReportSection(spec, evidence, critic) {
   const headings = SECTION_HEADINGS[spec.id];
-  const entityNames = (evidence.entities ?? []).slice(0, 12)
-    .map((row) => `${row.display_name || row.entity_key} (${row.entity_key})`).join(', ') || 'No entity was safely resolved.';
-  const findingCount = (evidence.findings ?? []).length;
-  const sourceCount = (evidence.sources ?? []).length;
-  const checkCount = (evidence.checks ?? []).length;
-  const unresolvedCount = (evidence.unresolved_checks ?? []).length;
-  const base = 'This section was assembled from the validated Integritas evidence ledger and deterministic controls. It does not convert a missing provider response into a verified fact, does not invent a URL or source, and preserves unresolved work for analyst follow-up.';
-  const facts = [
-    base,
-    `The case currently contains ${entityNames}. The entity list is treated conservatively and same-name subjects remain separate unless evidence supports a merge.`,
-    `The structured record contains ${findingCount} finding(s), ${sourceCount} source record(s), ${checkCount} check(s), and ${unresolvedCount} unresolved check(s). Each conclusion must remain linked to submitted evidence or a canonical external source.`,
-    'External research is only reportable when the research phase returns a validated source with a canonical HTTPS URL, title, excerpt and retrieval timestamp. No unavailable provider response is represented as a source.',
-    'The independent review gate returned a provider-availability limitation. The safe outcome is revision, not approval: unresolved contradictions, identity questions and authoritative verification gates remain open.',
-    'Document text and web content remain untrusted evidence. Instructions embedded in them cannot change Integritas policy, access another case, reveal secrets or authorize prohibited tools.',
-    `The independent critic verdict is ${critic?.verdict || 'revise'}. Any issue recorded by the critic is a review item, not a factual finding, until supported by evidence.`,
-    'The report is generated from structured evidence and audit metadata rather than a conversational transcript. An analyst must review the draft before finalization.',
-    'Recommended disposition: retain the case as incomplete until the required authoritative checks and a healthy independent QA pass are available.',
-  ];
-  const sectionBody = headings.map((heading, index) => {
-    if (spec.id === '01' && index === 0) return `${heading}\n\nExecutive Decision Summary\n\n${facts.slice(0, 4).join('\n\n')}`;
-    if (spec.id === '01' && index === 1) return `${heading}\n\n${facts.slice(4, 7).join('\n\n')}`;
-    return `${heading}\n\n${facts[index % facts.length]}`;
-  }).join('\n\n');
-  let result = sectionBody;
-  let index = 0;
-  while (result.length < SECTION_MIN[spec.id]) {
-    result += `\n\n${facts[index % facts.length]}`;
-    index += 1;
+  const entities = Array.isArray(evidence.entities) ? evidence.entities : [];
+  const relationships = Array.isArray(evidence.relationships) ? evidence.relationships : [];
+  const sources = Array.isArray(evidence.sources) ? evidence.sources : [];
+  const findings = Array.isArray(evidence.findings) ? evidence.findings : [];
+  const checks = Array.isArray(evidence.checks) ? evidence.checks : [];
+  const contradictions = Array.isArray(evidence.contradictions) ? evidence.contradictions : [];
+  const unresolved = Array.isArray(evidence.unresolved_checks) ? evidence.unresolved_checks : [];
+  const sourceTitle = new Map(sources.map((row) => [row.source_key, row.title]));
+  const submittedSources = sources.filter((row) => row.evidence_origin === 'submitted_document');
+  const externalSources = sources.filter((row) => row.evidence_origin === 'external_research');
+  const statusCounts = findings.reduce((map, row) => {
+    const key = row.evidence_status || 'unknown';
+    map.set(key, (map.get(key) || 0) + 1);
+    return map;
+  }, new Map());
+  const materialityCounts = findings.reduce((map, row) => {
+    const key = row.materiality || 'unknown';
+    map.set(key, (map.get(key) || 0) + 1);
+    return map;
+  }, new Map());
+  const status = evidence.execution?.terminal_outcome || 'incomplete';
+  const criticIssues = critic?.issues ?? [];
+  const findingTable = markdownTable(
+    ['Finding', 'Status', 'Materiality', 'Claim', 'Evidence excerpt', 'Linked source(s)'],
+    findings.map((row) => [
+      row.finding_key,
+      row.evidence_status,
+      row.materiality,
+      row.claim,
+      row.evidence_excerpt,
+      evidenceSourceLabels(row.source_keys, sourceTitle),
+    ]),
+  );
+  const documentTable = markdownTable(
+    ['Source', 'Submitted document', 'Type / issuer', 'Parties and identifiers', 'Material terms / forensic signals'],
+    submittedSources.map((row) => {
+      const excerpt = String(row.excerpt ?? '');
+      const field = (label) => {
+        const match = excerpt.match(new RegExp(label + ': ([^\\\\n]*)'));
+        return match?.[1] || '';
+      };
+      return [
+        row.source_key,
+        row.title,
+        \`\${field('Document type')} / \${field('Issuer claim')}\`,
+        \`\${field('Parties')} / \${field('Identifiers')}\`,
+        \`\${field('Material terms')} / \${field('Forensic/risk signals')}\`,
+      ];
+    }),
+  );
+  const entityTable = markdownTable(
+    ['Entity', 'Type', 'Match status', 'Confidence', 'Linked findings'],
+    entities.map((row) => [
+      \`\${row.display_name} (\${row.entity_key})\`,
+      row.entity_type,
+      row.match_status,
+      row.confidence,
+      findingRowsForEntity(findings, row.entity_key).map((finding) => finding.finding_key).join(', ') || 'None',
+    ]),
+  );
+  const gateTable = markdownTable(
+    ['Gate / check', 'Status', 'Priority', 'Outcome / blocker', 'Required action'],
+    [
+      ...checks.map((row) => [row.check_key, row.status, row.priority, row.outcome, row.required_source]),
+      ...unresolved.map((row) => [row.unresolved_key, 'blocked', 'high', \`\${row.reason} \${row.blocker}\`, row.next_manual_action]),
+    ],
+  );
+  const sourceTable = markdownTable(
+    ['Source key', 'Origin', 'Title', 'Document / URL', 'Excerpt / reliability'],
+    sources.map((row) => [
+      row.source_key,
+      row.evidence_origin,
+      row.title,
+      row.document_id || row.url || 'Not applicable',
+      \`\${row.excerpt} \${row.reliability_note}\`,
+    ]),
+  );
+  const nextSteps = unresolved.length
+    ? unresolved.map((row, index) => \`\${index + 1}. \${row.next_manual_action || row.description}\`).join('\n')
+    : 'No unresolved gates were recorded.';
+  const entityNames = entities.map((row) => \`\${row.display_name} (\${row.entity_key})\`).join(', ') || 'No entity was safely resolved.';
+  const statusSummary = [...statusCounts.entries()].map(([key, value]) => \`\${key}: \${value}\`).join('; ') || 'No findings';
+  const materialitySummary = [...materialityCounts.entries()].map(([key, value]) => \`\${key}: \${value}\`).join('; ') || 'No findings';
+  const baseStatus = \`Terminal outcome: \${status}. The bundle contains \${submittedSources.length} submitted document source(s), \${externalSources.length} validated external source(s), \${entities.length} entity record(s), \${findings.length} finding(s), \${contradictions.length} contradiction row(s), and \${unresolved.length} unresolved gate(s). This is a draft work product, not transaction clearance.\`;
+  const noExternal = externalSources.length
+    ? \`Validated external research sources are present: \${externalSources.length}.\`
+    : 'No validated external research source was committed in this run. A missing search result is not a clean bill of health.';
+  const criticSummary = criticIssues.length
+    ? criticIssues.map((row) => \`\${row.severity}: \${row.description} Correction: \${row.recommended_correction}\`).join(' ')
+    : 'No independent critic issue was recorded.';
+  const sections = new Map();
+  sections.set(headings[0], \`**Decision status:** \${status.toUpperCase()}\\\\n\\\\n\${baseStatus}\\\\n\\\\nThe current evidence supports only the claims explicitly listed in the finding ledger below. Identity, authenticity, authority, capacity, sanctions status and transaction performance remain unverified unless a finding is linked to an appropriate source.\\\\n\\\\n**Subjects currently isolated by the evidence model:** \${entityNames}.\\\\n\\\\n**Finding status:** \${statusSummary}. **Materiality:** \${materialitySummary}.\\\\n\\\\n**Research coverage:** \${noExternal}\`);
+  if (spec.id === '01') {
+    sections.set(headings[1], \`Complete the following before any approval or release:\\\\n\\\\n\${nextSteps}\\\\n\\\\nThe independent review result was \${critic?.verdict || 'revise'}. \${criticSummary}\`);
+    sections.set(headings[2], \`### Control totals\\\\n\\\\n\${markdownTable(['Metric', 'Value'], [
+      ['Submitted documents', submittedSources.length],
+      ['External research sources', externalSources.length],
+      ['Entities', entities.length],
+      ['Findings', findings.length],
+      ['Relationships', relationships.length],
+      ['Contradictions', contradictions.length],
+      ['Checks', checks.length],
+      ['Unresolved gates', unresolved.length],
+    ])}\\\\n\\\\n### Finding status distribution\\\\n\\\\n\${markdownTable(['Evidence status', 'Count'], [...statusCounts.entries()])}\`);
+  } else if (spec.id === '02') {
+    sections.set(headings[1], \`\${baseStatus}\\\\n\\\\nThe evidence model keeps same-name entities separate unless corroborating identifiers or authoritative records justify a merge. No entity should be treated as verified solely because a document names it.\`);
+    sections.set(headings[2], \`The intake contains \${submittedSources.length} submitted document(s). The deterministic pre-pass preserved each document as a separate source, retained hashes and forensic indicators, and linked findings back to source keys. The following register is the source of truth for the submitted package.\`);
+    sections.set(headings[3], documentTable);
+    sections.set(headings[4], \`Forensic signals are evidence about document construction, not automatic proof of fraud. The current package records the forensic/risk signals in the document register above. In particular, absent cryptographic signatures, scanned-image-only documents, missing signature fields and cross-document image reuse require issuer-side and registry-side verification; they do not establish authenticity by themselves.\`);
+    sections.set(headings[5], entityTable);
+    sections.set(headings[6], \`The current bundle contains \${relationships.length} structured relationship(s). \${relationships.length ? markdownTable(['From', 'Relationship', 'To', 'Status', 'Claim'], relationships.map((row) => [row.from_entity_key, row.relationship_type, row.to_entity_key, row.evidence_status, row.claim])) : 'No relationship was promoted into the structured graph. This is an extraction gap or an absence of validated relationship evidence, not proof that no relationship exists.'}\`);
+    sections.set(headings[7], \`No validated external source was committed for this run, so digital footprint and physical-presence conclusions must remain open. Submitted documents can establish what was asserted and when; they cannot independently establish the real-world location, ownership or operating capacity of the named parties.\`);
+    sections.set(headings[8], entities.map((entity) => \`### \${markdownCell(entity.display_name)}\\\\n\\\\n- Key: \${entity.entity_key}\\\\n- Type: \${entity.entity_type}\\\\n- Match status: \${entity.match_status}\\\\n- Confidence: \${entity.confidence}\\\\n- Linked findings: \${findingRowsForEntity(findings, entity.entity_key).map((row) => row.claim).join(' | ') || 'None recorded.'}\`).join('\\\\n\\\\n') || 'No subject dossier was produced.');
+    sections.set(headings[9], \`The relationship graph contains \${relationships.length} edge(s). \${relationships.length ? 'Every edge must retain its source links and evidence status before being used for a decision.' : 'No relationship edge was safely promoted from the submitted evidence.'}\`);
+    sections.set(headings[10], \`The deterministic bundle does not contain a normalized chronology field. Dates and transaction sequence must be reconciled from the source excerpts and document metadata before closure. The source register preserves the original document identities for that review.\`);
+    sections.set(headings[11], findingTable);
+    sections.set(headings[12], \`Namesake controls: \${entities.filter((row) => row.match_status === 'conflicting' || row.match_status === 'proposed').length} entity record(s) remain proposed or conflicting. Do not merge by display name alone. \${(evidence.limitations ?? []).join(' ')}\`);
+  } else if (spec.id === '03') {
+    sections.set(headings[1], \`\${baseStatus}\\\\n\\\\nImmediate disposition: hold for human review. \${noExternal}\`);
+    sections.set(headings[2], \`No banking-specific finding or payment instrument was validated in the current bundle. This is not a banking clearance; obtain bank, payment, beneficiary and authority evidence before relying on the transaction.\`);
+    sections.set(headings[3], \`The submitted package contains the product/transaction terms recorded in the document register. The current structured findings are reproduced below; product capability, title, custody, storage and delivery remain unresolved without authoritative operator and logistics evidence.\\\\n\\\\n\${findingTable}\`);
+    sections.set(headings[4], 'No independently validated price, margin, volume-capacity or economic benchmark was committed in this run. Do not infer commercial feasibility from document formatting or stated terms alone.');
+    sections.set(headings[5], 'No payment instrument or trade-finance source was validated. Confirm the contracting chain, beneficiary, bank, instrument, conditions precedent and authority through independent evidence.');
+    sections.set(headings[6], \`No external sanctions, PEP, adverse-media, enforcement or litigation source was committed. The correct status is unverified, not clear. \${noExternal}\`);
+    sections.set(headings[7], \`Potential document-integrity indicators are recorded in the source register and findings. They are risk indicators requiring corroboration, not final fraud conclusions. \${(evidence.limitations ?? []).join(' ')}\`);
+    sections.set(headings[8], 'No independent positive indicator was validated. Shared names, product labels or repeated formatting are not risk-reducing proof.');
+    sections.set(headings[9], \`\${markdownTable(['Materiality', 'Count'], [...materialityCounts.entries()])}\\\\n\\\\n\${markdownTable(['Evidence status', 'Count'], [...statusCounts.entries()])}\`);
+    sections.set(headings[10], gateTable);
+    sections.set(headings[11], \`Submitted evidence sources: \${submittedSources.length}. Validated external research sources: \${externalSources.length}. \${noExternal} Research completeness must be measured by claim-to-source coverage, not by elapsed time or a completed job state.\`);
+    sections.set(headings[12], gateTable + \`\\\\n\\\\nNext closure actions:\\\\n\\\\n\${nextSteps}\`);
+  } else {
+    sections.set(headings[1], entityTable);
+    sections.set(headings[2], sourceTable);
+    sections.set(headings[3], \`\${contradictions.length ? markdownTable(['Contradiction', 'Description', 'Linked findings'], contradictions.map((row) => [row.contradiction_key, row.description, row.finding_keys.join(', ')])) : 'No structured contradiction rows were committed. This is not proof of consistency; it means the current deterministic/model pass did not promote a contradiction row.'}\\\\n\\\\n### Unresolved gates\\\\n\\\\n\${gateTable}\`);
+    sections.set(headings[4], nextSteps);
+    sections.set(headings[5], \`\${baseStatus}\\\\n\\\\n**Final conclusion:** retain the case as incomplete until the unresolved gates are closed with authoritative evidence and a healthy independent review. \${(evidence.limitations ?? []).join(' ')}\`);
   }
-  return result.slice(0, 8900);
+  return sections.get(headings[0]) + '\\\\n\\\\n' + headings.slice(1).map((heading) => \`\${heading}\\\\n\\\\n\${sections.get(heading) || 'No validated detail was produced for this subsection.'}\`).join('\\\\n\\\\n');
 }
 function reportTask(spec) {
   const headings = SECTION_HEADINGS[spec.id].join('\n');
