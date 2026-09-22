@@ -207,6 +207,8 @@ test('deterministic case-analysis fallback creates only explicit parties with ro
         'name=SHELL TRADING INTERNATIONAL LIMITED; role=Seller/Exporter; representative=Mr. Oscar de Vries (Managing Director)',
         'name=GLOBAL A1 LLC; role=Buyer/Consignee; contact_person=Harald Spitzer; contact_title=CEO',
         'name=GREY SHIPPING B.V.; role=Seller Logistics; representative=Jansen De Jong (Managing Director)',
+        'name=Mr. Oscar de Vries (MANAGING DIRECTOR); role=Representative; source_page=p.1',
+        'name=Mr. Oscar De Vries REPRESENTED BY: Harald Spitzer; role=Representative; source_page=p.4',
         'name=for seamless execution of the Seller’s allocation.; role=Buyer Logistics; source_page=p.2',
       ],
       identifiers:['type=IBAN; value=NL91ABNA0793164363'],
@@ -238,6 +240,8 @@ test('deterministic case-analysis fallback creates only explicit parties with ro
   assert.equal(buyer.identifiers.subject_scope,'context_only');
   const jansen=result.entities.find((row)=>row.display_name==='Jansen De Jong');
   assert.equal(jansen.identifiers.role,'seller_logistics_representative');
+  assert.equal(result.entities.filter((row)=>row.display_name.toLowerCase()==='oscar de vries').length,1);
+  assert.equal(result.entities.some((row)=>/represented by/i.test(row.display_name)),false);
   assert.equal(result.relationships.filter((row)=>row.relationship_type==='represented_by').length,3);
 });
 
