@@ -397,7 +397,7 @@ async function runAgentWithRecovery({
     const now = Date.now();
     if (agentProgress) {
       const heartbeatAt = agentProgress.updated_at ? Date.parse(agentProgress.updated_at) : now;
-      lastHeartbeatAt = Number.isFinite(heartbeatAt) ? Math.max(lastHeartbeatAt, heartbeatAt) : now;
+      lastHeartbeatAt = Number.isFinite(heartbeatAt) ? Math.min(now, heartbeatAt) : now;
       const key = [
         agentProgress.stage,
         agentProgress.progress,
