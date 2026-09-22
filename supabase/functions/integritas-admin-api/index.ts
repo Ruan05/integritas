@@ -416,7 +416,7 @@ async function upload(uid: string, form: FormData) {
 async function reserveUpload(uid: string, body: any) {
   const cid = String(body.caseId || "");
   await access(uid, cid, ["owner", "analyst"]);
-  const idempotencyKey = String(body.idempotencyKey || "").trim();
+  const idempotencyKey = String(body.idempotency_key || body.idempotencyKey || "").trim();
   if (!/^[A-Za-z0-9._:-]{8,160}$/.test(idempotencyKey))
     throw Object.assign(new Error("A valid upload idempotency key is required"), { status: 400 });
   const v = validateUpload(body.name, body.mime, body.size);
