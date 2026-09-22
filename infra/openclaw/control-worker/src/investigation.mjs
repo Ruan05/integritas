@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { chmod, chown, copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, chown, copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { validateInvestigationBundle } from './bundle.mjs';
@@ -277,6 +277,16 @@ async function cleanLegacyWorkspace(jobDir) {
     'skills/integritas-dd', 'tools/dd/quality.py', 'docs/DD_EVIDENCE_CONTRACT.md',
   ]) {
     await rm(path.join(jobDir, relative), { recursive: true, force: true });
+  }
+}
+
+async function cleanFullReplayWorkspace(jobDir) {
+  // Deep/Maximum retries are defined as a full deterministic replay. Preserve only
+  // immutable, digest-verified staged evidence; discard every prior derived/model
+  // artifact so stale bundle/report/phase outputs cannot satisfy a fresh run.
+  for (const entry of await readdir(jobDir)) {
+    if (entry === 'documents') continue;
+    await rm(path.join(jobDir, entry), { recursive: true, force: true });
   }
 }
 
@@ -634,7 +644,11 @@ export async function executeInvestigation(command, {
         const sourceDocument = manifest.documents.find((candidate) => candidate.id === document.id);
         await stageDocument(sourceDocument, path.join(jobDir, document.local_path), fetchImpl);
       }
-      await cleanLegacyWorkspace(jobDir);
+      if (safeManifest.depth === 'deep' || safeManifest.depth === 'maximum') {
+        await cleanFullReplayWorkspace(jobDir);
+      } else {
+        await cleanLegacyWorkspace(jobDir);
+      }
       await writeFile(manifestPath, JSON.stringify(safeManifest, null, 2), { mode: SHARED_FILE_MODE });
       await chown(manifestPath, -1, process.getgid());
       await chmod(manifestPath, SHARED_FILE_MODE);
@@ -659,7 +673,7 @@ export async function executeInvestigation(command, {
     const reportPath = path.join(jobDir, 'report.md');
     const agentExecPath = path.join(jobDir, 'agent-exec.json');
     let reusable = false;
-    if (!rejoiningActiveUnit) {
+    if (!rejoiningActiveUnit && (manifest.depth === 'fast' || manifest.depth === 'standard')) {
       const retainedCandidates = [
         { bundle: bundlePath, report: reportPath, provenance: agentExecPath, materialize: false },
       ];
