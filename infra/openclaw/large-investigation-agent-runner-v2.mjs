@@ -191,13 +191,17 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
     const text = clean(raw, 1200);
     if (!text) return [];
     if (/^name=/i.test(text)) {
-      const field = (name) => {
-        const match = text.match(new RegExp(`(?:^|;\\\\s*)${name}=([^;]*)`, 'i'));
-        return clean(match?.[1] ?? '', 300);
-      };
-      const name = field('name');
-      const roleText = field('role');
-      const representative = field('representative') || field('contact_person');
+      const fields = Object.create(null);
+      for (const segment of text.split(';')) {
+        const separator = segment.indexOf('=');
+        if (separator < 1) continue;
+        const key = segment.slice(0, separator).trim().toLowerCase();
+        const value = clean(segment.slice(separator + 1), 300);
+        if (key && value && fields[key] == null) fields[key] = value;
+      }
+      const name = fields.name || '';
+      const roleText = fields.role || '';
+      const representative = fields.representative || fields.contact_person || '';
       const rows = [];
       if (name) rows.push({ name, role: roleText || 'unknown' });
       if (representative) {
