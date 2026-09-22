@@ -170,6 +170,15 @@ if (trustedForensics?.schema_version !== 1 || trustedForensics?.tool !== 'integr
   || !Array.isArray(trustedForensics?.reports)) {
   throw new Error('trusted forensic pre-pass is unavailable or invalid');
 }
+let trustedPageExtraction = null;
+if (manifest.depth === 'maximum') {
+  trustedPageExtraction = JSON.parse(await readFile(path.join(jobDir, 'page-extraction.json'), 'utf8'));
+  if (trustedPageExtraction?.schema_version !== 1 || trustedPageExtraction?.tool !== 'integritas_page_extract_v1'
+    || !Array.isArray(trustedPageExtraction?.reports)
+    || trustedPageExtraction.reports.length !== manifest.documents.length) {
+    throw new Error('trusted page-level extraction is unavailable or invalid');
+  }
+}
 const trustedSynthetic = isTrustedSyntheticValidationManifest(manifest);
 const route = (trustedSynthetic ? SYNTHETIC_MODEL_ROUTES : REAL_MODEL_ROUTES)[manifest.depth];
 if (!route) throw new Error('invalid investigation depth');
@@ -743,6 +752,7 @@ if (shouldUseLargeInvestigation(manifest)) {
     jobDir,
     manifest,
     trustedForensics,
+    trustedPageExtraction,
   });
   process.exit(0);
 }
