@@ -75,29 +75,39 @@ function routes(primary, fallbacks) {
 const ACTIVE_FREE_FALLBACKS = ZEN_ENABLED
   ? [...ZEN_FREE_FALLBACKS, ...FREE_FALLBACKS]
   : FREE_FALLBACKS;
+const PAID_PROVIDER_ENABLED = process.env.INTEGRITAS_ALLOW_PAID_PROVIDER === 'true';
 const SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, ACTIVE_FREE_FALLBACKS);
-const QUALITY_FALLBACKS = [DEEPSEEK_FLASH, GLM_53_FLASH, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS];
-const RESEARCH_FALLBACKS = [GLM_53_FLASH, GLM_53, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS];
+// Keep real investigations on the live-verified NVIDIA route by default. Paid
+// OpenRouter routes are opt-in so a billing/auth circuit cannot hold the case
+// at a pre-report phase. Free fallbacks remain bounded per investigation.
+const QUALITY_FALLBACKS = PAID_PROVIDER_ENABLED
+  ? [DEEPSEEK_FLASH, GLM_53_FLASH, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS]
+  : [NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS];
+const RESEARCH_FALLBACKS = PAID_PROVIDER_ENABLED
+  ? [GLM_53_FLASH, GLM_53, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS]
+  : [NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS];
+const REAL_PRIMARY = PAID_PROVIDER_ENABLED ? DEEPSEEK_FLASH : NVIDIA_PRIMARY;
+const REAL_PLANNER_PRIMARY = PAID_PROVIDER_ENABLED ? GLM_53 : NVIDIA_PRIMARY;
 const REAL_MODEL_ROUTES = Object.freeze({
   fast: {
-    planner: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS], timeoutSeconds: 90 },
-    research: { model: DEEPSEEK_FLASH, fallbacks: [GLM_53_FLASH, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS], timeoutSeconds: 180 },
+    planner: { model: REAL_PLANNER_PRIMARY, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 90 },
+    research: { model: REAL_PRIMARY, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 180 },
   },
   standard: {
-    planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 120 },
-    research: { model: DEEPSEEK_FLASH, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 300 },
+    planner: { model: REAL_PLANNER_PRIMARY, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 120 },
+    research: { model: REAL_PRIMARY, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 300 },
   },
   deep: {
-    planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 150 },
-    research: { model: DEEPSEEK_FLASH, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 600 },
-    critic: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 180 },
-    synthesis: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 240 },
+    planner: { model: REAL_PLANNER_PRIMARY, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 150 },
+    research: { model: REAL_PRIMARY, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 600 },
+    critic: { model: REAL_PLANNER_PRIMARY, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 180 },
+    synthesis: { model: REAL_PLANNER_PRIMARY, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 240 },
   },
   maximum: {
-    planner: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 180 },
-    research: { model: DEEPSEEK_FLASH, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 900 },
-    critic: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 240 },
-    synthesis: { model: GLM_53, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 360 },
+    planner: { model: REAL_PLANNER_PRIMARY, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 180 },
+    research: { model: REAL_PRIMARY, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 900 },
+    critic: { model: REAL_PLANNER_PRIMARY, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 240 },
+    synthesis: { model: REAL_PLANNER_PRIMARY, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 360 },
   },
 });
 
@@ -116,7 +126,7 @@ const trustedSynthetic = isTrustedSyntheticValidationManifest(manifest);
 const route = (trustedSynthetic ? SYNTHETIC_MODEL_ROUTES : REAL_MODEL_ROUTES)[manifest.depth];
 if (!route) throw new Error('invalid investigation depth');
 if (!trustedSynthetic && !Object.values(route).every((phaseRoute) =>
-  phaseRoute.model.startsWith('integritas-openrouter/') || phaseRoute.model.startsWith('nvidia/')
+  phaseRoute.model.startsWith('integritas-openrouter/') || phaseRoute.model.startsWith('integritas-nvidia/') || phaseRoute.model.startsWith('nvidia/')
 )) {
   throw new Error('real investigation routing contains an unapproved provider');
 }
@@ -244,6 +254,7 @@ async function runAgent(messageFile, phaseRoute) {
     env: agentEnv(),
     timeout: (phaseRoute.timeoutSeconds + 60) * 1000,
     maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
+    killSignal: 'SIGTERM',
   });
   return result.stdout;
 }
