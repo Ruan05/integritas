@@ -680,7 +680,6 @@ function deterministicShardSummaryFromTrustedContext(shard, trustedContext, erro
         return `p.${page.page}: trusted ${page.method || 'page'} extraction (${String(page.text).length} chars)`;
       });
       const riskFlags = [
-        `Model shard unavailable; deterministic trusted-page fallback used: ${clean(error?.message ?? error, 220)}`,
         ...(pageReport.pages.filter((page) => page?.unreadable === true).map((page) => `p.${page.page}: unreadable page`)),
         ...(forensic?.pdf?.cryptographic_signature_present === false ? ['No cryptographic PDF signature detected by deterministic forensics'] : []),
       ];
