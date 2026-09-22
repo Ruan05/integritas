@@ -146,39 +146,143 @@ function buildDeterministicLargePlan(documentSummaries, manifest) {
     document_count: manifest.documents.length,
   };
 }
-function buildDeterministicCaseAnalysis(documentSummaries) {
-  const sourceKey = (documentId) => `doc.${String(documentId).replaceAll('-', '')}`;
+export function buildDeterministicCaseAnalysis(documentSummaries) {
+  const sourceKey = (documentId) => \`doc.\${String(documentId).replaceAll('-', '')}\`;
+  const slug = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'unnamed';
+  const clean = (value, max = 240) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+  const cleanPerson = (value) => clean(value)
+    .replace(/^(?:mr|mrs|ms|dr)\.?\s+/i, '')
+    .replace(/\s*\([^)]{1,80}\)\s*$/g, '')
+    .trim();
+
+  const classifyRole = (roleText, displayName = '') => {
+    const role = clean(roleText, 160).toLowerCase();
+    const name = clean(displayName, 240).toLowerCase();
+    if (/\bglobal\s*a1(?:\s+llc)?\b/i.test(name) || /\b(?:buyer|consignee|client|requester)\b/.test(role)) {
+      if (/\b(?:logistics|shipping)\b/.test(role)) return { role: 'buyer_logistics', subject_scope: 'in_scope', entity_type: 'company' };
+      if (/\brepresentative\b/.test(role)) return { role: 'buyer_representative', subject_scope: 'context_only', entity_type: 'person' };
+      return { role: 'buyer_client', subject_scope: 'context_only', entity_type: 'company' };
+    }
+    if (/\b(?:seller|exporter|title\s*holder|refinery)\b/.test(role)) {
+      if (/\b(?:logistics|shipping)\b/.test(role)) return { role: 'seller_logistics', subject_scope: 'in_scope', entity_type: 'company' };
+      if (/\brepresentative\b/.test(role)) return { role: 'seller_representative', subject_scope: 'in_scope', entity_type: 'person' };
+      return { role: 'seller_counterparty', subject_scope: 'in_scope', entity_type: 'company' };
+    }
+    if (/\b(?:logistics|shipping)\b/.test(role)) return { role: 'logistics_party', subject_scope: 'in_scope', entity_type: 'company' };
+    if (/\bbank\b/.test(role)) return { role: 'bank', subject_scope: 'in_scope', entity_type: 'bank' };
+    if (/\brepresentative\b/.test(role)) return { role: 'representative', subject_scope: 'unknown', entity_type: 'person' };
+    return { role: 'unknown', subject_scope: 'unknown', entity_type: 'organization' };
+  };
+
+  const explicitLabelCandidate = (raw) => {
+    const text = clean(raw, 700).replace(/^p\.\d+\s*:\s*/i, '');
+    let match;
+    if ((match = text.match(/^Seller\s+Company\s+Name\s*:?\s*(.+)$/i))) return [{ name: match[1], role: 'Seller / Title Holder' }];
+    if ((match = text.match(/^Seller[’']s\s+(?:Logistics|Shipping)\s+Company\s*:?\s*(.+)$/i))) return [{ name: match[1], role: 'Seller Logistics' }];
+    if ((match = text.match(/^Buyer[’']s\s+Company\s+Name\s*:?\s*(.+)$/i))) return [{ name: match[1], role: 'Buyer / Client' }];
+    if ((match = text.match(/^Buyer[’']s\s+(?:Logistics|Shipping)\s+Company\s*:?\s*(.+)$/i))) return [{ name: match[1], role: 'Buyer Logistics' }];
+    if ((match = text.match(/^BUYER\s+SHIPPING\s+(.+)$/i))) return [{ name: match[1], role: 'Buyer Logistics' }];
+    if ((match = text.match(/^Bank\s+Name\s*:\s*(.+)$/i))) return [{ name: match[1], role: 'Bank' }];
+    if ((match = text.match(/^(?:Representative|Represented\s+By)\s*:?\s*(.+)$/i))) return [{ name: cleanPerson(match[1]), role: 'Representative', person: true }];
+    return [];
+  };
+
+  const parsePartyCandidates = (raw) => {
+    const text = clean(raw, 1200);
+    if (!text) return [];
+    if (/^name=/i.test(text)) {
+      const field = (name) => {
+        const match = text.match(new RegExp(\`(?:^|;\\\\s*)\${name}=([^;]*)\`, 'i'));
+        return clean(match?.[1] ?? '', 300);
+      };
+      const name = field('name');
+      const roleText = field('role');
+      const representative = field('representative') || field('contact_person');
+      const rows = [];
+      if (name) rows.push({ name, role: roleText || 'unknown' });
+      if (representative) {
+        const parentRole = classifyRole(roleText, name).role;
+        const repRole = parentRole.startsWith('buyer_')
+          ? 'Buyer Representative'
+          : parentRole.startsWith('seller_')
+            ? 'Seller Representative'
+            : parentRole.includes('logistics')
+              ? 'Logistics Representative'
+              : 'Representative';
+        rows.push({ name: cleanPerson(representative), role: repRole, person: true, represented_name: name });
+      }
+      return rows;
+    }
+    return explicitLabelCandidate(text);
+  };
+
   const entityRows = [];
-  const entityByName = new Map();
+  const entityByCanonical = new Map();
+  const relationshipSeeds = [];
   const signalMap = new Map();
+
+  const upsertEntity = (candidate) => {
+    const displayName = clean(candidate?.name);
+    if (!displayName || displayName.length < 2) return null;
+    // Reject obvious prose fragments and document labels. Deterministic fallback
+    // creates entities only from explicit structured or labelled party records.
+    if (/[.!?]\s*$/.test(displayName) && displayName.split(/\s+/).length > 8) return null;
+    if (/^(?:seller|buyer|company|address|email|phone|website|representative|represented by|agreed by|signed|logistics company)\s*:?$/i.test(displayName)) return null;
+    const canonical = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (!canonical) return null;
+    const classified = classifyRole(candidate.role, displayName);
+    const existingKey = entityByCanonical.get(canonical);
+    if (existingKey) {
+      const existing = entityRows.find((row) => row.entity_key === existingKey);
+      if (existing) {
+        if (existing.identifiers.role === 'unknown' && classified.role !== 'unknown') existing.identifiers.role = classified.role;
+        if (existing.identifiers.subject_scope === 'unknown' && classified.subject_scope !== 'unknown') existing.identifiers.subject_scope = classified.subject_scope;
+        if (existing.entity_type === 'organization' && classified.entity_type !== 'organization') existing.entity_type = classified.entity_type;
+        existing.confidence = Math.max(existing.confidence, candidate.person ? 55 : 65);
+      }
+      return existingKey;
+    }
+    const entityKey = \`entity.\${slug(displayName)}\`;
+    entityByCanonical.set(canonical, entityKey);
+    entityRows.push({
+      entity_key: entityKey,
+      entity_type: candidate.person ? 'person' : classified.entity_type,
+      display_name: displayName,
+      aliases: [],
+      identifiers: { role: classified.role, subject_scope: classified.subject_scope },
+      match_status: 'proposed',
+      confidence: candidate.person ? 55 : 65,
+    });
+    return entityKey;
+  };
+
   for (const summary of documentSummaries) {
     const currentSourceKey = sourceKey(summary.document_id);
+    const parsedCandidates = [];
     for (const party of Array.isArray(summary.parties) ? summary.parties : []) {
       if (typeof party !== 'string' || !party.trim()) continue;
-      const displayName = party.trim();
-      const normalized = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'unnamed';
-      const entityKey = `entity.${normalized}`;
-      if (!entityByName.has(displayName.toLowerCase())) {
-        entityByName.set(displayName.toLowerCase(), entityKey);
-        const isClientContext = /^(?:ci\s+)?global\s*a1(?:\s+llc)?$/i.test(displayName);
-        entityRows.push({
-          entity_key: entityKey,
-          entity_type: 'organization',
-          display_name: displayName,
-          aliases: [],
-          identifiers: {
-            role: isClientContext ? 'buyer_client' : 'unknown',
-            subject_scope: isClientContext ? 'context_only' : 'unknown',
-          },
-          match_status: 'proposed',
-          confidence: 0.35,
+      parsedCandidates.push(...parsePartyCandidates(party));
+    }
+    for (const candidate of parsedCandidates) {
+      const entityKey = upsertEntity(candidate);
+      if (!entityKey) continue;
+      if (candidate.represented_name) {
+        const parentCandidate = parsedCandidates.find((row) => clean(row.name).toLowerCase() === clean(candidate.represented_name).toLowerCase());
+        const parentKey = parentCandidate ? upsertEntity(parentCandidate) : null;
+        if (parentKey && parentKey !== entityKey) relationshipSeeds.push({
+          from_entity_key: parentKey,
+          to_entity_key: entityKey,
+          relationship_type: 'represented_by',
+          claim: \`\${clean(candidate.represented_name)} is represented in submitted evidence by \${clean(candidate.name)}.\`,
+          source_key: currentSourceKey,
         });
       }
     }
+
     const materialSignals = [
       ...(Array.isArray(summary.risk_flags) ? summary.risk_flags : []),
-      ...(Array.isArray(summary.material_terms) ? summary.material_terms.slice(0, 8) : []),
-    ].filter((value) => typeof value === 'string' && value.trim()).slice(0, 20);
+      ...(Array.isArray(summary.material_terms) ? summary.material_terms.slice(0, 16) : []),
+    ].filter((value) => typeof value === 'string' && value.trim()).slice(0, 32);
     for (const signal of materialSignals) {
       const claim = signal.trim().replace(/\s+/g, ' ');
       const normalizedClaim = claim.toLowerCase();
@@ -191,52 +295,73 @@ function buildDeterministicCaseAnalysis(documentSummaries) {
       existing.source_keys.add(currentSourceKey);
       const structuredExcerpt = [
         summary.evidence_excerpt,
-        Array.isArray(summary.parties) && summary.parties.length ? `Parties: ${summary.parties.join('; ')}` : '',
-        Object.values(summary.identifiers ?? {}).filter((value) => typeof value === 'string' && value.trim()).length
-          ? `Identifiers: ${Object.values(summary.identifiers ?? {}).filter((value) => typeof value === 'string' && value.trim()).join('; ')}`
-          : '',
-        Array.isArray(summary.material_terms) && summary.material_terms.length ? `Material terms: ${summary.material_terms.join('; ')}` : '',
-        Array.isArray(summary.risk_flags) && summary.risk_flags.length ? `Risk/forensic signals: ${summary.risk_flags.join('; ')}` : '',
+        Array.isArray(summary.identifiers) && summary.identifiers.length ? \`Identifiers: \${summary.identifiers.join('; ')}\` : '',
+        Array.isArray(summary.material_terms) && summary.material_terms.length ? \`Material terms: \${summary.material_terms.join('; ')}\` : '',
+        Array.isArray(summary.risk_flags) && summary.risk_flags.length ? \`Risk/forensic signals: \${summary.risk_flags.join('; ')}\` : '',
       ].filter(Boolean).join(' | ').replace(/\s+/g, ' ').slice(0, 1200);
       if (structuredExcerpt && existing.excerpts.length < 3) existing.excerpts.push(structuredExcerpt);
-      const signalLower = normalizedClaim;
-      for (const party of Array.isArray(summary.parties) ? summary.parties : []) {
-        if (typeof party === 'string' && signalLower.includes(party.toLowerCase())) {
-          const entityKey = entityByName.get(party.toLowerCase());
-          if (entityKey) existing.entity_keys.add(entityKey);
-        }
+      for (const entity of entityRows) {
+        if (claim.toLowerCase().includes(entity.display_name.toLowerCase())) existing.entity_keys.add(entity.entity_key);
       }
       signalMap.set(normalizedClaim, existing);
     }
   }
-  const findings = [...signalMap.values()].slice(0, 80).map((row, index) => ({
-    finding_key: `evidence.${String(index + 1).padStart(2, '0')}`,
+
+  // Explicit client/requester identity is contextual unless case scope says otherwise.
+  for (const entity of entityRows) {
+    if (/\bglobal\s*a1(?:\s+llc)?\b/i.test(entity.display_name)) {
+      entity.identifiers.role = 'buyer_client';
+      entity.identifiers.subject_scope = 'context_only';
+      entity.entity_type = 'company';
+    }
+  }
+
+  const relationships = [];
+  const relationshipKeys = new Set();
+  for (const [index, seed] of relationshipSeeds.entries()) {
+    const key = \`relationship.represented-by.\${slug(seed.from_entity_key)}.\${slug(seed.to_entity_key)}\`.slice(0, 128);
+    if (relationshipKeys.has(key)) continue;
+    relationshipKeys.add(key);
+    relationships.push({
+      relationship_key: key,
+      from_entity_key: seed.from_entity_key,
+      to_entity_key: seed.to_entity_key,
+      relationship_type: seed.relationship_type,
+      claim: seed.claim,
+      evidence_status: 'alleged',
+      source_keys: [seed.source_key],
+      confidence: 60,
+    });
+  }
+
+  const findings = [...signalMap.values()].slice(0, 120).map((row, index) => ({
+    finding_key: \`evidence.\${String(index + 1).padStart(3, '0')}\`,
     entity_key: row.entity_keys.size === 1 ? [...row.entity_keys][0] : null,
-    finding_type: /no_|image_reuse|scanned|signature|acroform/i.test(row.claim) ? 'document_forensic_signal' : 'submitted_evidence_signal',
+    finding_type: /no cryptographic|image reuse|scanned|signature|acroform|unreadable/i.test(row.claim) ? 'document_forensic_signal' : 'submitted_evidence_signal',
     claim: row.claim,
     evidence_status: 'uncertain',
-    materiality: /no_|image_reuse|scanned|signature|acroform/i.test(row.claim) ? 'high' : 'medium',
+    materiality: /no cryptographic|image reuse|signature|unreadable/i.test(row.claim) ? 'high' : 'medium',
     reliability: 'unknown',
     evidence_excerpt: row.excerpts.join(' | ').slice(0, 800),
     source_keys: [...row.source_keys],
   }));
+
   return {
-    entities: entityRows,
-    relationships: [],
+    entities: entityRows.slice(0, 120),
+    relationships: relationships.slice(0, 200),
     findings,
     contradictions: [],
     unresolved_checks: [{
       unresolved_key: 'analysis.deterministic_review',
       description: 'Model-assisted entity and claim synthesis was unavailable; deterministic document evidence was preserved without asserting verification.',
-      reason: 'The bounded model-analysis routes did not return a validated result within their route budget.',
-      attempted_methods: ['Deterministic document shard reconciliation', 'Evidence-derived entity and signal extraction'],
+      reason: 'The bounded model-analysis route did not return a validated result within its route budget.',
+      attempted_methods: ['Deterministic page extraction', 'Deterministic document shard reconciliation', 'Explicit labelled-party extraction'],
       blocker: 'Independent model-assisted synthesis remains unavailable for this run.',
-      next_manual_action: 'Review proposed entities and evidence-linked signals, then rerun model-assisted analysis when a healthy provider is available.',
+      next_manual_action: 'Use the specialist research lanes and independent review to resolve proposed identities; rerun model-assisted synthesis when a healthy provider is available.',
     }],
-    limitations: ['Deterministic fallback preserved submitted evidence signals; it does not establish identity, authenticity or external verification.'],
+    limitations: ['Deterministic fallback preserves explicit labelled parties and submitted evidence signals; it does not establish identity, authenticity or external verification.'],
   };
 }
-
 function runBoundedOpenClaw(args, { cwd, env, timeoutSeconds, maxBuffer }) {
   return new Promise((resolve, reject) => {
     const child = spawn('/opt/openclaw/bin/openclaw', args, {
@@ -659,11 +784,27 @@ function deterministicShardSummaryFromTrustedContext(shard, trustedContext, erro
         }
       }
       const fullText = lines.map((row) => row.line).join('\n');
-      const partyLines = lines
-        .filter(({ line }) =>
-          /\b(?:seller|buyer|exporter|consignee|shipper|shipping|logistics|beneficiary|representative|represented\s+by)\b/i.test(line)
-          || /\b(?:LLC|L\.?L\.?C\.?|LIMITED|LTD\.?|B\.?V\.?|INC\.?|CORP(?:ORATION)?|BANK\s+N\.?V\.?)\b/i.test(line))
-        .map(({ page, line }) => `p.${page}: ${line}`);
+      const partyLines = [];
+      for (const { page, line } of lines) {
+        const addParty = (name, role) => {
+          const cleaned = clean(name, 240).replace(/[|]+$/g, '').trim();
+          if (cleaned && cleaned.length <= 240) partyLines.push(`name=${cleaned}; role=${role}; source_page=p.${page}`);
+        };
+        let match;
+        if ((match = line.match(/Seller\s+Company\s+Name\s*:?[\s]+(.+)$/i))) addParty(match[1], 'Seller / Title Holder');
+        else if ((match = line.match(/Seller[’']s\s+(?:Logistics|Shipping)\s+Company\s*:?[\s]+(.+)$/i))) addParty(match[1], 'Seller Logistics');
+        else if ((match = line.match(/Buyer[’']s\s+Company\s+Name\s*:?[\s]+(.+)$/i))) addParty(match[1], 'Buyer / Client');
+        else if ((match = line.match(/Buyer[’']s\s+(?:Logistics|Shipping)\s+Company\s*:?[\s]+(.+)$/i))) addParty(match[1], 'Buyer Logistics');
+        else if ((match = line.match(/^BUYER\s+SHIPPING\s+(.+)$/i))) addParty(match[1], 'Buyer Logistics');
+        else if ((match = line.match(/^Bank\s+Name\s*:\s*(.+)$/i))) addParty(match[1], 'Bank');
+        else if ((match = line.match(/^(?:Representative|Represented\s+By)\s*:?[\s]+(.+)$/i))) addParty(match[1], 'Representative');
+        else if ((match = line.match(/^COMPANY:\s*(.+?)\s{2,}COMPANY:\s*(.+)$/i))) {
+          // Two-column commercial invoices commonly place seller and buyer company
+          // names on one row. Only this explicit labelled layout is interpreted.
+          addParty(match[1], 'Seller / Exporter');
+          addParty(match[2], 'Buyer / Consignee');
+        }
+      }
       const identifierLines = lines
         .filter(({ line }) => /\b(?:IBAN|SWIFT|BIC|account\s+number|invoice\s+(?:number|no)|contract\s+(?:number|no)|allocation\s+(?:number|no)|reference|tank\s+(?:reference|hub)|IMO|Q88|email|website)\b|@|https?:\/\/|www\./i.test(line))
         .map(({ page, line }) => `p.${page}: ${line}`);
