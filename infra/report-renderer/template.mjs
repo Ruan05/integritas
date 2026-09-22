@@ -1,4 +1,4 @@
-const TEMPLATE_VERSION = 'integritas-report-v1';
+const TEMPLATE_VERSION = 'integritas-report-v2';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -55,6 +55,7 @@ export function buildRenderSpec(bundle) {
     },
     check_completion_percent: percent(completedChecks, checks.length),
     finding_statuses: countBy(findings, 'evidence_status'),
+    finding_materialities: countBy(findings, 'materiality'),
     entity_types: countBy(entities, 'entity_type'),
   };
 }
@@ -95,12 +96,63 @@ function summaryVisuals(bundle, spec) {
     ${metric('Checks complete', `${spec.check_completion_percent}%`, `${spec.counts.completed_checks}/${spec.counts.checks}`)}
   </div>
   ${rows ? `<div class="bar-panel"><h3>Finding evidence status</h3>${rows}</div>` : ''}
+  ${spec.finding_materialities?.length ? `<div class="bar-panel"><h3>Finding materiality</h3>${spec.finding_materialities.slice(0, 5).map(([label, value]) => `<div class="bar-row"><span>${escapeHtml(label)}</span><div class="bar-track"><div class="bar-fill materiality" style="width:${percent(value, Math.max(1, spec.counts.findings))}%"></div></div><strong>${value}</strong></div>`).join('')}</div>` : ''}
 </section>`;
 }
 
 function compact(value, limit = 220) {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim();
   return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+}
+
+function subjectStatusMatrix(bundle) {
+  const findings = Array.isArray(bundle?.findings) ? bundle.findings : [];
+  const rows = (bundle?.entities ?? []).slice(0, 50).map((entity) => {
+    const entityFindings = findings.filter((finding) => finding?.entity_key === entity?.entity_key);
+    const material = entityFindings.filter((finding) => ['critical', 'high'].includes(String(finding?.materiality))).length;
+    const linked = entityFindings.filter((finding) => Array.isArray(finding?.source_keys) && finding.source_keys.length).length;
+    const role = entity?.identifiers?.role || 'unknown';
+    const scope = entity?.identifiers?.subject_scope || 'unknown';
+    const confidence = Number.isFinite(entity?.confidence) ? `${Math.round(entity.confidence)}%` : '—';
+    return `<tr><td><strong>${escapeHtml(entity?.display_name || entity?.entity_key || 'Unknown')}</strong><br><span class="mono-key">${escapeHtml(entity?.entity_key || '')}</span></td><td>${escapeHtml(String(role).replaceAll('_', ' '))}</td><td>${escapeHtml(String(scope).replaceAll('_', ' '))}</td><td><span class="status-pill ${statusClass(entity?.match_status)}">${escapeHtml(entity?.match_status || 'unknown')}</span><br>${escapeHtml(confidence)}</td><td>${material}</td><td>${linked}/${entityFindings.length}</td></tr>`;
+  }).join('');
+  if (!rows) return '';
+  return `<section class="report-visual subject-matrix"><div class="visual-title"><div><div class="eyebrow">Subject controls</div><h2>Subject status matrix</h2></div><span>${(bundle?.entities ?? []).length} entity record(s)</span></div><table><thead><tr><th>Entity</th><th>Role</th><th>Scope</th><th>Identity status</th><th>High / critical</th><th>Source-linked findings</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+}
+
+function claimEvidenceMatrix(bundle) {
+  const sources = new Map((bundle?.sources ?? []).map((row) => [row?.source_key, row]));
+  const weight = { critical: 5, high: 4, medium: 3, low: 2, informational: 1 };
+  const ordered = [...(bundle?.findings ?? [])]
+    .sort((a, b) => (weight[b?.materiality] ?? 0) - (weight[a?.materiality] ?? 0))
+    .slice(0, 35);
+  const rows = ordered.map((finding) => {
+    const labels = (finding?.source_keys ?? []).slice(0, 5).map((key) => {
+      const source = sources.get(key);
+      const page = source?.page_reference ? ` · ${source.page_reference}` : '';
+      return `${key}${page}`;
+    }).join('; ') || 'No linked source';
+    return `<tr><td>${escapeHtml(compact(finding?.claim, 360))}</td><td><span class="status-pill ${statusClass(finding?.evidence_status)}">${escapeHtml(finding?.evidence_status || 'unknown')}</span></td><td>${escapeHtml(finding?.materiality || 'unknown')}</td><td class="mono-key">${escapeHtml(labels)}</td></tr>`;
+  }).join('');
+  if (!rows) return '';
+  return `<section class="report-visual claim-matrix"><div class="visual-title"><div><div class="eyebrow">Provenance</div><h2>Claim-to-evidence matrix</h2></div><span>${ordered.length}/${(bundle?.findings ?? []).length} finding(s) shown</span></div><table><thead><tr><th>Claim</th><th>Status</th><th>Materiality</th><th>Source / page</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+}
+
+function transactionControlMatrix(bundle) {
+  const checks = (bundle?.checks ?? []).filter((row) => {
+    const key = `${row?.check_key || ''} ${row?.check_type || ''}`;
+    return /(?:bank|iban|bic|swift|imo|vessel|pricing|econom|trade|payment|product|title|logistic|terminal|sanction)/i.test(key);
+  }).slice(0, 40);
+  if (!checks.length) return '';
+  const rows = checks.map((row) => `<tr><td>${escapeHtml(row?.check_type || row?.check_key || 'check')}</td><td>${escapeHtml(compact(row?.description, 320))}</td><td><span class="status-pill ${statusClass(row?.status)}">${escapeHtml(row?.status || 'unknown')}</span></td><td>${escapeHtml(compact(row?.outcome, 340))}</td></tr>`).join('');
+  return `<section class="report-visual"><div class="visual-title"><div><div class="eyebrow">Transaction controls</div><h2>Banking, logistics & trade checks</h2></div><span>${checks.length} material check(s)</span></div><table><thead><tr><th>Control</th><th>Test</th><th>Status</th><th>Outcome</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+}
+
+function evidenceRegister(bundle) {
+  const sources = (bundle?.sources ?? []).slice(0, 50);
+  if (!sources.length) return '';
+  const rows = sources.map((row) => `<tr><td class="mono-key">${escapeHtml(row?.source_key || '')}</td><td>${escapeHtml(row?.evidence_origin || '')}</td><td>${escapeHtml(compact(row?.title, 220))}</td><td>${escapeHtml(row?.page_reference || '—')}</td><td>${escapeHtml(compact(row?.reliability_note, 280))}</td></tr>`).join('');
+  return `<section class="report-visual"><div class="visual-title"><div><div class="eyebrow">Evidence register</div><h2>Source coverage</h2></div><span>${(bundle?.sources ?? []).length} source(s)</span></div><table><thead><tr><th>Source key</th><th>Origin</th><th>Title</th><th>Page</th><th>Reliability / caveat</th></tr></thead><tbody>${rows}</tbody></table></section>`;
 }
 
 function relationshipMap(bundle) {
@@ -184,6 +236,9 @@ blockquote { border-left: 3px solid #b68a32; margin-left: 0; padding-left: 12px;
 .bar-row { display:grid; grid-template-columns:30mm 1fr 9mm; gap:7px; align-items:center; font-size:8.5pt; margin:5px 0; }
 .bar-track { height:7px; background:#eee9df; }
 .bar-fill { height:7px; background:#b68a32; }
+.bar-fill.materiality { background:#7b632d; }
+.mono-key { font-family:"DejaVu Sans Mono", monospace; font-size:7.5pt; color:#5a5140; word-break:break-all; }
+.subject-matrix table, .claim-matrix table { font-size:8.2pt; }
 .report-visual { border:1px solid #ded2b5; padding:13px; margin:14px 0 20px; break-inside:avoid-page; background:#fffdf8; }
 .visual-title { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; color:#6b5a39; font-size:8pt; }
 .visual-title h2 { color:#171717; margin:2px 0 9px; }
@@ -215,9 +270,13 @@ hr { border:0; border-top:1px solid #d9cfb9; margin:18px 0; }
   </div>
 </section>
 ${summaryVisuals(bundle, spec)}
+${subjectStatusMatrix(bundle)}
 ${relationshipMap(bundle)}
+${claimEvidenceMatrix(bundle)}
+${transactionControlMatrix(bundle)}
 ${contradictionMatrix(bundle)}
 ${unresolvedGates(bundle)}
+${evidenceRegister(bundle)}
 ${executionTimeline(bundle)}
 <main class="report-body">
 {{ toHTML "report.md" }}
@@ -243,3 +302,5 @@ body { margin: 0 14mm; width: calc(100% - 28mm); }
 }
 
 export { TEMPLATE_VERSION };
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

@@ -15,16 +15,16 @@ function bundle(markdown) {
     case_revision: 2,
     depth: 'maximum',
     generated_at: '2026-09-21T18:00:00.000Z',
-    entities: [{ entity_key: 'seller', display_name: 'Nimbus Seller', entity_type: 'company' }, { entity_key: 'director', display_name: 'Alex Test', entity_type: 'person' }],
+    entities: [{ entity_key: 'seller', display_name: 'Nimbus Seller', entity_type: 'company', identifiers: { role: 'seller', subject_scope: 'in_scope' }, match_status: 'conflicting', confidence: 75 }, { entity_key: 'director', display_name: 'Alex Test', entity_type: 'person', identifiers: { role: 'representative', subject_scope: 'in_scope' }, match_status: 'proposed', confidence: 55 }],
     relationships: [{ from_entity_key: 'director', to_entity_key: 'seller', relationship_type: 'director of', evidence_status: 'alleged' }],
     findings: [
-      { evidence_status: 'verified' },
-      { evidence_status: 'conflicting' },
+      { finding_key: 'banking', entity_key: 'seller', claim: 'IBAN candidate fails structural checksum.', evidence_status: 'verified', materiality: 'high', source_keys: ['doc-one'] },
+      { finding_key: 'authority', entity_key: 'director', claim: 'Representative authority is unresolved.', evidence_status: 'conflicting', materiality: 'critical', source_keys: ['web-one'] },
     ],
-    checks: [{ status: 'complete' }, { status: 'blocked' }],
+    checks: [{ check_key: 'deterministic.iban.01.check', check_type: 'iban_checksum', description: 'IBAN structural check', status: 'complete', outcome: 'Remainder 35; invalid.' }, { check_key: 'lane.transaction.trade_finance', check_type: 'research_lane', description: 'Verify trade-finance structure', status: 'blocked', outcome: 'Issuer confirmation required.' }],
     sources: [
-      { evidence_origin: 'submitted_document' },
-      { evidence_origin: 'external_research' },
+      { source_key: 'doc-one', evidence_origin: 'submitted_document', title: 'Submitted invoice', page_reference: 'p.3', reliability_note: 'Submitted evidence; authenticity not assumed.' },
+      { source_key: 'web-one', evidence_origin: 'external_research', title: 'Official registry', page_reference: null, reliability_note: 'Official public source.' },
     ],
     contradictions: [{ contradiction_key: 'registration', description: 'Two registration numbers are claimed.', finding_keys: ['registration-a', 'registration-b'] }],
     unresolved_checks: [{ description: 'Confirm beneficiary ownership.', blocker: 'Direct bank confirmation unavailable.', next_manual_action: 'Ask the bank through independently sourced contact details.' }],
@@ -59,12 +59,16 @@ test('template derives visual metrics from structured evidence', () => {
   assert.equal(spec.check_completion_percent, 50);
   const html = buildIndexHtml(value);
   assert.match(html, /Evidence dashboard/);
+  assert.match(html, /Subject status matrix/);
   assert.match(html, /Entity relationship map/);
+  assert.match(html, /Claim-to-evidence matrix/);
+  assert.match(html, /Banking, logistics & trade checks/);
+  assert.match(html, /Source coverage/);
   assert.match(html, /Contradiction matrix/);
   assert.match(html, /Unresolved verification gates/);
   assert.match(html, /Investigation timeline/);
   assert.match(html, /\{\{ toHTML "report\.md" \}\}/);
-  assert.match(html, /integritas-report-v1/);
+  assert.match(html, /integritas-report-v2/);
 });
 
 test('renderer health-checks Gotenberg and writes PDF plus audit sidecars atomically', async () => {
@@ -113,7 +117,7 @@ test('renderer health-checks Gotenberg and writes PDF plus audit sidecars atomic
     const pdf = await readFile(outputPath);
     assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
     const metadata = JSON.parse(await readFile(`${outputPath}.json`, 'utf8'));
-    assert.equal(metadata.template_version, 'integritas-report-v1');
+    assert.equal(metadata.template_version, 'integritas-report-v2');
     const renderSpec = JSON.parse(await readFile(`${outputPath}.render.json`, 'utf8'));
     assert.equal(renderSpec.counts.contradictions, 1);
   } finally {
@@ -137,3 +141,5 @@ test('renderer refuses markdown that does not match the canonical bundle report'
     /bundle\/report markdown mismatch/,
   );
 });
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

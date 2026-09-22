@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OPENCLAW_VERSION="2026.9.4"
+OPENCLAW_VERSION="2026.9.5"
 NODE_VERSION="24.19.0"
 TARGET_VERSION="${OPENCLAW_TARGET_VERSION:-${OPENCLAW_VERSION}}"
 PREFIX=/opt/openclaw
@@ -40,6 +40,13 @@ bash "${INSTALLER}" --prefix "${PREFIX}" --version "${TARGET_VERSION}" --node-ve
 chmod 0755 "${PREFIX}/bin/openclaw"
 "${PREFIX}/bin/openclaw" --version | grep -F "${TARGET_VERSION}" >/dev/null
 
+# Integritas research lanes pin web_search to the official Perplexity provider.
+# Keep the plugin installation source-controlled so a rebuilt Oracle host exposes
+# the same search capability as production. The credential remains server-side.
+runuser -u openclaw -- env \
+  HOME="${STATE_DIR}" OPENCLAW_HOME="${STATE_DIR}" OPENCLAW_STATE_DIR="${STATE_DIR}" \
+  "${PREFIX}/bin/openclaw" plugins install @openclaw/perplexity-plugin
+
 rm -rf "${SOURCE_DIR}"
 git clone --depth=1 --branch "v${TARGET_VERSION}" https://github.com/openclaw/openclaw.git "${SOURCE_DIR}"
 git -C "${SOURCE_DIR}" describe --tags --exact-match | grep -Fx "v${TARGET_VERSION}" >/dev/null
@@ -73,3 +80,5 @@ printf '%s\n' "${TARGET_VERSION}" >"${CURRENT_FILE}"
 chown openclaw:openclaw "${CURRENT_FILE}"
 chmod 0600 "${CURRENT_FILE}"
 echo "OpenClaw ${TARGET_VERSION} installed with Docker-backed sandboxing."
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

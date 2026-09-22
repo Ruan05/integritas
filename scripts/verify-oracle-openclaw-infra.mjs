@@ -67,7 +67,7 @@ if (!errors.length) {
     [gatewayOverlay, 'primary: "nvidia/nvidia/nemotron-3-ultra-550b-a55b"', 'Gateway canonical NVIDIA primary'],
     [gatewayOverlay, '"integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"', 'Gateway fixed free Nemotron fallback'],
     [gatewayOverlay, '"integritas-openrouter/openrouter/free"', 'Gateway dynamic free fallback'],
-    [installer, 'OPENCLAW_VERSION="2026.9.4"', 'pinned OpenClaw stable version'],
+    [installer, 'OPENCLAW_VERSION="2026.9.5"', 'pinned OpenClaw stable version'],
     [installer, 'chmod 0755 "${PREFIX}/bin/openclaw"', 'readable executable OpenClaw CLI'],
     [installer, 'v${TARGET_VERSION}', 'pinned OpenClaw source tag'],
     [cloudInit, 'ocarun', 'OCI Run Command user'],
@@ -127,3 +127,5 @@ if (errors.length) {
   process.exit(1);
 }
 console.log('Oracle/OpenClaw infrastructure policy verified.');
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

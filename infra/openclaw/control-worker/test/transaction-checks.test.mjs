@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ibanChecksum, imoChecksum, bicFormat, buildDeterministicChecks,
+  ibanChecksum, imoChecksum, bicFormat, buildDeterministicChecks, applyDeterministicChecksToBundle,
 } from '../../transaction-checks.mjs';
 
 test('IBAN mod-97 catches the historical Shell-style invalid account and accepts a valid control', () => {
@@ -59,3 +59,25 @@ test('transaction checks preserve document provenance and detect repeated candid
     ],
   }]);
 });
+
+
+test('deterministic structural checks become source-linked canonical findings and checks', () => {
+  const docId = '11111111-1111-4111-8111-111111111111';
+  const bundle = { findings: [], checks: [] };
+  const deterministic = {
+    iban_checks: [{ document_id: docId, value: 'NL91ABNA0793164363', mod97_remainder: 35, checksum_valid: false }],
+    imo_checks: [{ document_id: docId, value: 'IMO9776547', calculated_check_digit: 7, checksum_valid: true }],
+    bic_format_checks: [{ document_id: docId, value: 'ABNANL2A', format_valid: true, note: 'Format only; ownership is not established.' }],
+  };
+  applyDeterministicChecksToBundle(bundle, deterministic);
+  assert.equal(bundle.findings.length, 3);
+  assert.equal(bundle.checks.length, 3);
+  const iban = bundle.findings.find((row) => row.finding_type === 'iban_checksum');
+  assert.equal(iban.evidence_status, 'verified');
+  assert.equal(iban.materiality, 'high');
+  assert.deepEqual(iban.source_keys, ['doc.11111111111141118111111111111111']);
+  assert.match(iban.claim, /remainder 35/i);
+  assert.match(bundle.checks.find((row) => row.check_type === 'iban_checksum').outcome, /requires remainder 1/i);
+});
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

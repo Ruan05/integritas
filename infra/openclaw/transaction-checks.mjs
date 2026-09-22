@@ -75,3 +75,83 @@ export function buildDeterministicChecks(plan) {
       })),
   };
 }
+
+function documentSourceKey(documentId) {
+  return `doc.${String(documentId).replaceAll('-', '')}`;
+}
+
+/** Promote deterministic structural checks into the canonical evidence ledger.
+ * These records prove only the computation performed on a candidate extracted
+ * from submitted evidence; they never establish ownership, authority or authenticity.
+ */
+export function applyDeterministicChecksToBundle(bundle, deterministicChecks) {
+  if (!bundle || typeof bundle !== 'object') throw new Error('bundle is required');
+  if (!Array.isArray(bundle.findings)) bundle.findings = [];
+  if (!Array.isArray(bundle.checks)) bundle.checks = [];
+  const findingKeys = new Set(bundle.findings.map((row) => row?.finding_key).filter(Boolean));
+  const checkKeys = new Set(bundle.checks.map((row) => row?.check_key).filter(Boolean));
+  const add = ({ key, checkType, claim, materiality, sourceKey, outcome }) => {
+    const findingKey = `deterministic.${key}`.slice(0, 128);
+    const checkKey = `deterministic.${key}.check`.slice(0, 128);
+    if (!findingKeys.has(findingKey)) {
+      bundle.findings.push({
+        finding_key: findingKey,
+        entity_key: null,
+        finding_type: checkType,
+        claim,
+        evidence_status: 'verified',
+        materiality,
+        reliability: 'high',
+        evidence_excerpt: outcome,
+        source_keys: [sourceKey],
+      });
+      findingKeys.add(findingKey);
+    }
+    if (!checkKeys.has(checkKey)) {
+      bundle.checks.push({
+        check_key: checkKey,
+        entity_key: null,
+        check_type: checkType,
+        description: claim,
+        priority: materiality === 'critical' ? 'critical' : materiality === 'high' ? 'high' : 'medium',
+        required_source: 'Submitted evidence candidate plus deterministic structural calculation',
+        status: 'complete',
+        outcome,
+      });
+      checkKeys.add(checkKey);
+    }
+  };
+  for (const [index, row] of (deterministicChecks?.iban_checks ?? []).entries()) {
+    add({
+      key: `iban.${String(index + 1).padStart(2, '0')}`,
+      checkType: 'iban_checksum',
+      claim: `Submitted IBAN candidate ${row.value} has ISO 13616 mod-97 remainder ${row.mod97_remainder}; structural checksum is ${row.checksum_valid ? 'valid' : 'invalid'}.`,
+      materiality: row.checksum_valid ? 'medium' : 'high',
+      sourceKey: documentSourceKey(row.document_id),
+      outcome: `Deterministic mod-97 computation returned ${row.mod97_remainder}. A valid IBAN requires remainder 1. This structural result does not establish account ownership or transaction authenticity.`,
+    });
+  }
+  for (const [index, row] of (deterministicChecks?.imo_checks ?? []).entries()) {
+    add({
+      key: `imo.${String(index + 1).padStart(2, '0')}`,
+      checkType: 'imo_checksum',
+      claim: `Submitted IMO candidate ${row.value} has a ${row.checksum_valid ? 'valid' : 'invalid'} check digit.`,
+      materiality: row.checksum_valid ? 'medium' : 'high',
+      sourceKey: documentSourceKey(row.document_id),
+      outcome: `Calculated IMO check digit ${row.calculated_check_digit}; checksum validity ${row.checksum_valid}. This does not establish vessel ownership, control, nomination or cargo linkage.`,
+    });
+  }
+  for (const [index, row] of (deterministicChecks?.bic_format_checks ?? []).entries()) {
+    add({
+      key: `bic.${String(index + 1).padStart(2, '0')}`,
+      checkType: 'bic_format',
+      claim: `Submitted BIC/SWIFT candidate ${row.value} matches structural BIC format.`,
+      materiality: 'informational',
+      sourceKey: documentSourceKey(row.document_id),
+      outcome: row.note,
+    });
+  }
+  return bundle;
+}
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

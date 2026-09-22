@@ -702,8 +702,23 @@
     },
   },
   tools: {
+    // Pin web_search to the official Perplexity provider. The service already
+    // passes OPENROUTER_API_KEY into isolated investigation turns, which the
+    // provider supports directly; this avoids Gateway SecretRef resolution in
+    // standalone agent executions while preserving browser/web_fetch fallbacks.
+    web: {
+      search: {
+        enabled: true,
+        provider: "perplexity",
+        maxResults: 8,
+        timeoutSeconds: 45,
+      },
+      fetch: { enabled: true },
+    },
     profile: "minimal",
     alsoAllow: ["ls", "read", "web_search", "web_fetch", "browser", "view_image", "pdf"],
     deny: ["write", "edit", "exec", "apply_patch", "process", "code_execution", "terminal", "screen", "dashboard", "portal", "sessions", "sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents", "secrets"],
   },
 }
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

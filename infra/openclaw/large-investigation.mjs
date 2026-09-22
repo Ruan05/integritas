@@ -115,7 +115,7 @@ export function parseDocumentShardFinal(finalText, expectedDocumentIds) {
     const row = obj(row0, `document shard row ${index}`);
     allowedKeys(row, new Set([
       'document_id', 'document_type', 'issuer_claim', 'parties', 'identifiers',
-      'material_terms', 'risk_flags', 'instruction_like_text', 'evidence_excerpt',
+      'material_terms', 'risk_flags', 'instruction_like_text', 'evidence_excerpt', 'page_references',
     ]), `document shard row ${index}`);
     if (!UUID.test(row.document_id) || !expected.has(row.document_id) || seen.has(row.document_id)) {
       fail(`document shard row ${index} document_id is invalid`);
@@ -132,6 +132,8 @@ export function parseDocumentShardFinal(finalText, expectedDocumentIds) {
     // evidence excerpt useful while enforcing the canonical bundle size deterministically.
     if (typeof row.evidence_excerpt === 'string') row.evidence_excerpt = row.evidence_excerpt.slice(0, 500);
     str(row.evidence_excerpt, 'evidence_excerpt', 500, true);
+    if (row.page_references == null) row.page_references = [];
+    stringArray(row.page_references, 'page_references', 100, 600);
   }
   return { documents: rows };
 }
@@ -149,15 +151,19 @@ export function buildSubmittedSources(manifest, documentSummaries, retrievedAt) 
       `Identifiers: ${(summary.identifiers ?? []).join('; ') || 'not extracted'}`,
       `Material terms: ${(summary.material_terms ?? []).join('; ') || 'not extracted'}`,
       `Forensic/risk signals: ${(summary.risk_flags ?? []).join('; ') || 'none recorded'}`,
+      `Page evidence: ${(summary.page_references ?? []).join(' | ') || 'not supplied'}`,
       `Evidence excerpt: ${summary.evidence_excerpt ?? ''}`,
     ];
+    const pageNumbers = [...new Set((summary.page_references ?? []).flatMap((value) =>
+      [...String(value).matchAll(/(?:^|\b)p(?:age)?\.?\s*(\d{1,4})\b/gi)].map((match) => Number(match[1]))
+    ))].filter((value) => Number.isInteger(value) && value > 0).sort((a, b) => a - b);
     return {
       source_key: documentSourceKey(document.id),
       source_type: 'document',
       title: document.name,
       url: null,
       document_id: document.id,
-      page_reference: null,
+      page_reference: pageNumbers.length ? pageNumbers.map((value) => `p.${value}`).join(', ') : null,
       excerpt: detailLines.join('\\n'),
       reliability_note: 'Submitted evidence; authenticity and claims require independent verification unless otherwise established.',
       evidence_origin: 'submitted_document',
@@ -536,3 +542,5 @@ export function joinReportSections(sections) {
   if (ordered.some((value) => typeof value !== 'string' || !value.trim())) fail('missing report section');
   return `${ordered.join('\n\n')}\n`;
 }
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

@@ -472,6 +472,17 @@ def validate_semantic_maximum(bundle, manifest, report_text, errors, plan=None, 
     pdf_tool_observed = agent_exec is None or not pdf_docs or 'pdf' in observed_tools
     if not pdf_tool_observed:
         errors.append('semantic QA: maximum PDF evidence was not substantively inspected with the OpenClaw pdf tool')
+    submitted_by_document = {
+        row.get('document_id'): row for row in submitted
+        if isinstance(row, dict) and isinstance(row.get('document_id'), str)
+    }
+    missing_page_provenance = [
+        row.get('id') for row in pdf_docs
+        if not isinstance(submitted_by_document.get(row.get('id'), {}).get('page_reference'), str)
+        or not submitted_by_document.get(row.get('id'), {}).get('page_reference', '').strip()
+    ]
+    if missing_page_provenance:
+        errors.append('semantic QA: maximum PDF evidence lacks page-level source provenance: ' + ','.join(str(x) for x in missing_page_provenance[:12]))
 
     # Role/scope are required so contextual client/buyer parties are not silently adverse-scored.
     entities = bundle.get('entities') if isinstance(bundle.get('entities'), list) else []
@@ -658,3 +669,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

@@ -324,6 +324,16 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
         )
         self.assertTrue(any("pdf tool" in error for error in errors))
 
+
+    def test_semantic_maximum_rejects_missing_pdf_page_provenance(self):
+        bundle = copy.deepcopy(self.bundle)
+        bundle["sources"][0]["page_reference"] = None
+        errors, _ = validate(
+            bundle, self.manifest, self.report, 2, self.forensics,
+            plan=self.plan, agent_exec=self.agent_exec,
+        )
+        self.assertTrue(any("page-level source provenance" in error for error in errors))
+
     def test_semantic_maximum_rejects_collapsed_single_lane_plan(self):
         plan = {"research_lanes": [{"lane_id": "core.identity"}]}
         errors, _ = validate(
@@ -348,3 +358,5 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
