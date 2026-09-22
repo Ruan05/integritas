@@ -925,9 +925,27 @@ export async function executeInvestigation(command, {
           },
         );
         renderStatus = 'ready';
-      } catch {
+      } catch (error) {
+        // Rendering is an artifact/runtime failure, never a case finding. Preserve a
+        // bounded, non-sensitive diagnostic so an incomplete run can be recovered
+        // without exposing renderer responses, credentials, or submitted evidence.
+        const message = String(error?.message ?? error ?? 'unknown renderer failure');
+        const classified = /invalid investigation output size/i.test(message)
+          ? 'output_size_limit'
+          : /digest mismatch/i.test(message)
+            ? 'digest_mismatch'
+            : /Gotenberg .*HTTP/i.test(message)
+              ? 'gotenberg_http'
+              : /Gotenberg health/i.test(message)
+                ? 'gotenberg_unhealthy'
+                : /fetch failed|ECONNRESET|ETIMEDOUT|UND_ERR_/i.test(message)
+                  ? 'renderer_transport'
+                  : /control API worker_publish_output/i.test(message)
+                    ? 'artifact_persistence'
+                    : 'renderer_unknown';
         renderStatus = 'render_failed';
         pdfSha = null;
+        rendererTrace = `render-error:${classified}`;
       }
     }
 
