@@ -1274,26 +1274,47 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
   await progress(jobDir, 'mapping_entities', 38, 'large_bounded_plan');
   let planResult;
   if (LARGE_PLANNER_ENABLED) {
-    planResult = await validated({
-      jobDir, id: 'large-plan', role: 'plan', task: planTask(synthetic),
-      execName: 'large-v2-plan-exec.json', synthetic, allowExternal: false,
-      validator: (final) => filterSyntheticExternalResearchLanes(
-        parseLargePlanFinal(final, { allowZeroLanes: synthetic }), synthetic,
-      ),
-      progressState: { stage: 'mapping_entities', progress: 38, phase: 'large_bounded_plan' },
-    });
-    planResult = { ...planResult, planner_mode: 'optional_model_planner_v1' };
+    try {
+      planResult = await validated({
+        jobDir, id: 'large-plan', role: 'plan', task: planTask(synthetic),
+        execName: 'large-v2-plan-exec.json', synthetic, allowExternal: false,
+        validator: (final) => filterSyntheticExternalResearchLanes(
+          parseLargePlanFinal(final, { allowZeroLanes: synthetic }), synthetic,
+        ),
+        progressState: { stage: 'mapping_entities', progress: 38, phase: 'large_bounded_plan' },
+      });
+      planResult = { ...planResult, planner_mode: 'optional_model_planner_v1' };
+    } catch (error) {
+      planResult = {
+        envelope: {
+          ok: true, status: 'ok', final: '', provider: 'integritas',
+          model: 'deterministic-evidence-scheduler-v2', sessionId: jobId,
+          toolSummary: { tools: [], calls: 0, failures: 0 },
+        },
+        value: buildDeterministicLargePlan(documentSummaries, manifest),
+        reused: false,
+        fallback: true,
+        failures: [{ model: 'validated-provider-routes', error: String(error?.message ?? error).slice(0, 500) }],
+        planner_mode: 'deterministic_evidence_scheduler_v2',
+      };
+      executionTools.push(toolResult(
+        'integritas_planner_fallback_v2',
+        'completed',
+        'Optional model planner routes were unavailable; the evidence-driven deterministic multi-lane scheduler preserved the investigation route.'
+      ));
+      await writeAtomic(jobDir, 'large-v2-plan-exec.json', JSON.stringify(planResult.envelope) + '\\n');
+    }
   } else {
     planResult = {
       envelope: {
         ok: true, status: 'ok', final: '', provider: 'integritas',
-        model: 'deterministic-evidence-scheduler-v1', sessionId: jobId,
+        model: 'deterministic-evidence-scheduler-v2', sessionId: jobId,
         toolSummary: { tools: [], calls: 0, failures: 0 },
       },
       value: buildDeterministicLargePlan(documentSummaries, manifest),
       reused: true,
       failures: [],
-      planner_mode: 'deterministic_evidence_scheduler_v1',
+      planner_mode: 'deterministic_evidence_scheduler_v2',
     };
     await writeAtomic(jobDir, 'large-v2-plan-exec.json', JSON.stringify(planResult.envelope) + '\\n');
   }
