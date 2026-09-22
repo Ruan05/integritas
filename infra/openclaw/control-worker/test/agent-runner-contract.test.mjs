@@ -102,7 +102,7 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.ok(guard >= 0 && legacyPlanner > guard, 'large-case dispatch must happen before the legacy all-document planner');
   assert.match(parent, /large-investigation-agent-runner-v2\.mjs/);
   assert.match(large, /buildDocumentShards\(manifest, 1\)/, 'PDF extraction shards must isolate one evidence document so observed pdf-tool use is attributable');
-  assert.match(large, /mapLimit\(shards, 4/, 'document shard concurrency must remain bounded while allowing parallel page extraction');
+  assert.match(large, /mapLimit\(shards, 2/, 'document shard concurrency must stay low enough to avoid provider-rate-limit cascades while retaining bounded parallel extraction');
   assert.match(large, /mapLimit\(plan\.research_lanes, 4/, 'research lane concurrency must remain bounded while avoiding sequential bottlenecks');
   assert.match(large, /parseLargePlanFinal/, 'large plan must use a bounded contract');
   assert.match(large, /const LARGE_PLANNER_ENABLED = process\.env\.INTEGRITAS_ENABLE_LARGE_PLANNER !== 'false'/, 'maximum-depth model planning must be on by default and explicitly disableable');
@@ -273,14 +273,18 @@ test('investigation skill imposes research and reread budgets', async () => {
   assert.match(runner, /maximum:[\s\S]*research:[\s\S]*timeoutSeconds: 900/);
 });
 
-test('investigation prompts use the read-only /agent workspace mount', async () => {
+test('investigation prompts use the headless --cwd workspace boundary', async () => {
   const runtime = await readFile(new URL('../src/investigation.mjs', import.meta.url), 'utf8');
   const skill = await readFile(new URL('../../skills/integritas-investigation-v1/SKILL.md', import.meta.url), 'utf8');
   assert.match(runtime, /workspaceAccess ro/);
-  assert.match(runtime, /\/agent\/bundle-template\.json/);
-  assert.match(runtime, /\/agent\/investigation-plan\.json/);
-  assert.match(runtime, /\/agent\/deterministic-checks\.json/);
-  assert.match(skill, /mounted read-only at `\/agent`/);
+  assert.match(runtime, /\.\/bundle-template\.json/);
+  assert.match(runtime, /\.\/investigation-plan\.json/);
+  assert.match(runtime, /\.\/deterministic-checks\.json/);
+  assert.match(runtime, /current job workspace root selected by --cwd/);
+  assert.doesNotMatch(runtime, /\/agent\//, 'headless agent exec file tools are scoped to --cwd and must not be told to escape to /agent');
+  assert.doesNotMatch(skill, /\/agent\//, 'skill paths must remain relative to the bounded --cwd workspace');
   assert.doesNotMatch(runtime, /\/workspace\//, 'runtime prompt must not use writable /workspace paths');
   assert.doesNotMatch(skill, /\/workspace\//, 'skill must not use writable /workspace paths');
 });
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
