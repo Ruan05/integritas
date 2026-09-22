@@ -73,7 +73,7 @@ async function convertMarkdown({ baseUrl, trace, indexHtml, markdown, headerHtml
   form.append('generateTaggedPdf', 'true');
   form.append('failOnConsoleExceptions', 'true');
   form.append('failOnResourceLoadingFailed', 'true');
-  form.append('skipNetworkAlmostIdleEvent', 'false');
+  // The report template is fully local/static. Waiting for Chromium network-almost-idle can\n  // deadlock large Markdown renders; keep the Gotenberg default and skip that wait.\n  form.append('skipNetworkAlmostIdleEvent', 'true');
   form.append('preferCssPageSize', 'true');
   form.append('emulatedMediaType', 'print');
 
