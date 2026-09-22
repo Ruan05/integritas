@@ -129,5 +129,3 @@ if (errors.length) {
   process.exit(1);
 }
 console.log('Oracle/OpenClaw infrastructure policy verified.');
-
-[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
