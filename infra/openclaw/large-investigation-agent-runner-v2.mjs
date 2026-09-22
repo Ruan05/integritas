@@ -580,9 +580,12 @@ function timeoutForModel(role, model) {
 }
 
 function looksLikeProviderCapacityFailure(error) {
-  return /(?:402|429|credit|balance|insufficient|quota|rate.?limit|payment|required|capacity|temporarily unavailable)/i.test(
+  return /(?:\\b(?:401|402|403|408|409|429|5\\d{2})\\b|credit|balance|insufficient|quota|rate.?limit|capacity|temporarily unavailable|timed? ?out|timeout|network|fetch|gateway|provider)/i.test(
     String(error?.message ?? error),
   );
+}
+function isRetryableProviderRouteFailure(error) {
+  return looksLikeProviderCapacityFailure(error);
 }
 let groqBrowserQueue = Promise.resolve();
 
@@ -846,18 +849,30 @@ async function validated({
       continue;
     }
     if (FREE_OPENROUTER_MODELS.has(model)) localOpenRouterFallbackUses += 1;
+    let raw;
     try {
-      const raw = await invoke(jobDir, taskName, model, timeoutForModel(role, model), synthetic);
-      await writeAtomic(jobDir, `large-v2-attempt-${safePart(id)}-${index + 1}.json`, raw);
-      const envelope = parseEnvelope(raw, id);
-      if (!allowExternal && externalTools(envelope).length) throw new Error('phase used forbidden external research');
-      const value = validator(envelope.final, envelope);
-      await writeAtomic(jobDir, execName, raw);
-      return { envelope, value, reused: false, failures };
+      raw = await invoke(jobDir, taskName, model, timeoutForModel(role, model), synthetic);
     } catch (error) {
-      if (isPaidOpenRouterModel(model) && looksLikeProviderCapacityFailure(error)) openRouterPaidCircuitOpen = true;
+      if (isPaidOpenRouterModel(model) && isRetryableProviderRouteFailure(error)) openRouterPaidCircuitOpen = true;
+      if (!isRetryableProviderRouteFailure(error)) throw error;
       failures.push({ model, error: String(error?.message ?? error).slice(0, 500) });
+      continue;
     }
+    await writeAtomic(jobDir, `large-v2-attempt-${safePart(id)}-${index + 1}.json`, raw);
+    let envelope;
+    try {
+      envelope = parseEnvelope(raw, id);
+    } catch (error) {
+      if (!isRetryableProviderRouteFailure(error)) throw error;
+      failures.push({ model, error: String(error?.message ?? error).slice(0, 500) });
+      continue;
+    }
+    if (!allowExternal && externalTools(envelope).length) {
+      throw new Error('phase used forbidden external research');
+    }
+    const value = validator(envelope.final, envelope);
+    await writeAtomic(jobDir, execName, raw);
+    return { envelope, value, reused: false, failures };
     }
     await progress(
       jobDir,
@@ -1585,7 +1600,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
           return parsed;
         },
         progressState: { stage: 'extracting', progress: 18, phase: 'large_document_shards' },
-        maxModelAttempts: 1,
+        maxModelAttempts: 2,
       });
     } catch (error) {
       const value = deterministicShardSummaryFromTrustedContext(shard, trustedContext, error);
@@ -1718,7 +1733,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
           parseLargePlanFinal(final, { allowZeroLanes: synthetic }), synthetic,
         ),
         progressState: { stage: 'mapping_entities', progress: 38, phase: 'large_bounded_plan' },
-        maxModelAttempts: 1,
+        maxModelAttempts: 2,
       });
       planResult = { ...planResult, planner_mode: 'optional_model_planner_v1' };
     } catch (error) {
@@ -1796,7 +1811,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
         execName: 'large-v2-case-analysis-exec.json', synthetic: false, allowExternal: false,
         validator: (final) => parseCaseAnalysisFinal(final, docSourceKeys),
         progressState: { stage: 'analyzing_documents', progress: 45, phase: 'large_case_analysis' },
-        maxModelAttempts: 1,
+        maxModelAttempts: 2,
       });
       caseAnalysis = analysisResult.value;
     } catch (error) {
@@ -1885,7 +1900,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
           return parsed;
         },
         progressState: { stage: 'researching', progress: 52, phase: 'large_research_lanes' },
-        maxModelAttempts: 1,
+        maxModelAttempts: 2,
       });
     } catch (error) {
       const providerFailure = String(error?.message ?? error).slice(0, 500);
@@ -1985,7 +2000,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
         execName: 'large-v2-critic-exec.json', synthetic: false, allowExternal: false,
         validator: (final) => parseCriticIssuesFinal(final),
         progressState: { stage: 'independent_review', progress: 68, phase: 'large_independent_critic' },
-        maxModelAttempts: 1,
+        maxModelAttempts: 2,
       });
       critic = criticResult.value;
     } catch (error) {
@@ -2043,7 +2058,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
               execName: `large-v2-report-${spec.id}-exec.json`, synthetic, allowExternal: false,
               validator: reportValidator(spec),
               progressState: { stage: 'drafting_report', progress: 76, phase: 'large_sectioned_report' },
-              maxModelAttempts: 1,
+              maxModelAttempts: 2,
             });
           } catch (error) {
             const value = reportValidator(spec, { requireMinimum: false })(deterministicProviderReportSection(spec, reviewed, critic));
