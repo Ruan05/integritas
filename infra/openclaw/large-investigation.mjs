@@ -142,6 +142,15 @@ export function buildSubmittedSources(manifest, documentSummaries, retrievedAt) 
   return manifest.documents.map((document) => {
     const summary = summaryById.get(document.id);
     if (!summary) fail(`missing document summary for ${document.id}`);
+    const detailLines = [
+      `Document type: ${summary.document_type || 'not classified'}`,
+      `Issuer claim: ${summary.issuer_claim || 'not stated'}`,
+      `Parties: ${(summary.parties ?? []).join('; ') || 'not extracted'}`,
+      `Identifiers: ${(summary.identifiers ?? []).join('; ') || 'not extracted'}`,
+      `Material terms: ${(summary.material_terms ?? []).join('; ') || 'not extracted'}`,
+      `Forensic/risk signals: ${(summary.risk_flags ?? []).join('; ') || 'none recorded'}`,
+      `Evidence excerpt: ${summary.evidence_excerpt ?? ''}`,
+    ];
     return {
       source_key: documentSourceKey(document.id),
       source_type: 'document',
@@ -149,7 +158,7 @@ export function buildSubmittedSources(manifest, documentSummaries, retrievedAt) 
       url: null,
       document_id: document.id,
       page_reference: null,
-      excerpt: summary.evidence_excerpt ?? '',
+      excerpt: detailLines.join('\\n'),
       reliability_note: 'Submitted evidence; authenticity and claims require independent verification unless otherwise established.',
       evidence_origin: 'submitted_document',
       retrieved_at: retrievedAt,
