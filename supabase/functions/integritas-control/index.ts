@@ -554,6 +554,11 @@ Deno.serve(async (req) => {
         const ok = await rpc('integritas_control_complete', { p_command_id: commandId, p_worker_id: workerId, p_result_summary: result });
         return json({ ok: !!ok }, ok ? 200 : 409, origin);
       }
+      if (action === 'worker_incomplete') {
+        const result = isObject(body.result_summary) ? body.result_summary : {};
+        const ok = await rpc('integritas_control_incomplete', { p_command_id: commandId, p_worker_id: workerId, p_result_summary: result });
+        return json({ ok: !!ok }, ok ? 200 : 409, origin);
+      }
       if (action === 'worker_fail') {
         const ok = await rpc('integritas_control_fail', {
           p_command_id: commandId,
