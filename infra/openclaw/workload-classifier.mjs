@@ -5,6 +5,18 @@ const MAX_DETERMINISTIC_TEXT_BYTES = 8 * 1024;
 const SYNTHETIC_MARKER = /\b(?:synthetic|test control|test fixture|regression fixture|no real[- ]world|no real person|no real company|no real entit(?:y|ies)|no confidential data)\b/i;
 const EMPTY_SUBJECT = /^(?:none|n\/a|not applicable|synthetic|test(?: control| fixture)?)$/i;
 const GENERIC_SUBJECT_SCOPE = /^(?:people,? companies,? representatives,? identifiers? and relationships? identified in (?:the )?submitted evidence|people,? companies,? representatives,? identifiers? and relationships? identified in (?:the )?evidence|entities? identified in (?:the )?submitted evidence|subjects? identified in (?:the )?submitted evidence)[.]?$/i;
+const SYNTHETIC_CONTROL_SUMMARY = /synthetic test control document/i;
+function isExplicitSyntheticControlSummary(row) {
+  if (!row || typeof row !== 'object') return false;
+  const text = [
+    row.document_type,
+    ...(Array.isArray(row.material_terms) ? row.material_terms : []),
+    ...(Array.isArray(row.risk_flags) ? row.risk_flags : []),
+    row.evidence_excerpt,
+  ].filter((value) => typeof value === 'string').join(' ');
+  return SYNTHETIC_CONTROL_SUMMARY.test(text)
+    && /no real (?:person|company|identifier|entity|world)|no confidential data/i.test(text);
+}
 const INVESTIGABLE_TOKEN = new RegExp([
   'https?://',
   '[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}',
@@ -115,6 +127,12 @@ export async function classifyInvestigationWorkload({ manifest, documentSummarie
     explicit_subject: intendedSubjectRequiresResearch(manifest),
   };
 
+  const explicitSyntheticControl = documentSummaries.length === metrics.documents
+    && documentSummaries.length > 0
+    && documentSummaries.every(isExplicitSyntheticControlSummary);
+  if (explicitSyntheticControl && !metrics.explicit_subject) {
+    return { route: 'no_investigable_evidence', reason_code: 'synthetic_control_document', metrics };
+  }
   if (metrics.extracted_signals > 0) {
     return { route: 'substantive', reason_code: 'extracted_evidence_present', metrics };
   }
