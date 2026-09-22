@@ -60,6 +60,29 @@ test('transaction checks preserve document provenance and detect repeated candid
   }]);
 });
 
+test('repeated structural candidates create one canonical result per value', () => {
+  const result = buildDeterministicChecks({ document_profiles: [
+    { document_id: '11111111-1111-4111-8111-111111111111', material_identifiers: ['NL91ABNA0793164363', 'ABNANL2A'] },
+    { document_id: '22222222-2222-4222-8222-222222222222', material_identifiers: ['NL91ABNA0793164363', 'ABNANL2A'] },
+  ] });
+  assert.equal(result.iban_checks.length, 1);
+  assert.equal(result.bic_format_checks.length, 1);
+});
+
+test('deterministic bundle promotion does not duplicate a semantic claim already present', () => {
+  const docId = '11111111-1111-4111-8111-111111111111';
+  const claim = 'Submitted BIC/SWIFT candidate ABNANL2A matches structural BIC format.';
+  const bundle = {
+    findings: [{ finding_key: 'existing.bic', claim }],
+    checks: [],
+  };
+  applyDeterministicChecksToBundle(bundle, {
+    iban_checks: [], imo_checks: [],
+    bic_format_checks: [{ document_id: docId, value: 'ABNANL2A', format_valid: true, note: 'Format only.' }],
+  });
+  assert.equal(bundle.findings.length, 1);
+});
+
 
 test('transaction checks extract labeled IBAN and BIC candidates from rich document summaries', () => {
   const docId = '33333333-3333-4333-8333-333333333333';

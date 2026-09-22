@@ -64,16 +64,18 @@ export function buildDeterministicChecks(plan) {
     }
     for (const fragment of structuralCandidateFragments(candidate.value)) {
       const iban = ibanChecksum(fragment);
-      if (iban && !ibans.some((row) => row.document_id === candidate.document_id && row.value === iban.value)) {
+      // A structural result is about the candidate value, not every document in
+      // which that value appears. Cross-document repetition is retained below.
+      if (iban && !ibans.some((row) => row.value === iban.value)) {
         ibans.push({ document_id: candidate.document_id, ...iban });
       }
       const bic = bicFormat(fragment);
-      if (bic && !bicCandidates.some((row) => row.document_id === candidate.document_id && row.value === bic.value)) {
+      if (bic && !bicCandidates.some((row) => row.value === bic.value)) {
         bicCandidates.push({ document_id: candidate.document_id, ...bic });
       }
     }
     const imo = imoChecksum(candidate.value);
-    if (imo && !imoNumbers.some((row) => row.document_id === candidate.document_id && row.value === imo.value)) {
+    if (imo && !imoNumbers.some((row) => row.value === imo.value)) {
       imoNumbers.push({ document_id: candidate.document_id, ...imo });
     }
   }
@@ -107,11 +109,12 @@ export function applyDeterministicChecksToBundle(bundle, deterministicChecks) {
   if (!Array.isArray(bundle.findings)) bundle.findings = [];
   if (!Array.isArray(bundle.checks)) bundle.checks = [];
   const findingKeys = new Set(bundle.findings.map((row) => row?.finding_key).filter(Boolean));
+  const findingClaims = new Set(bundle.findings.map((row) => row?.claim).filter((claim) => typeof claim === 'string' && claim.length > 0));
   const checkKeys = new Set(bundle.checks.map((row) => row?.check_key).filter(Boolean));
   const add = ({ key, checkType, claim, materiality, sourceKey, outcome }) => {
     const findingKey = `deterministic.${key}`.slice(0, 128);
     const checkKey = `deterministic.${key}.check`.slice(0, 128);
-    if (!findingKeys.has(findingKey)) {
+    if (!findingKeys.has(findingKey) && !findingClaims.has(claim)) {
       bundle.findings.push({
         finding_key: findingKey,
         entity_key: null,
@@ -124,6 +127,7 @@ export function applyDeterministicChecksToBundle(bundle, deterministicChecks) {
         source_keys: [sourceKey],
       });
       findingKeys.add(findingKey);
+      findingClaims.add(claim);
     }
     if (!checkKeys.has(checkKey)) {
       bundle.checks.push({

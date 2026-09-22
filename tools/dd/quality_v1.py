@@ -210,6 +210,7 @@ def validate_sources(bundle, manifest, errors):
 def validate_findings(bundle, entities, sources, errors):
     fields = {'finding_key', 'entity_key', 'finding_type', 'claim', 'evidence_status', 'materiality', 'reliability', 'evidence_excerpt', 'source_keys'}
     findings = keyed(bundle.get('findings'), 'finding_key', 'findings', errors)
+    claims = set()
     for key, row in findings.items():
         exact_fields(row, fields, f'finding {key}', errors)
         entity_key = row.get('entity_key')
@@ -217,6 +218,10 @@ def validate_findings(bundle, entities, sources, errors):
             errors.append(f'finding {key}: unknown entity_key')
         require_string(row.get('finding_type'), f'finding {key}.finding_type', errors, 160)
         require_string(row.get('claim'), f'finding {key}.claim', errors)
+        if isinstance(row.get('claim'), str) and row.get('claim'):
+            if row['claim'] in claims:
+                errors.append(f'finding {key}: duplicate claim is not publishable')
+            claims.add(row['claim'])
         if row.get('evidence_status') not in {'verified', 'alleged', 'conflicting', 'uncertain'}:
             errors.append(f'finding {key}: invalid evidence_status')
         if row.get('materiality') not in {'informational', 'low', 'medium', 'high', 'critical'}:
