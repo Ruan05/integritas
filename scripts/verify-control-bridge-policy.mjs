@@ -110,8 +110,10 @@ assert.ok(!investigationRunner.includes('NVIDIA_LIGHTNING'), 'unhealthy Lightnin
 assert.ok(investigationRunner.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash'"), 'real research must expose DeepSeek V4.1 Flash');
 assert.ok(investigationRunner.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3'"), 'real planning/critic must expose GLM 5.3');
 assert.ok(investigationRunner.includes("const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash'"), 'real investigation fallback must expose GLM 5.3 Flash');
-assert.ok(investigationRunner.includes("planner: { model: GLM_53"), 'standard/deep planning must prefer GLM 5.3');
-assert.ok(investigationRunner.includes("research: { model: DEEPSEEK_FLASH"), 'real research must prefer DeepSeek V4.1 Flash');
+assert.ok(investigationRunner.includes("const PAID_PROVIDER_ENABLED = process.env.INTEGRITAS_ALLOW_PAID_PROVIDER === 'true'"), 'paid provider routing must be explicit opt-in');
+assert.ok(investigationRunner.includes('const REAL_PRIMARY = PAID_PROVIDER_ENABLED ? DEEPSEEK_FLASH : NVIDIA_PRIMARY'), 'real research must default to the live-verified NVIDIA route');
+assert.ok(investigationRunner.includes('const REAL_PLANNER_PRIMARY = PAID_PROVIDER_ENABLED ? GLM_53 : NVIDIA_PRIMARY'), 'real planning must default to the live-verified NVIDIA route');
+assert.ok(investigationRunner.includes('QUALITY_FALLBACKS = PAID_PROVIDER_ENABLED'), 'paid routes must not be attempted when the safe default is active');
 assert.ok(investigationRunner.includes("'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'"), 'free Nemotron Ultra may remain as an emergency fallback');
 assert.ok(investigationRunner.includes("'integritas-openrouter/nvidia/nemotron-3-super-120b-a12b:free'"), 'verified free Nemotron Super must be routable');
 assert.ok(investigationRunner.includes("'integritas-openrouter/nex-agi/nex-n2.5-pro:free'"), 'verified free Nex Pro must be routable');
