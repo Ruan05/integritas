@@ -155,12 +155,13 @@ async function writeSharedAtomic(name, content) {
   await rename(temporary, target);
 }
 
-async function writeProgress(stage, progress, phase, milestones = []) {
+async function writeProgress(stage, progress, phase, milestones = [], detail = '') {
   await writeSharedAtomic(
     'agent-progress.json',
     `${JSON.stringify({
       stage, progress, phase,
       milestones: Array.isArray(milestones) ? milestones.slice(0, 64) : [],
+      detail: String(detail).slice(0, 500),
       updated_at: new Date().toISOString(),
     })}\n`,
   );
@@ -248,15 +249,30 @@ function buildArgs(messageFile, phaseRoute) {
   return args;
 }
 
-async function runAgent(messageFile, phaseRoute) {
-  const result = await execFileAsync('/opt/openclaw/bin/openclaw', buildArgs(messageFile, phaseRoute), {
-    cwd: jobDir,
-    env: agentEnv(),
-    timeout: (phaseRoute.timeoutSeconds + 60) * 1000,
-    maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
-    killSignal: 'SIGTERM',
-  });
-  return result.stdout;
+async function runAgent(messageFile, phaseRoute, progressState = null) {
+  let heartbeatTimer = null;
+  if (progressState) {
+    heartbeatTimer = setInterval(() => writeProgress(
+      progressState.stage,
+      progressState.progress,
+      progressState.phase,
+      [],
+      `Waiting for bounded ${progressState.phase} provider response; the child process remains time-limited.`,
+    ).catch(() => {}), 15_000);
+    heartbeatTimer.unref?.();
+  }
+  try {
+    const result = await execFileAsync('/opt/openclaw/bin/openclaw', buildArgs(messageFile, phaseRoute), {
+      cwd: jobDir,
+      env: agentEnv(),
+      timeout: (phaseRoute.timeoutSeconds + 60) * 1000,
+      maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
+      killSignal: 'SIGTERM',
+    });
+    return result.stdout;
+  } finally {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+  }
 }
 
 function parseEnvelope(stdout, label) {
@@ -699,7 +715,7 @@ try {
   ({ envelope: plannerEnvelope, plan } = parsePlan(plannerStdout));
   plannerReused = true;
 } catch {
-  plannerStdout = await runAgent('planner-task.md', route.planner);
+  plannerStdout = await runAgent('planner-task.md', route.planner, { stage: 'mapping_entities', progress: 20, phase: 'adaptive_planning' });
   await writeSharedAtomic('planner-agent-exec.json', plannerStdout);
   ({ envelope: plannerEnvelope, plan } = parsePlan(plannerStdout));
 }
@@ -726,7 +742,7 @@ try {
   researchParsed = parseAgentBundle(researchStdout, manifest);
   researchReused = true;
 } catch {
-  researchStdout = await runAgent('research-task.md', route.research);
+  researchStdout = await runAgent('research-task.md', route.research, { stage: 'researching', progress: 30, phase: 'primary_research' });
   await writeSharedAtomic('research-agent-exec.json', researchStdout);
   researchEnvelope = parseEnvelope(researchStdout, 'research');
   if (isTrustedSyntheticValidationManifest(manifest)) {
@@ -762,7 +778,7 @@ if (route.critic && route.synthesis) {
     ({ envelope: criticEnvelope, critique } = parseCritique(criticStdout));
     criticReused = true;
   } catch {
-    criticStdout = await runAgent('critic-task.md', route.critic);
+    criticStdout = await runAgent('critic-task.md', route.critic, { stage: 'independent_review', progress: 70, phase: 'independent_critic' });
     await writeSharedAtomic('critic-agent-exec.json', criticStdout);
     ({ envelope: criticEnvelope, critique } = parseCritique(criticStdout));
   }
@@ -782,7 +798,7 @@ if (route.critic && route.synthesis) {
     finalParsed = parseAgentBundle(finalStdout, manifest);
     synthesisReused = true;
   } catch {
-    finalStdout = await runAgent('synthesis-task.md', route.synthesis);
+    finalStdout = await runAgent('synthesis-task.md', route.synthesis, { stage: 'independent_review', progress: 78, phase: 'final_synthesis' });
     await writeSharedAtomic('synthesis-agent-exec.json', finalStdout);
     synthesisEnvelope = parseEnvelope(finalStdout, 'synthesis');
     const synthesisResearchTools = Array.isArray(synthesisEnvelope?.toolSummary?.tools)
