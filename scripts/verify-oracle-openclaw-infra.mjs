@@ -96,6 +96,8 @@ if (!errors.length) {
     [rollbackTest, 'diff -u', 'rollback before/after state comparison'],
     [releaseDeploy, 'mv -Tf', 'atomic current-release symlink switch'],
     [releaseDeploy, 'systemctl restart "${GATEWAY}"', 'provider-aware Gateway restart'],
+    [releaseDeploy, 'smoke_investigation_runtime', 'live provider and key-free web-search release gate'],
+    [releaseDeploy, "'web_search' not in tools", 'deployment smoke must observe a successful web_search call'],
     [rollback, 'previous-version', 'rollback version record'],
     [provision, 'VM.Standard.A1.Flex', 'Always Free A1 shape'],
   ];
@@ -127,3 +129,5 @@ if (errors.length) {
   process.exit(1);
 }
 console.log('Oracle/OpenClaw infrastructure policy verified.');
+
+[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
