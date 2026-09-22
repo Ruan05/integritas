@@ -119,6 +119,8 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.match(large, /shardNeedsPdfVisualReview/, 'PDF visual tool use must be evidence-proportional rather than mandatory for native-text pages');
   assert.match(large, /PDF visual review is required because deterministic page extraction was incomplete or non-native/, 'OCR or incomplete PDF extraction must still require an observed pdf-tool visual review');
   assert.match(large, /parseLaneFinal/, 'research lanes must use a bounded schema');
+  assert.match(large, /you MUST call web_search at least once for this lane before answering/, 'real research lanes must prove discovery rather than answer from model memory');
+  assert.match(large, /source-open call \(web_fetch or browser\)/, 'external sources must be opened in the same lane before they can be asserted');
   assert.match(large, /validateInvestigationBundle\(finalBundle, manifest, reportMarkdown\)/, 'deterministic assembly must pass the canonical bundle validator');
   assert.match(large, /provider: 'integritas', model: 'deterministic-large-assembly-v2'/, 'final canonical bundle must be assembled deterministically rather than by a model');
   assert.match(large, /failed every validated model route/, 'schema-invalid model output must trigger application-level model failover');
