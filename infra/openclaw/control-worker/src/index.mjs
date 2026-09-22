@@ -37,6 +37,7 @@ if (!baseUrl || !workerToken) {
 
 const client = new ControlClient({ baseUrl, workerToken, workerId });
 let stopping = false;
+const settlementQuarantine = new Map();
 process.on('SIGTERM', () => { stopping = true; });
 process.on('SIGINT', () => { stopping = true; });
 
@@ -100,6 +101,23 @@ while (!stopping) {
       continue;
     }
 
+    const deferredSettlement = settlementQuarantine.get(command.id);
+    if (deferredSettlement) {
+      const settlementKeepalive = setInterval(() => {
+        client.touch(command.id).catch((error) => console.error(`deferred settlement touch failed: ${error.message}`));
+      }, 25_000);
+      try {
+        await client.fail(command.id, deferredSettlement.code, deferredSettlement.summary);
+        settlementQuarantine.delete(command.id);
+      } catch (error) {
+        console.error(`deferred settlement still unavailable for ${command.id}: ${error.message}`);
+        await sleep(Math.min(pollMs * 4, 30_000));
+      } finally {
+        clearInterval(settlementKeepalive);
+      }
+      continue;
+    }
+
     const keepalive = setInterval(() => {
       client.touch(command.id).catch((error) => console.error(`touch failed: ${error.message}`));
     }, 25_000);
@@ -127,7 +145,16 @@ while (!stopping) {
         }
       }
     } catch (error) {
-      await client.fail(command.id, 'execution_failed', String(error.message || error).slice(0, 1000));
+      const code = 'execution_failed';
+      const summary = String(error.message || error).slice(0, 1000);
+      try {
+        await client.fail(command.id, code, summary);
+      } catch (settlementError) {
+        // Never re-run a side-effecting investigation merely because the
+        // control API is temporarily unavailable while settling its failure.
+        settlementQuarantine.set(command.id, { code, summary });
+        console.error(`failure settlement deferred for ${command.id}: ${settlementError.message}`);
+      }
     } finally {
       clearInterval(keepalive);
     }
