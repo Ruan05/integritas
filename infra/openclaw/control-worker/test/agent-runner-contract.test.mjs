@@ -107,6 +107,8 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.match(large, /parseLargePlanFinal/, 'large plan must use a bounded contract');
   assert.match(large, /const LARGE_PLANNER_ENABLED = process\.env\.INTEGRITAS_ENABLE_LARGE_PLANNER === 'true'/, 'model planning must be explicitly opt-in');
   assert.match(large, /buildDeterministicLargePlan/, 'large investigations must have a deterministic scheduler fallback');
+  assert.match(large, /const LARGE_MODEL_ANALYSIS_ENABLED = process\.env\.INTEGRITAS_ENABLE_LARGE_MODEL_ANALYSIS === 'true'/, 'large model analysis must be explicitly opt-in');
+  assert.match(large, /buildDeterministicCaseAnalysis/, 'large investigations must retain an evidence-only analysis fallback');
   assert.match(large, /deterministic-evidence-scheduler-v1/, 'large investigations must not block on a global planner model');
   assert.match(large, /applyEvidenceDrivenSpecialistRouting\(plan, manifest\)/, 'large plans must use the same evidence-driven specialist router');
   assert.match(large, /parseDocumentShardFinal/, 'document shards must validate exact coverage');
