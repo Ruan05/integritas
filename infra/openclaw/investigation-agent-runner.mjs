@@ -941,5 +941,3 @@ await writeSharedAtomic('agent-exec.json', `${JSON.stringify(combinedEnvelope)}\
 await writeSharedAtomic('bundle.json', `${JSON.stringify(finalParsed.bundle, null, 2)}\n`);
 await writeSharedAtomic('report.md', finalParsed.reportMarkdown);
 await writeProgress('drafting_report', 82, 'ready_for_deterministic_qa', milestoneSnapshot('ready_for_deterministic_qa', plan, finalParsed.bundle));
-
-[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]

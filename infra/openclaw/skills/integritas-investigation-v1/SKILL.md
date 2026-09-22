@@ -246,5 +246,3 @@ For `maximum` investigations, the report must also include the strongest reusabl
 A Maximum report is not Prototype-1-equivalent merely because it is long. It must demonstrate complete lane coverage, source-linked findings, independent entity resolution, contradiction handling, transaction-specific verification gates, and a defensible stop rule.
 
 For `fast` or `standard`, the same structure may be compressed, but the evidence package, material findings, source ledger, unresolved checks, limitations, and next actions must still be present.
-
-[executed on device: integritas-openclaw-a1 (9d9982e8-9052-45b2-b91d-0faeaae0cc0d)]
