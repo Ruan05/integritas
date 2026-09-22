@@ -264,7 +264,7 @@ async function validated({
     heartbeatTimer.unref?.();
   }
   try {
-    for (const [index, model] of models.entries() {
+    for (const [index, model] of models.entries()) {
     if (openRouterPaidCircuitOpen && isPaidOpenRouterModel(model)) {
       failures.push({ model, error: 'skipped because the paid OpenRouter provider circuit is open for this investigation' });
       continue;
