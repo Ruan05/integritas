@@ -163,9 +163,9 @@ assert.ok(largeInvestigationRunner.includes("const GLM_53 = 'integritas-openrout
 assert.ok(largeInvestigationRunner.includes("FREE_OPENROUTER_MODELS.has(model)"), 'large-case free budget must apply only to free routes');
 assert.ok(largeInvestigationRunner.includes("const MAX_OPENROUTER_FREE_USES = 4"), 'large-case free-router usage must be globally bounded per investigation');
 assert.ok(largeInvestigationRunner.includes("const MAX_ZEN_FREE_USES = 4"), 'large-case Zen free usage must be bounded per investigation');
-assert.match(largeInvestigationRunner, /buildDocumentShards\(manifest, 4\)/, 'large-case runner must shard documents into bounded groups');
-assert.match(largeInvestigationRunner, /mapLimit\(shards, 2/, 'document shard concurrency must remain bounded');
-assert.match(largeInvestigationRunner, /mapLimit\(plan\.research_lanes, 2/, 'research lane concurrency must remain bounded');
+assert.match(largeInvestigationRunner, /buildDocumentShards\(manifest, 1\)/, 'large-case runner must isolate each document so PDF-tool provenance is attributable');
+assert.match(largeInvestigationRunner, /mapLimit\(shards, 4/, 'document shard concurrency must remain bounded');
+assert.match(largeInvestigationRunner, /mapLimit\(plan\.research_lanes, 4/, 'research lane concurrency must remain bounded');
 assert.match(largeInvestigationRunner, /failed every validated model route/, 'large-case runner must fail over on validation failure, not only transport failure');
 assert.match(largeInvestigationRunner, /validateInvestigationBundle\(finalBundle, manifest, reportMarkdown\)/, 'large-case deterministic assembly must pass canonical validation');
 assert.ok(!largeInvestigationRunner.includes('synthesis-task'), 'large-case final canonical bundle must not depend on giant model synthesis');
