@@ -147,7 +147,7 @@ function buildDeterministicLargePlan(documentSummaries, manifest) {
   };
 }
 export function buildDeterministicCaseAnalysis(documentSummaries) {
-  const sourceKey = (documentId) => \`doc.\${String(documentId).replaceAll('-', '')}\`;
+  const sourceKey = (documentId) => `doc.${String(documentId).replaceAll('-', '')}`;
   const slug = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'unnamed';
   const clean = (value, max = 240) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
   const cleanPerson = (value) => clean(value)
@@ -192,7 +192,7 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
     if (!text) return [];
     if (/^name=/i.test(text)) {
       const field = (name) => {
-        const match = text.match(new RegExp(\`(?:^|;\\\\s*)\${name}=([^;]*)\`, 'i'));
+        const match = text.match(new RegExp(`(?:^|;\\\\s*)${name}=([^;]*)`, 'i'));
         return clean(match?.[1] ?? '', 300);
       };
       const name = field('name');
@@ -242,7 +242,7 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
       }
       return existingKey;
     }
-    const entityKey = \`entity.\${slug(displayName)}\`;
+    const entityKey = `entity.${slug(displayName)}`;
     entityByCanonical.set(canonical, entityKey);
     entityRows.push({
       entity_key: entityKey,
@@ -273,7 +273,7 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
           from_entity_key: parentKey,
           to_entity_key: entityKey,
           relationship_type: 'represented_by',
-          claim: \`\${clean(candidate.represented_name)} is represented in submitted evidence by \${clean(candidate.name)}.\`,
+          claim: `${clean(candidate.represented_name)} is represented in submitted evidence by ${clean(candidate.name)}.`,
           source_key: currentSourceKey,
         });
       }
@@ -295,9 +295,9 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
       existing.source_keys.add(currentSourceKey);
       const structuredExcerpt = [
         summary.evidence_excerpt,
-        Array.isArray(summary.identifiers) && summary.identifiers.length ? \`Identifiers: \${summary.identifiers.join('; ')}\` : '',
-        Array.isArray(summary.material_terms) && summary.material_terms.length ? \`Material terms: \${summary.material_terms.join('; ')}\` : '',
-        Array.isArray(summary.risk_flags) && summary.risk_flags.length ? \`Risk/forensic signals: \${summary.risk_flags.join('; ')}\` : '',
+        Array.isArray(summary.identifiers) && summary.identifiers.length ? `Identifiers: ${summary.identifiers.join('; ')}` : '',
+        Array.isArray(summary.material_terms) && summary.material_terms.length ? `Material terms: ${summary.material_terms.join('; ')}` : '',
+        Array.isArray(summary.risk_flags) && summary.risk_flags.length ? `Risk/forensic signals: ${summary.risk_flags.join('; ')}` : '',
       ].filter(Boolean).join(' | ').replace(/\s+/g, ' ').slice(0, 1200);
       if (structuredExcerpt && existing.excerpts.length < 3) existing.excerpts.push(structuredExcerpt);
       for (const entity of entityRows) {
@@ -319,7 +319,7 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
   const relationships = [];
   const relationshipKeys = new Set();
   for (const [index, seed] of relationshipSeeds.entries()) {
-    const key = \`relationship.represented-by.\${slug(seed.from_entity_key)}.\${slug(seed.to_entity_key)}\`.slice(0, 128);
+    const key = `relationship.represented-by.${slug(seed.from_entity_key)}.${slug(seed.to_entity_key)}`.slice(0, 128);
     if (relationshipKeys.has(key)) continue;
     relationshipKeys.add(key);
     relationships.push({
@@ -335,7 +335,7 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
   }
 
   const findings = [...signalMap.values()].slice(0, 120).map((row, index) => ({
-    finding_key: \`evidence.\${String(index + 1).padStart(3, '0')}\`,
+    finding_key: `evidence.${String(index + 1).padStart(3, '0')}`,
     entity_key: row.entity_keys.size === 1 ? [...row.entity_keys][0] : null,
     finding_type: /no cryptographic|image reuse|scanned|signature|acroform|unreadable/i.test(row.claim) ? 'document_forensic_signal' : 'submitted_evidence_signal',
     claim: row.claim,
