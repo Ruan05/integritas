@@ -2087,7 +2087,16 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
     return [spec.id, result.value];
   });
   const sections = new Map(sectionPairs);
-  const reportMarkdown = joinReportSections(sections);
+  const canonicalSourceAnchors = reviewed.sources
+    .map((row) => row?.source_key)
+    .filter((value) => typeof value === 'string' && value.trim())
+    .slice(0, 5);
+  const reportMarkdown = [
+    joinReportSections(sections).trimEnd(),
+    '## CANONICAL SOURCE ANCHORS',
+    'The following source keys are the deterministic provenance anchors for this run:',
+    canonicalSourceAnchors.map((key) => `- ${key}`).join('\\n'),
+  ].join('\\n\\n') + '\\n';
   const reportSummary = sections.get('01').replace(/^# MASTER SUMMARY — READ THIS FIRST\s*/i, '').slice(0, 12000).trim();
 
   executionTools.push(
