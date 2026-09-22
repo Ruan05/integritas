@@ -60,9 +60,10 @@ const FREE_OPENROUTER_MODELS = new Set([
 ]);
 const MAX_OPENROUTER_FREE_USES = 4;
 const MAX_ZEN_FREE_USES = 4;
+const PAID_PROVIDER_ENABLED = process.env.INTEGRITAS_ALLOW_PAID_PROVIDER === 'true';
 let openRouterFallbackUses = 0;
 let zenFallbackUses = 0;
-let openRouterPaidCircuitOpen = false;
+let openRouterPaidCircuitOpen = !PAID_PROVIDER_ENABLED;
 
 const SECTION_HEADINGS = Object.freeze({
   '01': ['# MASTER SUMMARY — READ THIS FIRST', '## DIRECT NEXT STEPS — WHAT TO DO NOW', '## Master Issue Dashboard'],
@@ -120,13 +121,20 @@ function candidates(role, synthetic) {
       ...(zen ? [ZEN_BIG_PICKLE, ZEN_ULTRA, ZEN_DEEPSEEK, ZEN_MIMO, ZEN_LING, ZEN_LIGHTNING] : []),
       OPENROUTER_SUPER, OPENROUTER_NEX, OPENROUTER_NORTH, OPENROUTER_LING, OPENROUTER_LAGUNA, OPENROUTER_ULTRA, OPENROUTER_FREE,
     ];
+    const paid = PAID_PROVIDER_ENABLED ? [
+      openrouter && DEEPSEEK_FLASH,
+      openrouter && GLM_53_FLASH,
+      openrouter && GLM_53,
+    ] : [];
+    // NVIDIA is live-verified as the healthy primary route on this host. Paid
+    // OpenRouter routes are opt-in so a billing/auth circuit cannot stall a case.
     const rows = {
-      shard: [openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, ...healthyFree],
-      plan: [openrouter && GLM_53, openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, ...healthyFree],
-      analysis: [openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, openrouter && GLM_53, nvidia && NVIDIA_ULTRA, ...healthyFree],
-      lane: [openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, openrouter && GLM_53, nvidia && NVIDIA_ULTRA, ...healthyFree],
-      critic: [openrouter && GLM_53, openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, ...healthyFree],
-      report: [openrouter && GLM_53, openrouter && DEEPSEEK_FLASH, openrouter && GLM_53_FLASH, nvidia && NVIDIA_ULTRA, ...healthyFree],
+      shard: [nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
+      plan: [nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
+      analysis: [nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
+      lane: [nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
+      critic: [nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
+      report: [nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
     }[role] ?? [];
     return uniq(rows);
   }
@@ -223,11 +231,12 @@ async function invoke(jobDir, messageFile, model, timeoutSeconds, synthetic) {
     env: agentEnv(),
     timeout: (timeoutSeconds + 60) * 1000,
     maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
+    killSignal: 'SIGTERM',
   });
   return result.stdout;
 }
 async function validated({
-  jobDir, id, role, task, execName, validator, synthetic, allowExternal = false,
+  jobDir, id, role, task, execName, validator, synthetic, allowExternal = false, progressState = null,
 }) {
   const taskName = `large-v2-task-${safePart(id)}.md`;
   await writeAtomic(jobDir, taskName, task);
@@ -242,7 +251,20 @@ async function validated({
   }
   const models = candidates(role, synthetic);
   if (!models.length) throw new Error(`${id}: no configured provider candidate available`);
-  for (const [index, model] of models.entries()) {
+  let heartbeatTimer = null;
+  if (progressState) {
+    const heartbeat = () => progress(
+      jobDir,
+      progressState.stage,
+      progressState.progress,
+      progressState.phase,
+      `Waiting for bounded ${role} route for ${id}; active model attempt remains time-limited.`,
+    ).catch(() => {});
+    heartbeatTimer = setInterval(heartbeat, 15_000);
+    heartbeatTimer.unref?.();
+  }
+  try {
+    for (const [index, model] of models.entries() {
     if (openRouterPaidCircuitOpen && isPaidOpenRouterModel(model)) {
       failures.push({ model, error: 'skipped because the paid OpenRouter provider circuit is open for this investigation' });
       continue;
@@ -269,8 +291,18 @@ async function validated({
       if (isPaidOpenRouterModel(model) && looksLikeProviderCapacityFailure(error)) openRouterPaidCircuitOpen = true;
       failures.push({ model, error: String(error?.message ?? error).slice(0, 500) });
     }
+    }
+    await progress(
+      jobDir,
+      progressState?.stage ?? 'failed',
+      progressState?.progress ?? 15,
+      progressState?.phase ?? 'provider_routes_exhausted',
+      `${id} provider routes exhausted; retryable provider failure recorded.`,
+    );
+    throw new Error(`${id} failed every validated model route: ${failures.map((row) => `${row.model}=${row.error}`).join(' | ')}`);
+  } finally {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
   }
-  throw new Error(`${id} failed every validated model route: ${failures.map((row) => `${row.model}=${row.error}`).join(' | ')}`);
 }
 async function mapLimit(rows, limit, fn) {
   const out = new Array(rows.length);
@@ -674,6 +706,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
       task: shardTask(shard), execName: `large-v2-shard-${shard.shard_id}-exec.json`,
       synthetic, allowExternal: false,
       validator: (final) => parseDocumentShardFinal(final, shard.documents.map((row) => row.id)),
+      progressState: { stage: 'extracting', progress: 18, phase: 'large_document_shards' },
     });
     phases.push({ phase: `shard-${shard.shard_id}`, ...result });
     await progress(jobDir, 'extracting', 18 + Math.round(((index + 1) / shards.length) * 18), 'large_document_shards', `shard ${index + 1}/${shards.length}`);
@@ -777,6 +810,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
     validator: (final) => filterSyntheticExternalResearchLanes(
       parseLargePlanFinal(final, { allowZeroLanes: synthetic }), synthetic,
     ),
+    progressState: { stage: 'mapping_entities', progress: 38, phase: 'large_bounded_plan' },
   });
   phases.push({ phase: 'large-plan', ...planResult });
   let plan = buildCompatiblePlan(documentSummaries, planResult.value);
@@ -817,6 +851,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
       jobDir, id: 'large-case-analysis', role: 'analysis', task: analysisTask(false),
       execName: 'large-v2-case-analysis-exec.json', synthetic: false, allowExternal: false,
       validator: (final) => parseCaseAnalysisFinal(final, docSourceKeys),
+      progressState: { stage: 'analyzing_documents', progress: 45, phase: 'large_case_analysis' },
     });
     caseAnalysis = analysisResult.value;
   }
@@ -873,6 +908,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
           }
           return parsed;
         },
+        progressState: { stage: 'researching', progress: 52, phase: 'large_research_lanes' },
       });
     } catch (error) {
       const blocked = providerBlockedLane(lane);
@@ -929,6 +965,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
         jobDir, id: 'large-critic', role: 'critic', task: criticTask(false),
         execName: 'large-v2-critic-exec.json', synthetic: false, allowExternal: false,
         validator: (final) => parseCriticIssuesFinal(final),
+        progressState: { stage: 'independent_review', progress: 68, phase: 'large_independent_critic' },
       });
       critic = criticResult.value;
     } catch (error) {
@@ -975,6 +1012,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
             jobDir, id: `report-${spec.id}`, role: 'report', task: reportTask(spec),
             execName: `large-v2-report-${spec.id}-exec.json`, synthetic, allowExternal: false,
             validator: reportValidator(spec),
+            progressState: { stage: 'drafting_report', progress: 76, phase: 'large_sectioned_report' },
           });
         } catch (error) {
           const value = reportValidator(spec)(deterministicProviderReportSection(spec, reviewed, critic));
