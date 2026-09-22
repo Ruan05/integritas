@@ -18,12 +18,38 @@ import {
   parseReportSectionFinal,
   shouldUseLargeInvestigation,
 } from '../../large-investigation.mjs';
-import { buildDeterministicCaseAnalysis, deterministicSyntheticCaseAnalysis, deterministicSyntheticCritic, deterministicProviderReportSection, providerBlockedCritic, providerBlockedLane } from '../../large-investigation-agent-runner-v2.mjs';
+import { buildDeterministicCaseAnalysis, buildGroqBrowserLaneResult, deterministicSyntheticCaseAnalysis, deterministicSyntheticCritic, deterministicProviderReportSection, providerBlockedCritic, providerBlockedLane } from '../../large-investigation-agent-runner-v2.mjs';
 
 const CASE_ID='11111111-1111-4111-8111-111111111111';
 const JOB_ID='22222222-2222-4222-8222-222222222222';
 const DOC1='33333333-3333-4333-8333-333333333333';
 const DOC2='44444444-4444-4444-8444-444444444444';
+
+test('Groq browser fallback preserves bounded HTTPS provenance and keeps claims cautious', () => {
+  const lane = {
+    lane_id: 'core.corporate_identity', priority: 'critical', question: 'Verify legal identity.',
+    preferred_sources: ['Official company registry'], stop_condition: 'Obtain official registry confirmation.',
+  };
+  const result = buildGroqBrowserLaneResult(lane, {
+    choices: [{ message: {
+      content: 'Official registry evidence identifies SHELL TRADING INTERNATIONAL LIMITED as company 03634752.',
+      executed_tools: [{ search_results: { results: [
+        { title: 'Companies House record', url: 'https://find-and-update.company-information.service.gov.uk/company/03634752', content: 'SHELL TRADING INTERNATIONAL LIMITED. Company number 03634752. Active.' },
+        { title: 'Duplicate', url: 'https://find-and-update.company-information.service.gov.uk/company/03634752', content: 'duplicate' },
+        { title: 'Secondary profile', url: 'https://example.test/profile', content: 'secondary' },
+      ] } }],
+    } }],
+  }, '2026-09-22T16:00:00.000Z');
+  assert.equal(result.lane_id, lane.lane_id);
+  assert.equal(result.sources.length, 2);
+  assert.equal(result.sources[0].source_type, 'official');
+  assert.equal(result.sources[0].retrieved_at, '2026-09-22T16:00:00.000Z');
+  assert.equal(result.findings[0].evidence_status, 'uncertain');
+  assert.equal(result.findings[0].reliability, 'high');
+  assert.deepEqual(result.findings[0].source_refs, ['groq01', 'groq02']);
+  assert.equal(result.check.status, 'complete');
+  assert.equal(result.unresolved_checks.length, 0);
+});
 
 test('provider failure becomes a blocked lane without fabricated evidence', () => {
   const lane = providerBlockedLane({
