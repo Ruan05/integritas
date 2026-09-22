@@ -15,6 +15,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ "${EUID}" -eq 0 ]] || { echo "root required" >&2; exit 1; }
 [[ "${TARGET_VERSION}" =~ ^[0-9]{4}\.[0-9]+\.[0-9]+$ ]] || { echo "invalid OpenClaw version" >&2; exit 2; }
 
+# Deterministic page-level extraction fallback for image-only or low-text PDFs.
+if ! command -v pdftotext >/dev/null 2>&1 || ! command -v pdftoppm >/dev/null 2>&1 || ! command -v tesseract >/dev/null 2>&1; then
+  if command -v dnf >/dev/null 2>&1; then
+    dnf -y install poppler-utils tesseract tesseract-langpack-eng
+  else
+    echo "Missing Poppler/Tesseract page-extraction dependencies and no supported package manager is available." >&2
+    exit 3
+  fi
+fi
+for required in /usr/bin/pdftotext /usr/bin/pdfinfo /usr/bin/pdftoppm /usr/bin/tesseract; do
+  [[ -x "$required" ]] || { echo "Missing page-extraction dependency: $required" >&2; exit 3; }
+done
+
 if ! id openclaw >/dev/null 2>&1; then
   useradd --system --create-home --home-dir "${STATE_DIR}" --shell /sbin/nologin openclaw
 fi
