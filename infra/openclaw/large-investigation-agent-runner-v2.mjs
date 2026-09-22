@@ -80,6 +80,7 @@ function buildDeterministicCaseAnalysis(documentSummaries) {
   const entityRows = [];
   const entityByName = new Map();
   const findings = [];
+  const seenClaims = new Set();
   for (const summary of documentSummaries) {
     const sourceKeys = [sourceKey(summary.document_id)];
     for (const party of Array.isArray(summary.parties) ? summary.parties : []) {
@@ -105,6 +106,9 @@ function buildDeterministicCaseAnalysis(documentSummaries) {
       ...(Array.isArray(summary.material_terms) ? summary.material_terms.slice(0, 8) : []),
     ].filter((value) => typeof value === 'string' && value.trim()).slice(0, 12);
     for (const signal of materialSignals) {
+      const normalizedClaim = signal.trim().replace(/\s+/g, ' ').toLowerCase();
+      if (seenClaims.has(normalizedClaim)) continue;
+      seenClaims.add(normalizedClaim);
       findings.push({
         finding_key: `evidence.${String(findings.length + 1).padStart(2, '0')}`,
         entity_key: null,
