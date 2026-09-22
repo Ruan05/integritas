@@ -177,7 +177,7 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
   }
 });
 
-test('reuses retained output and normalizes unresolved completed outcome without restarting OpenClaw', async () => {
+test('reuses retained standard output and normalizes unresolved completed outcome without restarting OpenClaw', async () => {
   const spoolRoot = await mkdtemp(path.join(os.tmpdir(), 'integritas-investigation-'));
   const bytes = Buffer.from('alpha evidence');
   const sha256 = createHash('sha256').update(bytes).digest('hex');
@@ -187,7 +187,7 @@ test('reuses retained output and normalizes unresolved completed outcome without
   await writeFile(path.join(documentsDir, `${DOC_ID}.pdf`), bytes);
   const report = '# Retained report\n\nManual registry work remains.';
   const bundle = {
-    schema_version: 1, case_id: CASE_ID, case_job_id: JOB_ID, case_revision: 7, depth: 'deep',
+    schema_version: 1, case_id: CASE_ID, case_job_id: JOB_ID, case_revision: 7, depth: 'standard',
     generated_at: '2026-09-18T08:00:00Z', entities: [], relationships: [], sources: [], findings: [],
     checks: [{
       check_key: 'registry-check', check_type: 'registry_verification', description: 'Verify registry directly.',
@@ -213,7 +213,7 @@ test('reuses retained output and normalizes unresolved completed outcome without
   const client = {
     baseUrl: 'https://project.supabase.co/functions/v1/integritas-control',
     storageSelfTest: async () => ({ storage: { ok: true } }),
-    manifest: async () => manifestFor(bytes, sha256, { job_stage: 'verifying', job_progress: 80 }),
+    manifest: async () => { const m = manifestFor(bytes, sha256, { job_stage: 'verifying', job_progress: 80 }); m.manifest.depth = 'standard'; return m; },
     checkpoint: async (...args) => { checkpoints.push(args); return { ok: true }; },
     publishOutput: async () => ({ ok: true }),
     commitBundle: async (...args) => { commits.push(args); return { commit_summary: {} }; },
@@ -223,7 +223,8 @@ test('reuses retained output and normalizes unresolved completed outcome without
     throw new Error('retained valid output must not restart OpenClaw');
   };
   try {
-    const result = await executeInvestigation(command, {
+    const standardCommand = { ...command, payload: { ...command.payload, depth: 'standard' } };
+    const result = await executeInvestigation(standardCommand, {
       client,
       fetchImpl: async () => new Response(bytes, { status: 200, headers: { 'content-length': String(bytes.length) } }),
       systemctlRunner,
@@ -667,7 +668,7 @@ async function runRetainedRenderFixture(reportRenderer) {
     case_id: CASE_ID,
     case_job_id: JOB_ID,
     case_revision: 7,
-    depth: 'deep',
+    depth: 'standard',
     generated_at: '2026-09-21T18:00:00Z',
     entities: [],
     relationships: [],
@@ -696,7 +697,7 @@ async function runRetainedRenderFixture(reportRenderer) {
   const client = {
     baseUrl: 'https://project.supabase.co/functions/v1/integritas-control',
     storageSelfTest: async () => ({ storage: { ok: true } }),
-    manifest: async () => manifestFor(bytes, sha256, { job_stage: 'drafting_report', job_progress: 90 }),
+    manifest: async () => { const m = manifestFor(bytes, sha256, { job_stage: 'drafting_report', job_progress: 90 }); m.manifest.depth = 'standard'; return m; },
     checkpoint: async (...args) => { checkpoints.push(args); return { ok: true }; },
     jobState: async () => ({ state: {
       cancel_requested: false,
@@ -726,7 +727,8 @@ async function runRetainedRenderFixture(reportRenderer) {
     : null;
 
   try {
-    const result = await executeInvestigation(command, {
+    const standardCommand = { ...command, payload: { ...command.payload, depth: 'standard' } };
+    const result = await executeInvestigation(standardCommand, {
       client,
       fetchImpl: async () => new Response(bytes, {
         status: 200,
