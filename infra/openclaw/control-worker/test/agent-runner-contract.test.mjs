@@ -137,7 +137,8 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.match(large, /MAX_ZEN_FREE_USES = 4/, 'Zen free fallback must remain bounded per investigation');
   assert.match(large, /const zen = ZEN_ENABLED/, 'large-case Zen activation must require the validated enable marker');
   assert.match(large, /ZEN_FREE_MODELS\.has\(model\)/, 'Zen free routes must use their own bounded budget');
-  assert.match(large, /external lane sources require observed research-tool use in the same phase/, 'external source provenance must be phase-local');
+  assert.match(large, /external research lane requires an observed web_search call in the same phase/, 'external discovery provenance must be phase-local');
+  assert.match(large, /external lane sources require an observed source-open call \(web_fetch or browser\) in the same phase/, 'external source-open provenance must be phase-local');
   assert.match(large, /# MASTER SUMMARY — READ THIS FIRST/);
   assert.match(large, /## DIRECT NEXT STEPS — WHAT TO DO NOW/);
   assert.match(large, /## Master Issue Dashboard/);
