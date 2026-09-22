@@ -566,7 +566,7 @@ def validate_semantic_maximum(bundle, manifest, report_text, errors, plan=None, 
     pdf_tool_required = bool(pdf_docs) and not deterministic_native_complete
     pdf_tool_observed = agent_exec is None or not pdf_docs or 'pdf' in observed_tools
     if pdf_tool_required and not pdf_tool_observed:
-        errors.append('semantic QA: maximum PDF evidence requires either complete trusted native page extraction or an observed OpenClaw pdf visual-review tool call')
+        errors.append('semantic QA: maximum PDF evidence requires either complete trusted native page extraction or an observed OpenClaw pdf tool call for visual review')
     submitted_by_document = {
         row.get('document_id'): row for row in submitted
         if isinstance(row, dict) and isinstance(row.get('document_id'), str)
