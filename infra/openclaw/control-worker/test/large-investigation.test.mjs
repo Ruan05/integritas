@@ -207,6 +207,7 @@ test('deterministic case-analysis fallback creates only explicit parties with ro
         'name=SHELL TRADING INTERNATIONAL LIMITED; role=Seller/Exporter; representative=Mr. Oscar de Vries (Managing Director)',
         'name=GLOBAL A1 LLC; role=Buyer/Consignee; contact_person=Harald Spitzer; contact_title=CEO',
         'name=GREY SHIPPING B.V.; role=Seller Logistics; representative=Jansen De Jong (Managing Director)',
+        'name=for seamless execution of the Seller’s allocation.; role=Buyer Logistics; source_page=p.2',
       ],
       identifiers:['type=IBAN; value=NL91ABNA0793164363'],
       material_terms:['field=Quantity; value=100,000 MT'],
@@ -228,6 +229,7 @@ test('deterministic case-analysis fallback creates only explicit parties with ro
   ]);
   assert.ok(result.entities.length <= 8, 'prose fragments must not become entities');
   assert.equal(result.entities.some((row)=>/release and loading/i.test(row.display_name)),false);
+  assert.equal(result.entities.some((row)=>/seamless execution/i.test(row.display_name)),false);
   const shell=result.entities.find((row)=>row.display_name==='SHELL TRADING INTERNATIONAL LIMITED');
   assert.equal(shell.identifiers.role,'seller_counterparty');
   assert.equal(shell.identifiers.subject_scope,'in_scope');
