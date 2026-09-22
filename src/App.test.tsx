@@ -87,7 +87,9 @@ describe('persisted investigation result presentation', () => {
     expect(screen.getByText(/stale report/i)).toBeInTheDocument();
     expect(screen.getByText(/manual registry follow-up/i)).toBeInTheDocument();
     expect(screen.getByText('draft', { selector: 'span' })).toBeInTheDocument();
-    expect(screen.getByText((_, element) => element?.textContent === '# Draft report\nEvidence only.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Draft report' })).toBeInTheDocument();
+    expect(screen.getByText('Evidence only.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /open canonical integritas pdf/i })).toBeDisabled();
   });
 
   it('surfaces terminal failure/cancel states from durable job state', () => {

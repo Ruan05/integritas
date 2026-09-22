@@ -92,6 +92,19 @@ describe('Integritas browser adapter', () => {
     ]);
   });
 
+  it('requests the canonical report PDF through the authenticated admin API', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      url: 'https://example.test/signed-report.pdf', expiresIn: 300, sha256: 'a'.repeat(64), sizeBytes: 2048, caseRevision: 3,
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const client = createIntegritasBrowserClient({ adminApiUrl: 'https://example.test/admin', controlApiUrl: 'https://example.test/control', fetchImpl });
+    const artifact = await client.getReportPdfUrl('token', '11111111-1111-4111-8111-111111111111');
+    expect(artifact.sha256).toBe('a'.repeat(64));
+    expect(JSON.parse(String(fetchImpl.mock.calls[0][1].body))).toEqual({
+      action: 'get_report_pdf',
+      caseJobId: '11111111-1111-4111-8111-111111111111',
+    });
+  });
+
   it('uses a case-scoped control action for evidence deletion', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ deleted: { document_id: 'doc-1' } }), { status: 200, headers: { 'content-type': 'application/json' } }));
     const client = createIntegritasBrowserClient({ adminApiUrl: 'https://example.test/admin', controlApiUrl: 'https://example.test/control', fetchImpl });

@@ -215,6 +215,23 @@ export function createIntegritasBrowserClient(options: BrowserClientOptions) {
       });
       return payload.deleted;
     },
+    async getReportPdfUrl(token: string, caseJobId: string) {
+      const payload = await adminRequest(token, {
+        action: 'get_report_pdf',
+        caseJobId,
+      });
+      if (typeof payload?.url !== 'string' || !payload.url.startsWith('https://')) {
+        throw new Error('Canonical report PDF is not available yet.');
+      }
+      return payload as {
+        url: string;
+        expiresIn: number;
+        sha256: string;
+        sizeBytes: number;
+        caseRevision: number;
+        metadata?: Record<string, unknown>;
+      };
+    },
   };
 }
 

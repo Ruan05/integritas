@@ -10,6 +10,7 @@ const ACTIONS = new Set([
   "cancel_job",
   "review_report",
   "finalize_report",
+  "get_report_pdf",
   "archive_case",
   "purge_case",
   "create_thread",

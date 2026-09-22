@@ -72,13 +72,10 @@ async function convertMarkdown({ baseUrl, trace, indexHtml, markdown, headerHtml
   form.append('generateDocumentOutline', 'true');
   form.append('generateTaggedPdf', 'true');
   form.append('failOnConsoleExceptions', 'true');
+  form.append('failOnResourceLoadingFailed', 'true');
+  form.append('skipNetworkAlmostIdleEvent', 'false');
+  form.append('preferCssPageSize', 'true');
   form.append('emulatedMediaType', 'print');
-  form.append('paperWidth', '8.27');
-  form.append('paperHeight', '11.7');
-  form.append('marginTop', '0.72');
-  form.append('marginBottom', '0.72');
-  form.append('marginLeft', '0.55');
-  form.append('marginRight', '0.55');
 
   const response = await fetch(`${baseUrl}/forms/chromium/convert/markdown`, {
     method: 'POST',

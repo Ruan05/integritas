@@ -51,7 +51,8 @@ test('provider failure preserves revision-required critic and a structured repor
   assert.match(text, /# MASTER SUMMARY — READ THIS FIRST/);
   assert.match(text, /Executive Decision Summary/);
   assert.match(text, /## DIRECT NEXT STEPS — WHAT TO DO NOW/);
-  assert.ok(text.length >= 1800);
+  assert.ok(text.length < 1800, 'deterministic fallback must not pad evidence-free sections to a target length');
+  assert.doesNotMatch(text, /Evidence completeness note:.*Evidence completeness note:/s, 'fallback must not repeat boilerplate to satisfy length');
 });
 
 function manifest(depth='maximum') {

@@ -1,3 +1,5 @@
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { isInvestigationResultStale, type PersistedInvestigationResults } from './lib/integritas-browser';
 
 type ResultJob = { case_revision: number; stage: string };
@@ -6,10 +8,14 @@ export function InvestigationResultsView({
   results,
   caseRevision,
   job,
+  onOpenPdf,
+  pdfBusy = false,
 }: {
   results: PersistedInvestigationResults;
   caseRevision: number;
   job: ResultJob;
+  onOpenPdf?: () => void;
+  pdfBusy?: boolean;
 }) {
   const sourceById = new Map(results.sources.map((source) => [source.id, source]));
   const contradictions = results.findings.filter((finding) => finding.finding_type === 'contradiction');
@@ -19,8 +25,8 @@ export function InvestigationResultsView({
   const terminalLabels: Record<string, string> = {
     failed: 'Investigation failed',
     cancelled: 'Investigation cancelled',
-    incomplete: 'Investigation incomplete',
-    research_limit_reached: 'Research limit reached',
+    incomplete: 'Investigation incomplete — comprehensive verification is not complete',
+    research_limit_reached: 'Research limit reached — comprehensive verification is not complete',
   };
   const terminalLabel = terminalLabels[job.stage];
 
@@ -43,19 +49,25 @@ export function InvestigationResultsView({
         <div className="panel-head"><h2>Entities</h2><span>{results.entities.length}</span></div>
         {results.entities.length === 0 ? <p className="muted">No persisted entities yet.</p> : (
           <ul className="result-list">
-            {results.entities.map((entity) => (
-              <li key={entity.id}>
-                <strong>{entity.display_name}</strong>
-                <span className="result-key">{entity.entity_key}</span>
-                <small>
-                  {entity.entity_type} · {entity.match_status}
-                  {entity.match_confidence == null ? '' : ' · ' + entity.match_confidence + '%'}
-                </small>
-              </li>
-            ))}
+            {results.entities.map((entity) => {
+              const role = typeof entity.identifiers?.role === 'string' ? entity.identifiers.role : 'unknown';
+              const scope = typeof entity.identifiers?.subject_scope === 'string' ? entity.identifiers.subject_scope : 'unknown';
+              return (
+                <li key={entity.id}>
+                  <strong>{entity.display_name}</strong>
+                  <span className="result-key">{entity.entity_key}</span>
+                  <small>
+                    {entity.entity_type} · {entity.match_status}
+                    {entity.match_confidence == null ? '' : ' · ' + entity.match_confidence + '%'}
+                  </small>
+                  <small>Role: {role.replaceAll('_', ' ')} · Scope: {scope.replaceAll('_', ' ')}</small>
+                </li>
+              );
+            })}
           </ul>
         )}
       </article>
+
       <article className="panel" id="findings">
         <div className="panel-head"><h2>Findings</h2><span>Source-linked</span></div>
         {results.findings.filter((finding) => finding.finding_type !== 'contradiction').length === 0 ? (
@@ -117,8 +129,16 @@ export function InvestigationResultsView({
         <div className="panel-head"><h2>Report</h2><span>{results.report?.status ?? 'Not generated'}</span></div>
         {results.report ? (
           <>
+            <div className="report-actions">
+              <button type="button" onClick={onOpenPdf} disabled={!onOpenPdf || pdfBusy || stale}>
+                {pdfBusy ? 'Preparing canonical PDF…' : 'Open canonical Integritas PDF'}
+              </button>
+              {stale && <small>PDF access is disabled because this report predates the current case revision.</small>}
+            </div>
             <p className="muted">{results.report.summary}</p>
-            <pre className="report-markdown">{results.report.content_markdown}</pre>
+            <div className="report-document">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{results.report.content_markdown}</ReactMarkdown>
+            </div>
             {results.report.limitations && <p className="report-limitations">Limitations: {results.report.limitations}</p>}
           </>
         ) : <p className="muted">No persisted report yet.</p>}

@@ -1265,6 +1265,45 @@ async function toolRegistry(): Promise<Capability[]> {
     cap("production_publish", "Production publish", "APPROVAL REQUIRED", "Always requires explicit authorised approval bound to the exact tested change-set hash."),
   ];
 }
+async function getReportPdf(uid: string, body: any) {
+  const caseJobId = String(body.caseJobId || "");
+  if (!/^[0-9a-f-]{36}$/i.test(caseJobId))
+    throw Object.assign(new Error("Invalid investigation job"), { status: 400 });
+  const output = await admin
+    .from("integritas_case_job_outputs")
+    .select("case_id,case_job_id,case_revision,storage_path,sha256,size_bytes,safe_metadata,created_at")
+    .eq("case_job_id", caseJobId)
+    .eq("output_type", "report_pdf")
+    .eq("content_type", "application/pdf")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (output.error) throw output.error;
+  if (!output.data?.storage_path)
+    throw Object.assign(new Error("Canonical report PDF is not available yet"), { status: 404 });
+  await access(uid, output.data.case_id);
+  const signed = await admin.storage
+    .from("integritas-case-files")
+    .createSignedUrl(output.data.storage_path, 300, {
+      download: `Integritas-${caseJobId.slice(0, 8)}.pdf`,
+    });
+  if (signed.error || !signed.data?.signedUrl)
+    throw signed.error || new Error("Could not create report download link");
+  await audit(output.data.case_id, uid, "report_pdf_accessed", {
+    caseJobId,
+    caseRevision: output.data.case_revision,
+    sha256: output.data.sha256,
+  });
+  return {
+    url: signed.data.signedUrl,
+    expiresIn: 300,
+    sha256: output.data.sha256,
+    sizeBytes: output.data.size_bytes,
+    caseRevision: output.data.case_revision,
+    metadata: output.data.safe_metadata || {},
+  };
+}
+
 async function listThreads(uid: string) {
   const q = await admin
     .from("integritas_agent_threads")
@@ -1418,6 +1457,8 @@ Deno.serve(async (req) => {
       return json(req, await reportAction(who.userId, b));
     if (a === "finalize_report")
       return json(req, await reportAction(who.userId, b, true));
+    if (a === "get_report_pdf")
+      return json(req, await getReportPdf(who.userId, b));
     if (a === "create_thread")
       return json(req, await createThread(who.userId, b), 201);
     if (a === "thread_snapshot")

@@ -163,3 +163,27 @@ select:disabled, input:disabled { opacity: 0.6; }
   .milestone-state { grid-column: 2; justify-self: start; }
   .milestone-head { align-items: flex-start; }
 }
+
+.report-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 0 16px; }
+.report-actions button { border: 1px solid rgba(212,175,55,.55); background: linear-gradient(180deg, #d8b65b, #a77d23); color: #080706; font-weight: 800; padding: 10px 14px; border-radius: 8px; cursor: pointer; }
+.report-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.report-actions small { color: #b9aa8a; }
+.report-document { margin-top: 16px; padding: clamp(14px, 3vw, 26px); border: 1px solid rgba(212,175,55,.22); border-radius: 12px; background: linear-gradient(180deg, rgba(19,16,11,.96), rgba(8,7,6,.98)); color: #e9dfcc; line-height: 1.65; overflow-wrap: anywhere; }
+.report-document h1 { margin: 28px 0 14px; padding-bottom: 9px; border-bottom: 1px solid rgba(212,175,55,.45); color: #f5e4b8; font-size: clamp(1.45rem, 3vw, 2rem); }
+.report-document h1:first-child { margin-top: 0; }
+.report-document h2 { margin: 24px 0 10px; color: #d9b85d; font-size: clamp(1.12rem, 2.5vw, 1.4rem); }
+.report-document h3 { margin: 18px 0 8px; color: #e8cf8d; font-size: 1.04rem; }
+.report-document p { margin: 8px 0 13px; }
+.report-document ul, .report-document ol { padding-left: 22px; }
+.report-document blockquote { margin: 14px 0; padding: 9px 14px; border-left: 3px solid #d4af37; background: rgba(212,175,55,.06); color: #d7cdb9; }
+.report-document table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: .9rem; display: block; overflow-x: auto; }
+.report-document th, .report-document td { min-width: 120px; padding: 9px 10px; border: 1px solid rgba(212,175,55,.18); text-align: left; vertical-align: top; }
+.report-document th { color: #f1d993; background: rgba(212,175,55,.11); }
+.report-document a { color: #e8c35f; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.report-document code { background: rgba(255,255,255,.07); border-radius: 4px; padding: 1px 4px; }
+.report-document pre { overflow-x: auto; background: #090807; border-left: 3px solid #b68a32; padding: 12px; }
+@media (max-width: 720px) {
+  .report-document { margin-left: -4px; margin-right: -4px; padding: 13px; border-radius: 9px; }
+  .report-document table { font-size: .82rem; }
+  .report-actions button { width: 100%; }
+}

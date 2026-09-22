@@ -428,6 +428,112 @@ def validate_maximum_report(bundle, report_text, errors):
     }
 
 
+def normalized_paragraphs(report_text):
+    rows = []
+    for chunk in re.split(r'\n\s*\n+', report_text):
+        value = re.sub(r'[`*_#>|\[\]()]+', ' ', chunk)
+        value = re.sub(r'\s+', ' ', value).strip().lower()
+        if len(value) >= 90 and not value.startswith('|'):
+            rows.append(value)
+    return rows
+
+
+def validate_semantic_maximum(bundle, manifest, report_text, errors, plan=None, agent_exec=None):
+    if bundle.get('depth') != 'maximum' or evidence_proportional_no_evidence(bundle):
+        return {
+            'research_lanes': 0, 'external_sources': 0, 'source_anchor_ratio': 1.0,
+            'duplicate_paragraph_ratio': 0.0, 'pdf_tool_observed': True,
+        }
+    sources = bundle.get('sources') if isinstance(bundle.get('sources'), list) else []
+    findings = bundle.get('findings') if isinstance(bundle.get('findings'), list) else []
+    checks = bundle.get('checks') if isinstance(bundle.get('checks'), list) else []
+    external = [row for row in sources if isinstance(row, dict) and row.get('evidence_origin') == 'external_research']
+    submitted = [row for row in sources if isinstance(row, dict) and row.get('evidence_origin') == 'submitted_document']
+    outcome = (bundle.get('execution') or {}).get('terminal_outcome') if isinstance(bundle.get('execution'), dict) else None
+
+    # A Maximum investigation must never collapse into a single generic research lane.
+    lanes = plan.get('research_lanes', []) if isinstance(plan, dict) and isinstance(plan.get('research_lanes'), list) else []
+    if plan is not None and len(lanes) < 3:
+        errors.append('semantic QA: maximum substantive investigation requires at least three evidence-driven research lanes')
+    if lanes:
+        check_keys = {row.get('check_key') for row in checks if isinstance(row, dict)}
+        missing_lane_checks = [row.get('lane_id') for row in lanes if isinstance(row, dict) and f"lane.{row.get('lane_id')}" not in check_keys]
+        if missing_lane_checks:
+            errors.append('semantic QA: research lanes missing persisted checks: ' + ','.join(str(x) for x in missing_lane_checks[:12]))
+
+    # Every PDF must have crossed the real PDF tool path. This prevents metadata/filename-only summaries.
+    pdf_docs = [row for row in manifest.get('documents', []) if isinstance(row, dict) and (
+        row.get('mime_type') == 'application/pdf' or str(row.get('name', '')).lower().endswith('.pdf')
+    )]
+    observed_tools = set()
+    if isinstance(agent_exec, dict):
+        summary = agent_exec.get('toolSummary') if isinstance(agent_exec.get('toolSummary'), dict) else {}
+        observed_tools.update(x for x in summary.get('tools', []) if isinstance(x, str))
+    pdf_tool_observed = agent_exec is None or not pdf_docs or 'pdf' in observed_tools
+    if not pdf_tool_observed:
+        errors.append('semantic QA: maximum PDF evidence was not substantively inspected with the OpenClaw pdf tool')
+
+    # Role/scope are required so contextual client/buyer parties are not silently adverse-scored.
+    entities = bundle.get('entities') if isinstance(bundle.get('entities'), list) else []
+    missing_roles = []
+    for row in entities:
+        if not isinstance(row, dict):
+            continue
+        identifiers = row.get('identifiers') if isinstance(row.get('identifiers'), dict) else {}
+        if identifiers.get('role') not in {
+            'client', 'buyer', 'buyer_client', 'seller', 'representative', 'intermediary', 'bank',
+            'terminal', 'logistics', 'vessel_owner', 'related_party', 'counterparty', 'unknown'
+        } or identifiers.get('subject_scope') not in {'in_scope', 'context_only', 'unknown'}:
+            missing_roles.append(str(row.get('entity_key', 'unknown')))
+    if missing_roles:
+        errors.append('semantic QA: maximum-depth entities require explicit identifiers.role and identifiers.subject_scope: ' + ','.join(missing_roles[:12]))
+
+    # A completed external due-diligence case needs independent public-source evidence.
+    if outcome == 'completed':
+        if len(external) < 2:
+            errors.append('semantic QA: completed maximum investigation requires at least two validated external research sources')
+        if external and not any(row.get('source_type') in {'official', 'primary'} for row in external):
+            errors.append('semantic QA: completed maximum investigation lacks an official/primary external source')
+    elif len(external) == 0 and not re.search(r'\bincomplete\b|research\s+(?:was\s+)?(?:blocked|unavailable)|no validated external', report_text, flags=re.I):
+        errors.append('semantic QA: zero-external-source maximum report must be explicitly labelled incomplete/blocked')
+
+    # Comprehensive reports must visibly anchor their analysis to the canonical source ledger.
+    source_keys = [row.get('source_key') for row in sources if isinstance(row, dict) and isinstance(row.get('source_key'), str)]
+    mentioned = [key for key in source_keys if key in report_text]
+    required_anchor_count = min(len(source_keys), max(1, min(5, len(submitted) + len(external)))) if source_keys else 0
+    if required_anchor_count and len(mentioned) < required_anchor_count:
+        errors.append(
+            f'semantic QA: report cites only {len(mentioned)} canonical source key(s); at least {required_anchor_count} are required for maximum-depth provenance'
+        )
+
+    # Findings should be evidence-linked instead of becoming free-standing narrative assertions.
+    linked_findings = [row for row in findings if isinstance(row, dict) and isinstance(row.get('source_keys'), list) and row.get('source_keys')]
+    if findings and len(linked_findings) / len(findings) < 0.6:
+        errors.append('semantic QA: fewer than 60% of findings are linked to canonical sources')
+
+    # Reject length-padding/repeated boilerplate even when all headings are present.
+    paragraphs = normalized_paragraphs(report_text)
+    duplicate_ratio = 0.0
+    if paragraphs:
+        duplicate_ratio = (len(paragraphs) - len(set(paragraphs))) / len(paragraphs)
+        if duplicate_ratio > 0.12:
+            errors.append(f'semantic QA: repeated boilerplate ratio is too high ({duplicate_ratio:.2f})')
+
+    # A provider-availability critic cannot certify a completed comprehensive case.
+    if outcome == 'completed' and isinstance(agent_exec, dict):
+        phases = agent_exec.get('phases') if isinstance(agent_exec.get('phases'), list) else []
+        critic = next((row for row in phases if isinstance(row, dict) and row.get('phase') == 'large-critic'), None)
+        if critic and str(critic.get('model', '')).startswith('deterministic-review-gate'):
+            errors.append('semantic QA: completed maximum report requires a real independent critic, not deterministic provider fallback')
+
+    return {
+        'research_lanes': len(lanes),
+        'external_sources': len(external),
+        'source_anchor_ratio': (len(mentioned) / len(source_keys)) if source_keys else 1.0,
+        'duplicate_paragraph_ratio': round(duplicate_ratio, 4),
+        'pdf_tool_observed': pdf_tool_observed,
+    }
+
 def validate_execution(bundle, errors):
     execution = bundle.get('execution')
     if not isinstance(execution, dict):
@@ -467,7 +573,7 @@ def validate_execution(bundle, errors):
         errors.append('execution: maximum-depth investigation must record completed integritas_forensics_v1')
 
 
-def validate(bundle, manifest, report_text, current_revision, forensics=None):
+def validate(bundle, manifest, report_text, current_revision, forensics=None, plan=None, agent_exec=None):
     errors = []
     if not isinstance(bundle, dict):
         return ['bundle: must be an object'], {}
@@ -491,6 +597,7 @@ def validate(bundle, manifest, report_text, current_revision, forensics=None):
     forensics_summary = validate_forensics(bundle, manifest, forensics, errors)
     front_matter = validate_report_front_matter(report_text, errors)
     prototype1 = validate_maximum_report(bundle, report_text, errors)
+    semantic = validate_semantic_maximum(bundle, manifest, report_text, errors, plan=plan, agent_exec=agent_exec)
     validate_execution(bundle, errors)
     execution = bundle.get('execution') if isinstance(bundle.get('execution'), dict) else {}
     if execution.get('terminal_outcome') == 'completed':
@@ -512,6 +619,7 @@ def validate(bundle, manifest, report_text, current_revision, forensics=None):
         'prototype1_missing_features': prototype1.get('missing_features', []),
         'forensic_documents': forensics_summary.get('documents', 0),
         'front_matter_valid': front_matter.get('valid', False),
+        'semantic_quality': semantic,
     }
     return errors, summary
 
@@ -535,8 +643,13 @@ def main():
         manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
         report_text = report_path.read_text(encoding='utf-8')
         forensics = json.loads(args.forensics.read_text(encoding='utf-8')) if args.forensics else None
+        sibling = args.bundle.parent
+        plan_path = sibling / 'investigation-plan.json'
+        exec_path = sibling / 'agent-exec.json'
+        plan = json.loads(plan_path.read_text(encoding='utf-8')) if plan_path.exists() else None
+        agent_exec = json.loads(exec_path.read_text(encoding='utf-8')) if exec_path.exists() else None
         revision = args.current_revision if args.current_revision is not None else manifest.get('case_revision')
-        errors, summary = validate(bundle, manifest, report_text, revision, forensics)
+        errors, summary = validate(bundle, manifest, report_text, revision, forensics, plan=plan, agent_exec=agent_exec)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         errors, summary = [f'input: {type(exc).__name__}'], {}
     print(json.dumps({'valid': not errors, 'errors': errors, 'summary': summary}, sort_keys=True))

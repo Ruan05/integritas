@@ -45,9 +45,11 @@ def prototype1_maximum_report():
         "Verified facts, corroborated facts, submitted claims, allegations, inference, contradictions "
         "and unresolved items remain distinct. "
     )
-    report = "\n\n".join(sections)
+    report = "\n\n".join(sections) + "\n\nCanonical provenance keys: doc-one, doc-two, web-one."
+    n = 0
     while len(report) < 8500:
-        report += detail
+        n += 1
+        report += detail + f" Evidence paragraph {n}."
     return report
 
 
@@ -115,7 +117,11 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
                 },
             ],
             "findings": [],
-            "checks": [],
+            "checks": [
+                {"check_key": "lane.core.identity", "entity_key": None, "check_type": "research_lane", "description": "Verify identity.", "priority": "critical", "required_source": "Official registry", "status": "complete", "outcome": "Checked."},
+                {"check_key": "lane.core.authority", "entity_key": None, "check_type": "research_lane", "description": "Verify authority.", "priority": "high", "required_source": "Primary issuer", "status": "complete", "outcome": "Checked."},
+                {"check_key": "lane.core.screening", "entity_key": None, "check_type": "research_lane", "description": "Screen subject.", "priority": "high", "required_source": "Official lists", "status": "complete", "outcome": "Checked."},
+            ],
             "contradictions": [],
             "unresolved_checks": [],
             "limitations": [],
@@ -130,6 +136,18 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
                 "warnings": [],
                 "terminal_outcome": "incomplete",
             },
+        }
+
+        self.plan = {
+            "research_lanes": [
+                {"lane_id": "core.identity"},
+                {"lane_id": "core.authority"},
+                {"lane_id": "core.screening"},
+            ]
+        }
+        self.agent_exec = {
+            "toolSummary": {"tools": ["read", "pdf", "web_fetch"], "calls": 6, "failures": 0},
+            "phases": [{"phase": "large-critic", "provider": "test", "model": "independent-test-critic"}],
         }
 
         self.forensics = {
@@ -158,7 +176,7 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
 
     def errors(self, bundle=None, forensics=None):
         evidence_forensics = self.forensics if forensics is None else forensics
-        return validate(bundle or self.bundle, self.manifest, self.report, 2, evidence_forensics)[0]
+        return validate(bundle or self.bundle, self.manifest, self.report, 2, evidence_forensics, plan=self.plan, agent_exec=self.agent_exec)[0]
 
     def test_valid_bundle_covers_every_manifest_document(self):
         self.assertEqual(self.errors(), [])
@@ -167,7 +185,7 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
         bundle = copy.deepcopy(self.bundle)
         bundle["report"]["markdown"] = "# Executive Summary\nShort maximum report."
         errors, summary = validate(
-            bundle, self.manifest, bundle["report"]["markdown"], 2, self.forensics
+            bundle, self.manifest, bundle["report"]["markdown"], 2, self.forensics, plan=self.plan, agent_exec=self.agent_exec
         )
         self.assertTrue(any("Prototype 1 report is too short" in error for error in errors))
         self.assertTrue(any("Prototype 1 lanes missing" in error for error in errors))
@@ -200,7 +218,7 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
         })
         bundle["execution"]["terminal_outcome"] = "completed"
         bundle["report"]["markdown"] = report
-        errors, summary = validate(bundle, self.manifest, report, 2, self.forensics)
+        errors, summary = validate(bundle, self.manifest, report, 2, self.forensics, plan=self.plan, agent_exec=self.agent_exec)
         self.assertEqual(errors, [])
         self.assertEqual(summary["prototype1_required_lanes"], 0)
         self.assertEqual(summary["prototype1_missing_lanes"], [])
@@ -225,7 +243,7 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
         })
         report = "# MASTER SUMMARY — READ THIS FIRST\nShort.\n\n# DIRECT NEXT STEPS — WHAT TO DO NOW\nShort."
         bundle["report"]["markdown"] = report
-        errors, _ = validate(bundle, self.manifest, report, 2, self.forensics)
+        errors, _ = validate(bundle, self.manifest, report, 2, self.forensics, plan=self.plan, agent_exec=self.agent_exec)
         self.assertTrue(any("Prototype 1 report is too short" in error for error in errors))
 
     def test_maximum_report_accepts_canonical_subject_status_matrix_heading(self):
@@ -235,7 +253,7 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
             "Subject Status Matrix",
         )
         bundle["report"]["markdown"] = report
-        errors, summary = validate(bundle, self.manifest, report, 2, self.forensics)
+        errors, summary = validate(bundle, self.manifest, report, 2, self.forensics, plan=self.plan, agent_exec=self.agent_exec)
         self.assertFalse(any("subject status matrix" in error for error in errors))
         self.assertNotIn("subject status matrix", summary["prototype1_missing_features"])
 
@@ -262,7 +280,7 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
         self.assertTrue(any("no detailed report section" in error for error in errors))
 
     def test_maximum_requires_trusted_forensics(self):
-        errors, _ = validate(self.bundle, self.manifest, self.report, 2, None)
+        errors, _ = validate(self.bundle, self.manifest, self.report, 2, None, plan=self.plan, agent_exec=self.agent_exec)
         self.assertTrue(any("requires trusted forensic pre-pass" in error for error in errors))
 
     def test_forensic_hash_mismatch_is_rejected(self):
@@ -295,6 +313,37 @@ class InvestigationBundleV1QualityTests(unittest.TestCase):
         errors = self.errors(bundle)
         self.assertTrue(any("external research requires public HTTPS URL" in error for error in errors))
         self.assertTrue(any("external research cannot use document_id" in error for error in errors))
+
+
+    def test_semantic_maximum_rejects_missing_pdf_tool_provenance(self):
+        agent_exec = copy.deepcopy(self.agent_exec)
+        agent_exec["toolSummary"]["tools"] = ["read", "web_fetch"]
+        errors, _ = validate(
+            self.bundle, self.manifest, self.report, 2, self.forensics,
+            plan=self.plan, agent_exec=agent_exec,
+        )
+        self.assertTrue(any("pdf tool" in error for error in errors))
+
+    def test_semantic_maximum_rejects_collapsed_single_lane_plan(self):
+        plan = {"research_lanes": [{"lane_id": "core.identity"}]}
+        errors, _ = validate(
+            self.bundle, self.manifest, self.report, 2, self.forensics,
+            plan=plan, agent_exec=self.agent_exec,
+        )
+        self.assertTrue(any("at least three evidence-driven research lanes" in error for error in errors))
+
+    def test_semantic_maximum_requires_explicit_entity_role_and_scope(self):
+        bundle = copy.deepcopy(self.bundle)
+        bundle["entities"] = [{
+            "entity_key": "entity.example", "entity_type": "company", "display_name": "Example Co",
+            "aliases": [], "identifiers": {}, "match_status": "proposed", "confidence": 50,
+        }]
+        errors, _ = validate(
+            bundle, self.manifest, self.report, 2, self.forensics,
+            plan=self.plan, agent_exec=self.agent_exec,
+        )
+        self.assertTrue(any("identifiers.role" in error for error in errors))
+
 
 
 if __name__ == "__main__":

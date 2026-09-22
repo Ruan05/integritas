@@ -76,6 +76,7 @@ export function App() {
   const [files, setFiles] = useState<File[]>([]);
   const [depth, setDepth] = useState<InvestigationDepth>('deep');
   const [busy, setBusy] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [results, setResults] = useState<PersistedInvestigationResults | null>(null);
   const [liveCheckpoints, setLiveCheckpoints] = useState<CheckpointRow[]>([]);
@@ -361,6 +362,24 @@ export function App() {
     finally { setBusy(false); }
   };
 
+  const openReportPdf = async () => {
+    if (!token || !browserClient || !job || pdfBusy) return;
+    const popup = window.open('', '_blank', 'noopener,noreferrer');
+    setPdfBusy(true);
+    setNotice('Preparing the canonical server-rendered Integritas PDF…');
+    try {
+      const artifact = await browserClient.getReportPdfUrl(token, job.id);
+      if (popup) popup.location.replace(artifact.url);
+      else window.location.assign(artifact.url);
+      setNotice(`Canonical PDF ready · ${Math.max(1, Math.round((artifact.sizeBytes || 0) / 1024))} KB · SHA-256 ${artifact.sha256.slice(0, 12)}…`);
+    } catch (error) {
+      if (popup) popup.close();
+      setNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   const deleteDocument = async (document: DocumentRow) => {
     if (!token || !browserClient || !selectedCase || busy) return;
     if (!window.confirm(`Delete ${document.name}? This is permanent. Documents cited by a saved investigation are protected.`)) return;
@@ -503,6 +522,8 @@ export function App() {
               results={results}
               caseRevision={selectedCase.revision}
               job={{ case_revision: job.case_revision, stage: job.stage }}
+              onOpenPdf={() => { void openReportPdf(); }}
+              pdfBusy={pdfBusy}
             />
           ) : (
             <article className="panel" id="entities">

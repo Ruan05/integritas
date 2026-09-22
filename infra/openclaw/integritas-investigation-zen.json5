@@ -570,6 +570,27 @@
       sandbox: {
         workspaceAccess: "ro",
       },
+      // Maximum-depth document ingestion must be able to read scanned/image-only PDFs.
+      // OpenClaw's pdf tool extracts text first and renders low-text pages for vision fallback.
+      imageModel: {
+        primary: "integritas-nvidia/google/gemma-4-31b-it",
+        fallbacks: [
+          "integritas-nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+          "integritas-openrouter/inclusionai/ling-3.0-flash-vl:free",
+        ],
+      },
+      pdfModel: {
+        primary: "integritas-nvidia/google/gemma-4-31b-it",
+        fallbacks: [
+          "integritas-nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+          "integritas-openrouter/inclusionai/ling-3.0-flash-vl:free",
+        ],
+      },
+      pdfMaxMb: 50,
+      pdfMaxPages: 60,
+      imageQuality: "high",
+      timeoutSeconds: 600,
+      maxConcurrent: 4,
       models: {
         "integritas-opencode-zen/big-pickle": {},
         "integritas-opencode-zen/deepseek-v4-flash-free": {},
