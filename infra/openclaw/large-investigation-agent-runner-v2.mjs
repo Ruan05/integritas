@@ -76,20 +76,19 @@ function buildDeterministicLargePlan(documentSummaries, manifest) {
 }
 
 function buildDeterministicCaseAnalysis(documentSummaries) {
-  const sourceKey = (documentId) => `doc.${String(documentId).replaceAll('-', '')}`;
+  const sourceKey = (documentId) => \`doc.\${String(documentId).replaceAll('-', '')}\`;
   const entityRows = [];
   const entityByName = new Map();
-  const findings = [];
-  const seenClaims = new Set();
+  const signalMap = new Map();
   for (const summary of documentSummaries) {
-    const sourceKeys = [sourceKey(summary.document_id)];
+    const currentSourceKey = sourceKey(summary.document_id);
     for (const party of Array.isArray(summary.parties) ? summary.parties : []) {
       if (typeof party !== 'string' || !party.trim()) continue;
       const displayName = party.trim();
       const normalized = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'unnamed';
-      const entityKey = `entity.${normalized}`;
-      if (!entityByName.has(displayName)) {
-        entityByName.set(displayName, entityKey);
+      const entityKey = \`entity.\${normalized}\`;
+      if (!entityByName.has(displayName.toLowerCase())) {
+        entityByName.set(displayName.toLowerCase(), entityKey);
         entityRows.push({
           entity_key: entityKey,
           entity_type: 'organization',
@@ -104,25 +103,39 @@ function buildDeterministicCaseAnalysis(documentSummaries) {
     const materialSignals = [
       ...(Array.isArray(summary.risk_flags) ? summary.risk_flags : []),
       ...(Array.isArray(summary.material_terms) ? summary.material_terms.slice(0, 8) : []),
-    ].filter((value) => typeof value === 'string' && value.trim()).slice(0, 12);
+    ].filter((value) => typeof value === 'string' && value.trim()).slice(0, 20);
     for (const signal of materialSignals) {
-      const normalizedClaim = signal.trim().replace(/\s+/g, ' ').toLowerCase();
-      if (seenClaims.has(normalizedClaim)) continue;
-      seenClaims.add(normalizedClaim);
-      findings.push({
-        finding_key: `evidence.${String(findings.length + 1).padStart(2, '0')}`,
-        entity_key: null,
-        finding_type: 'submitted_evidence_signal',
-        claim: signal.trim(),
-        evidence_status: 'uncertain',
-        materiality: 'medium',
-        reliability: 'unknown',
-        evidence_excerpt: String(summary.evidence_excerpt ?? '').slice(0, 800),
-        source_keys: sourceKeys,
-      });
-      if (findings.length >= 60) break;
+      const claim = signal.trim().replace(/\s+/g, ' ');
+      const normalizedClaim = claim.toLowerCase();
+      const existing = signalMap.get(normalizedClaim) || {
+        claim,
+        source_keys: new Set(),
+        excerpts: [],
+        entity_keys: new Set(),
+      };
+      existing.source_keys.add(currentSourceKey);
+      if (summary.evidence_excerpt && existing.excerpts.length < 3) existing.excerpts.push(summary.evidence_excerpt);
+      const signalLower = normalizedClaim;
+      for (const party of Array.isArray(summary.parties) ? summary.parties : []) {
+        if (typeof party === 'string' && signalLower.includes(party.toLowerCase())) {
+          const entityKey = entityByName.get(party.toLowerCase());
+          if (entityKey) existing.entity_keys.add(entityKey);
+        }
+      }
+      signalMap.set(normalizedClaim, existing);
     }
   }
+  const findings = [...signalMap.values()].slice(0, 80).map((row, index) => ({
+    finding_key: \`evidence.\${String(index + 1).padStart(2, '0')}\`,
+    entity_key: row.entity_keys.size === 1 ? [...row.entity_keys][0] : null,
+    finding_type: /no_|image_reuse|scanned|signature|acroform/i.test(row.claim) ? 'document_forensic_signal' : 'submitted_evidence_signal',
+    claim: row.claim,
+    evidence_status: 'uncertain',
+    materiality: /no_|image_reuse|scanned|signature|acroform/i.test(row.claim) ? 'high' : 'medium',
+    reliability: 'unknown',
+    evidence_excerpt: row.excerpts.join(' | ').slice(0, 800),
+    source_keys: [...row.source_keys],
+  }));
   return {
     entities: entityRows,
     relationships: [],
