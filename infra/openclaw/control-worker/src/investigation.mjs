@@ -21,6 +21,10 @@ const STAGE_ORDER = [
   'researching', 'verifying', 'cross_checking', 'independent_review', 'drafting_report', 'completed',
 ];
 const TERMINAL_STAGES = new Set(['completed', 'incomplete', 'failed', 'cancelled', 'research_limit_reached']);
+const AGENT_STARTUP_WATCHDOG_MS = 90_000;
+const AGENT_STALL_NOTICE_MS = 180_000;
+const AGENT_HARD_STALL_MS = 15 * 60_000;
+const AGENT_WATCHDOG_NOTICE_INTERVAL_MS = 60_000;
 
 function ensureManifest(command, response, client) {
   const manifest = response?.manifest;
@@ -340,12 +344,17 @@ async function readAgentProgress(jobDir) {
     const progress = JSON.parse(raw);
     if (!progress || typeof progress !== 'object'
       || typeof progress.stage !== 'string' || !STAGE_ORDER.includes(progress.stage)
-      || !Number.isInteger(progress.progress) || progress.progress < 15 || progress.progress > 89) {
+      || !Number.isInteger(progress.progress) || progress.progress < 0 || progress.progress > 89) {
       return null;
     }
+    const updatedAt = typeof progress.updated_at === 'string' && !Number.isNaN(Date.parse(progress.updated_at))
+      ? progress.updated_at : null;
     return {
       stage: progress.stage,
       progress: progress.progress,
+      phase: typeof progress.phase === 'string' ? progress.phase.slice(0, 120) : '',
+      detail: typeof progress.detail === 'string' ? progress.detail.slice(0, 500) : '',
+      updated_at: updatedAt,
       milestones: sanitizeMilestones(progress.milestones),
     };
   } catch {
@@ -360,6 +369,8 @@ async function runAgentWithRecovery({
   const unit = `integritas-openclaw-investigation@${jobId}.service`;
   let unitState = initialUnitState ?? await readUnitState(systemctlRunner, unit);
   let lastAgentProgress = '';
+  let lastHeartbeatAt = Date.now();
+  let lastWatchdogNoticeAt = 0;
   if (unitState === 'inactive' || unitState === 'failed') {
     await systemctlRunner('/usr/bin/systemctl', ['start', '--no-block', unit]);
   }
@@ -381,19 +392,61 @@ async function runAgentWithRecovery({
       await client.acknowledgePause(commandId, jobId);
       return { paused: true };
     }
-    if (jobDir && typeof onProgress === 'function') {
-      const agentProgress = await readAgentProgress(jobDir);
-      const key = agentProgress
-        ? `${agentProgress.stage}:${agentProgress.progress}:${JSON.stringify(agentProgress.milestones.map((row) => [row.id, row.status]))}`
-        : '';
-      if (agentProgress && key !== lastAgentProgress) {
-        await onProgress(agentProgress.stage, agentProgress.progress, { milestones: agentProgress.milestones });
+
+    const agentProgress = jobDir ? await readAgentProgress(jobDir) : null;
+    const now = Date.now();
+    if (agentProgress) {
+      const heartbeatAt = agentProgress.updated_at ? Date.parse(agentProgress.updated_at) : now;
+      lastHeartbeatAt = Number.isFinite(heartbeatAt) ? Math.max(lastHeartbeatAt, heartbeatAt) : now;
+      const key = [
+        agentProgress.stage,
+        agentProgress.progress,
+        agentProgress.phase,
+        agentProgress.detail,
+        JSON.stringify(agentProgress.milestones.map((row) => [row.id, row.status])),
+      ].join(':');
+      if (typeof onProgress === 'function' && key !== lastAgentProgress) {
+        await onProgress(agentProgress.stage, agentProgress.progress, {
+          phase: agentProgress.phase,
+          message: agentProgress.detail,
+          heartbeat_at: agentProgress.updated_at,
+          milestones: agentProgress.milestones,
+        });
         lastAgentProgress = key;
       }
     }
+
+    const heartbeatAge = now - lastHeartbeatAt;
+    if (typeof onProgress === 'function'
+      && heartbeatAge >= AGENT_STALL_NOTICE_MS
+      && now - lastWatchdogNoticeAt >= AGENT_WATCHDOG_NOTICE_INTERVAL_MS) {
+      const stage = agentProgress?.stage ?? 'analyzing_documents';
+      const progress = Math.max(16, agentProgress?.progress ?? 16);
+      const detail = agentProgress
+        ? `Runner heartbeat is ${Math.floor(heartbeatAge / 1000)}s old; the current bounded phase is still being monitored.`
+        : 'OpenClaw runner has not published its first phase heartbeat; startup is being monitored.';
+      await onProgress(stage, progress, {
+        phase: agentProgress?.phase ?? 'runner_startup',
+        message: detail,
+        watchdog: { status: 'monitoring', heartbeat_age_seconds: Math.floor(heartbeatAge / 1000) },
+        milestones: agentProgress?.milestones ?? [],
+      });
+      lastWatchdogNoticeAt = now;
+    }
+    if (heartbeatAge >= AGENT_HARD_STALL_MS) {
+      await systemctlRunner('/usr/bin/systemctl', ['stop', unit]).catch(() => {});
+      throw new Error(
+        `OpenClaw investigation runner watchdog stopped a stalled phase after ${Math.floor(heartbeatAge / 1000)}s without a heartbeat`,
+      );
+    }
+
     unitState = await readUnitState(systemctlRunner, unit);
-    if (unitState === 'inactive') return { cancelled: false };
-    if (unitState === 'failed') throw new Error(`OpenClaw investigation unit failed: ${unit}`);
+    if (unitState === 'inactive') return { cancelled: false, last_agent_progress: agentProgress };
+    if (unitState === 'failed') {
+      throw new Error(
+        `OpenClaw investigation unit failed before final artifacts; last phase ${agentProgress?.phase ?? 'unknown'} at ${agentProgress?.progress ?? 15}%`,
+      );
+    }
   }
 }
 
