@@ -97,7 +97,11 @@ if (!errors.length) {
     [releaseDeploy, 'mv -Tf', 'atomic current-release symlink switch'],
     [releaseDeploy, 'systemctl restart "${GATEWAY}"', 'provider-aware Gateway restart'],
     [releaseDeploy, 'smoke_investigation_runtime', 'live provider and key-free web-search release gate'],
-    [releaseDeploy, "'web_search' not in tools", 'deployment smoke must observe a successful web_search call'],
+    [releaseDeploy, 'plugins inspect parallel --json', 'deployment smoke must inspect trusted Parallel capability deterministically'],
+    [releaseDeploy, 'trustedOfficialInstall', 'deployment smoke must require official Parallel trust provenance'],
+    [releaseDeploy, 'parallel-free', 'deployment smoke must require Parallel Free search capability'],
+    [releaseDeploy, 'integrate.api.nvidia.com/v1/chat/completions', 'deployment smoke must verify the configured provider endpoint'],
+    [releaseDeploy, '--max-time 90', 'deployment provider smoke must remain bounded'],
     [rollback, 'previous-version', 'rollback version record'],
     [provision, 'VM.Standard.A1.Flex', 'Always Free A1 shape'],
   ];
@@ -111,7 +115,9 @@ if (!errors.length) {
   if (cloudInit.includes('NOPASSWD: ALL')) errors.push('unbounded sudo is forbidden');
   if (runCommand.includes('bash -c "$')) errors.push('arbitrary remote shell is forbidden');
   if (runCommand.includes('commandString')) errors.push('OCI Run Command must use TEXT source only; commandString duplication is forbidden');
-  if (releaseDeploy.includes('curl ') || releaseDeploy.includes('wget ')) errors.push('release deploy must not fetch executable content from the network');
+  if (releaseDeploy.includes('wget ')) errors.push('release deploy must not use wget');
+  if (/curl[^\n]*(?:\|\s*(?:sh|bash)|-o\s+[^\s]+\.sh\b|--output\s+[^\s]+\.sh\b)/.test(releaseDeploy)) errors.push('release deploy must not fetch or pipe executable content from the network');
+  if (releaseDeploy.includes('--message-file')) errors.push('release admission must not depend on model-directed tool use');
   if (releaseDeploy.includes('eval ')) errors.push('release deploy must not use eval');
   if (/\b(curl|wget|eval)\b/.test(controlledDeploy)) errors.push('controlled deploy must not download or evaluate executable content');
   if (!/\[\[ "\$\{SHA\}" == "\$\{REMOTE_HEAD\}" \]\]/.test(controlledDeploy)) errors.push('controlled deploy must require exact approved branch head');
