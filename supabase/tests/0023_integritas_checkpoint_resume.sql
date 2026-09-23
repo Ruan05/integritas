@@ -259,5 +259,69 @@ select pg_temp.assert_true(
   'renderer-only style retry resumes at latest 90% checkpoint'
 );
 
+
+-- Fixture D: a failed current attempt must never borrow a later checkpoint from
+-- an older attempt. The failed job's own progress is the upper resume bound.
+insert into public.integritas_cases(id,created_by,revision)
+values('bbbbbbbb-8888-4888-8888-888888888888','checkpoint-resume-d',1);
+insert into public.integritas_case_access(case_id,user_id,role)
+values('bbbbbbbb-8888-4888-8888-888888888888','bbbbbbbb-2222-4222-8222-222222222222','owner');
+insert into public.integritas_documents(
+  id,case_id,name,mime_type,size_bytes,sha256,storage_path,extraction_status
+) values(
+  'bbbbbbbb-9999-4999-8999-999999999999',
+  'bbbbbbbb-8888-4888-8888-888888888888',
+  'resume-d.pdf','application/pdf',100,repeat('e',64),
+  'cases/bbbbbbbb-8888-4888-8888-888888888888/documents/resume-d.pdf','pending'
+);
+
+-- Close fixture C before leasing D.
+select id as released_command_id
+from public.integritas_control_lease('oracle-primary',600)
+\gset crelease_
+select public.integritas_checkpoint_case_investigation(
+  :'c_control_command_id'::uuid,'oracle-primary',:'c_case_job_id'::uuid,1,
+  'completed',100,'{}'::jsonb
+);
+select public.integritas_control_complete(
+  :'c_control_command_id'::uuid,'oracle-primary',jsonb_build_object('terminal_outcome','completed')
+);
+
+select * from public.integritas_start_case_investigation(
+  'bbbbbbbb-8888-4888-8888-888888888888',1,'maximum',
+  'bbbbbbbb-2222-4222-8222-222222222222','checkpoint-resume-d-start'
+) \gset d_
+select id as leased_command_id
+from public.integritas_control_lease('oracle-primary',600)
+\gset dlease_
+
+-- Simulate an older attempt that once reached 90%.
+select public.integritas_checkpoint_case_investigation(
+  :'d_control_command_id'::uuid,'oracle-primary',:'d_case_job_id'::uuid,1,
+  'mapping_entities',38,'{}'::jsonb
+);
+select public.integritas_checkpoint_case_investigation(
+  :'d_control_command_id'::uuid,'oracle-primary',:'d_case_job_id'::uuid,1,
+  'drafting_report',90,'{}'::jsonb
+);
+
+-- Reset the live row to the point where the current attempt actually failed.
+update public.integritas_case_jobs
+set stage='failed',progress=38,updated_at=now()
+where id=:'d_case_job_id'::uuid;
+update public.integritas_control_commands
+set status='failed',lease_owner=null,lease_expires_at=null,updated_at=now()
+where id=:'d_control_command_id'::uuid;
+
+select public.integritas_retry_case_investigation(
+  :'d_case_job_id'::uuid,'bbbbbbbb-2222-4222-8222-222222222222'
+) as retry_result \gset dresume_
+
+select pg_temp.assert_true(
+  (select stage='mapping_entities' and progress=38
+   from public.integritas_case_jobs where id=:'d_case_job_id'::uuid),
+  'failed current attempt cannot borrow an older 90% checkpoint'
+);
+
 reset role;
 select 'checkpoint resume assertions passed' as result;
