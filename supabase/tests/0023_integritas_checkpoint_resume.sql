@@ -104,6 +104,26 @@ select pg_temp.assert_true(
   'retained-artifact validation cannot regress durable resume progress'
 );
 
+-- A failed second attempt must not jump forward to the older 90% checkpoint
+-- that still exists for the same durable job id.
+select pg_temp.assert_true(
+  public.integritas_control_fail(
+    :'a_control_command_id'::uuid,'oracle-primary','synthetic_retry_failure','synthetic retry failure'
+  ),
+  'fixture can fail the resumed attempt at 38%'
+);
+select public.integritas_retry_case_investigation(
+  :'a_case_job_id'::uuid,'bbbbbbbb-2222-4222-8222-222222222222'
+) as retry_result \gset aresume2_
+select pg_temp.assert_true(
+  (select stage='mapping_entities' and progress=38
+   from public.integritas_case_jobs where id=:'a_case_job_id'::uuid),
+  'failed continuation is scoped to current-attempt progress instead of an older high-water checkpoint'
+);
+select id as released_command_id
+from public.integritas_control_lease('oracle-primary',600)
+\gset arelease2_
+
 -- Close fixture A so it cannot interfere with subsequent leases.
 select public.integritas_checkpoint_case_investigation(
   :'a_control_command_id'::uuid,'oracle-primary',:'a_case_job_id'::uuid,1,
