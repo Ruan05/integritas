@@ -319,12 +319,20 @@ export function App() {
 
   const retryInvestigation = async (targetJob = job) => {
     if (!token || !browserClient || !targetJob || !retryableInvestigationStages.has(targetJob.stage) || busy) return;
-    setBusy(true); setNotice('Retrying investigation from the latest durable checkpoint…');
+    setBusy(true); setNotice('Continuing from the last trustworthy checkpoint…');
     try {
-      await browserClient.retryInvestigation(token, targetJob.id);
+      const investigation = await browserClient.retryInvestigation(token, targetJob.id);
+      setJob((current) => current?.id === targetJob.id ? {
+        ...current,
+        stage: investigation?.stage ?? current.stage,
+        progress: Number.isInteger(investigation?.progress) ? investigation.progress : current.progress,
+      } : current);
       setCommandStatus('queued');
       await refreshSelectedCase();
-      setNotice('Investigation retry queued from the latest durable checkpoint.');
+      const resumeProgress = Number.isInteger(investigation?.progress) ? investigation.progress : null;
+      setNotice(resumeProgress === null
+        ? 'Investigation continuation queued. Valid completed work will be reused.'
+        : `Investigation continuing from ${resumeProgress}%. Valid completed phases are reused; only missing or blocked work is rerun.`);
     } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
   };
@@ -484,7 +492,7 @@ export function App() {
             {job && <p className="muted job-summary">Command status: {commandStatus || 'queued'} · provider: {job.runtime_provider}</p>}
             {job && (
               <div className="actions">
-                {retryAllowed && <button type="button" className="secondary" onClick={() => void retryInvestigation()}>Retry from checkpoint</button>}
+                {retryAllowed && <button type="button" className="secondary" onClick={() => void retryInvestigation()}>Continue investigation</button>}
                 {pauseAllowed && <button type="button" className="secondary" onClick={pauseInvestigation}>Pause safely</button>}
                 {resumeAllowed && <button type="button" className="secondary" onClick={resumeInvestigation}>Continue investigation</button>}
                 {cancelAllowed && <button type="button" className="secondary" onClick={cancelInvestigation}>Cancel investigation</button>}
@@ -510,7 +518,7 @@ export function App() {
                     <div><strong>{row.stage.replaceAll('_', ' ')}</strong><small>{row.depth ?? '—'} depth · revision {row.case_revision} · {row.progress}%</small></div>
                     <details className="run-menu"><summary aria-label={`Actions for investigation ${row.id}`}>•••</summary><div>
                       <button type="button" onClick={() => setJob(row)}>Open</button>
-                      {retryableInvestigationStages.has(row.stage) && <button type="button" disabled={busy} onClick={() => { setJob(row); void retryInvestigation(row); }}>Resume / retry</button>}
+                      {retryableInvestigationStages.has(row.stage) && <button type="button" disabled={busy} onClick={() => { setJob(row); void retryInvestigation(row); }}>Continue from checkpoint</button>}
                     </div></details>
                   </li>
                 ))}
