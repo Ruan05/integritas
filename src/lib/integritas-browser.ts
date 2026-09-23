@@ -251,7 +251,14 @@ export type InvestigationMilestoneSnapshot = {
   message: string;
   isLive: boolean;
 };
-export type CheckpointRow = { id: string; stage: string; progress: number; safe_metadata: Record<string, unknown>; created_at: string };
+export type CheckpointRow = {
+  id: string;
+  stage: string;
+  progress: number;
+  safe_metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at?: string;
+};
 export type EntityResultRow = { id: string; entity_key: string; entity_type: string; display_name: string; match_status: string; match_confidence: number | null; identifiers: Record<string, unknown>; aliases: string[] };
 export type RelationshipResultRow = { id: string; relationship_key: string; from_entity_id: string; to_entity_id: string; relationship_type: string; claim: string; evidence_status: string; confidence: number | null };
 export type FindingResultRow = { id: string; finding_key: string; finding_type: string; claim: string; evidence_status: string; materiality: string; reliability: string; source_ids: string[] };
@@ -301,10 +308,20 @@ const terminalMilestoneStages = new Set(['completed', 'incomplete', 'failed', 'c
 
 function orderedCheckpoints(checkpoints: CheckpointRow[]) {
   return [...checkpoints].sort((a, b) => {
-    const at = Date.parse(a.created_at || '') || 0;
-    const bt = Date.parse(b.created_at || '') || 0;
-    return at - bt || a.progress - b.progress;
+    const at = Date.parse(a.updated_at || a.created_at || '') || 0;
+    const bt = Date.parse(b.updated_at || b.created_at || '') || 0;
+    return at - bt || a.progress - b.progress || a.id.localeCompare(b.id);
   });
+}
+
+function authoritativeCheckpoint(checkpoints: CheckpointRow[], jobStage?: string) {
+  const ordered = orderedCheckpoints(checkpoints);
+  if (!jobStage) return ordered.at(-1);
+  // A job stage is the durable state for the current attempt.  A failed
+  // checkpoint from a short-lived earlier attempt must never displace a later
+  // terminal checkpoint merely because it was inserted more recently.
+  const matchingStage = ordered.filter((checkpoint) => checkpoint.stage === jobStage);
+  return matchingStage.at(-1) ?? ordered.at(-1);
 }
 
 export function deriveInvestigationMilestoneSnapshot(
@@ -314,8 +331,10 @@ export function deriveInvestigationMilestoneSnapshot(
   jobProgress?: number,
 ): InvestigationMilestoneSnapshot {
   const ordered = orderedCheckpoints(checkpoints);
-  const latest = ordered.at(-1);
-  const latestWithMilestones = [...ordered].reverse().find((checkpoint) => Array.isArray(checkpoint.safe_metadata?.milestones));
+  const latest = authoritativeCheckpoint(ordered, jobStage);
+  const latestWithMilestones = latest && Array.isArray(latest.safe_metadata?.milestones)
+    ? latest
+    : [...ordered].reverse().find((checkpoint) => Array.isArray(checkpoint.safe_metadata?.milestones));
   const stage = jobStage || latest?.stage || '';
   const progress = Number.isFinite(jobProgress) ? Number(jobProgress) : (latest?.progress ?? 0);
   const isLive = !terminalMilestoneStages.has(stage);
@@ -395,7 +414,7 @@ export async function loadPersistedInvestigationResults(
     checkpoints, entities, relationships, findings, sources,
     sourceLinks, checks, reports, auditEvents,
   ] = await Promise.all([
-    readRlsRows(client, 'integritas_case_job_checkpoints', 'id,stage,progress,safe_metadata,created_at', caseId, jobId),
+    readRlsRows(client, 'integritas_case_job_checkpoints', 'id,stage,progress,safe_metadata,created_at,updated_at', caseId, jobId),
     readRlsRows(client, 'integritas_entities', 'id,entity_key,entity_type,display_name,match_status,match_confidence,identifiers,aliases', caseId, jobId),
     readRlsRows(client, 'integritas_relationships', 'id,relationship_key,from_entity_id,to_entity_id,relationship_type,claim,evidence_status,confidence', caseId, jobId),
 
@@ -417,7 +436,7 @@ export async function loadPersistedInvestigationResults(
     source_ids: sourceIdsByFinding.get(finding.id) ?? [],
   }));
   return {
-    checkpoints: (checkpoints as CheckpointRow[]).sort((a, b) => (Date.parse(a.created_at || '') || 0) - (Date.parse(b.created_at || '') || 0)),
+    checkpoints: orderedCheckpoints(checkpoints as CheckpointRow[]),
     entities: entities as EntityResultRow[],
     relationships: relationships as RelationshipResultRow[],
     findings: normalizedFindings,
