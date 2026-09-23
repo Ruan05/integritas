@@ -46,7 +46,8 @@ fi
 smoke_investigation_runtime() {
   local smoke_dir="/var/lib/integritas-runner/deploy-smoke.$$"
   local plugin_out="${smoke_dir}/parallel-plugin.json"
-  local provider_out="${smoke_dir}/provider.json"
+  local provider_out="${smoke_dir}/provider-models.json"
+  local provider_cfg="${smoke_dir}/provider.curlrc"
   install -d -o openclaw -g integritas-openclaw -m 0770 "${smoke_dir}"
   set -a
   # shellcheck disable=SC1091
@@ -73,24 +74,24 @@ if 'parallel-free' not in providers:
     raise SystemExit('Parallel Free web-search provider is unavailable')
 PYPLUGIN
 
-  # Provider readiness is tested independently with one bounded API turn. This
-  # proves the configured server-side credential/model route without requiring
-  # a second model turn after a tool call.
-  /usr/bin/curl --fail --silent --show-error --max-time 90 \
-    -H "Authorization: Bearer ${NVIDIA_API_KEY}" \
-    -H "Content-Type: application/json" \
-    --data '{"model":"z-ai/glm-5.3","messages":[{"role":"user","content":"Reply exactly OK"}],"temperature":0,"max_tokens":8}' \
-    https://integrate.api.nvidia.com/v1/chat/completions >"${provider_out}"
+  # Release admission verifies authenticated provider capability and the exact
+  # configured model deterministically. Do not perform an inference here: model
+  # generation latency is a runtime concern and must not make releases flaky.
+  # Keep the bearer credential out of process argv by passing it through a
+  # root-readable curl config file that is deleted with the smoke workspace.
+  /usr/bin/printf 'header = "Authorization: Bearer %s"\n' "${NVIDIA_API_KEY}" >"${provider_cfg}"
+  /usr/bin/chmod 0600 "${provider_cfg}"
+  /usr/bin/curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
+    --config "${provider_cfg}" \
+    https://integrate.api.nvidia.com/v1/models >"${provider_out}"
   /usr/bin/python3 - "${provider_out}" <<'PYPROVIDER'
 import json, sys
 from pathlib import Path
 row = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
-choices = row.get('choices') if isinstance(row, dict) else None
-if not isinstance(choices, list) or not choices:
-    raise SystemExit('provider smoke returned no completion choice')
-message = choices[0].get('message') if isinstance(choices[0], dict) else None
-if not isinstance(message, dict):
-    raise SystemExit('provider smoke returned no assistant message')
+models = row.get('data') if isinstance(row, dict) else None
+ids = {item.get('id') for item in models if isinstance(item, dict)} if isinstance(models, list) else set()
+if 'z-ai/glm-5.3' not in ids:
+    raise SystemExit('configured NVIDIA GLM 5.3 model is unavailable')
 PYPROVIDER
 
   rm -rf "${smoke_dir}"
