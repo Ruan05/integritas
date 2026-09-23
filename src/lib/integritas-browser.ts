@@ -243,6 +243,32 @@ export type InvestigationMilestone = {
   status: InvestigationMilestoneStatus;
   priority: InvestigationMilestonePriority;
 };
+export type InvestigationLiveTask = {
+  id: string;
+  label: string;
+  status: 'waiting' | 'active' | 'complete' | 'blocked' | 'failed' | 'manual';
+  detail: string;
+  provider?: string;
+  model?: string;
+};
+export type InvestigationLiveEvent = {
+  id: string;
+  category: string;
+  message: string;
+  state: 'info' | 'discovery' | 'verified' | 'warning' | 'success';
+  at: string;
+};
+export type InvestigationModelDiscovery = {
+  status: string;
+  refreshed_at: string;
+  providers: Array<{
+    provider: string;
+    status: string;
+    model_count: number;
+    new_count: number;
+    removed_count: number;
+  }>;
+};
 export type InvestigationMilestoneSnapshot = {
   rows: InvestigationMilestone[];
   stage: string;
@@ -250,6 +276,11 @@ export type InvestigationMilestoneSnapshot = {
   phase: string;
   message: string;
   isLive: boolean;
+  currentTask: InvestigationLiveTask | null;
+  liveTasks: InvestigationLiveTask[];
+  liveEvents: InvestigationLiveEvent[];
+  modelDiscovery: InvestigationModelDiscovery | null;
+  renderStatus: string;
 };
 export type CheckpointRow = {
   id: string;
@@ -296,6 +327,60 @@ function normalizeMilestone(value: unknown): InvestigationMilestone | null {
     || !milestoneStatuses.has(status)
     || !milestonePriorities.has(priority)) return null;
   return { id, label, status, priority };
+}
+
+function normalizeLiveTask(value: unknown): InvestigationLiveTask | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const id = typeof row.id === 'string' ? row.id.slice(0, 120) : '';
+  const label = typeof row.label === 'string' ? row.label.trim().slice(0, 180) : '';
+  const status = typeof row.status === 'string' ? row.status : 'active';
+  if (!id || !label || !['waiting', 'active', 'complete', 'blocked', 'failed', 'manual'].includes(status)) return null;
+  return {
+    id,
+    label,
+    status: status as InvestigationLiveTask['status'],
+    detail: typeof row.detail === 'string' ? row.detail.trim().slice(0, 500) : '',
+    ...(typeof row.provider === 'string' ? { provider: row.provider.slice(0, 80) } : {}),
+    ...(typeof row.model === 'string' ? { model: row.model.slice(0, 180) } : {}),
+  };
+}
+
+function normalizeLiveEvent(value: unknown): InvestigationLiveEvent | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const id = typeof row.id === 'string' ? row.id.slice(0, 120) : '';
+  const category = typeof row.category === 'string' ? row.category.trim().slice(0, 40) : '';
+  const message = typeof row.message === 'string' ? row.message.trim().slice(0, 420) : '';
+  const state = typeof row.state === 'string' ? row.state : 'info';
+  if (!id || !category || !message || !['info', 'discovery', 'verified', 'warning', 'success'].includes(state)) return null;
+  return {
+    id,
+    category,
+    message,
+    state: state as InvestigationLiveEvent['state'],
+    at: typeof row.at === 'string' ? row.at.slice(0, 80) : '',
+  };
+}
+
+function normalizeModelDiscovery(value: unknown): InvestigationModelDiscovery | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const providers = Array.isArray(row.providers) ? row.providers.map((provider) => {
+    const item = provider as Record<string, unknown>;
+    return {
+      provider: typeof item.provider === 'string' ? item.provider.slice(0, 40) : 'unknown',
+      status: typeof item.status === 'string' ? item.status.slice(0, 40) : 'unknown',
+      model_count: typeof item.model_count === 'number' ? item.model_count : 0,
+      new_count: typeof item.new_count === 'number' ? item.new_count : 0,
+      removed_count: typeof item.removed_count === 'number' ? item.removed_count : 0,
+    };
+  }).slice(0, 8) : [];
+  return {
+    status: typeof row.status === 'string' ? row.status.slice(0, 40) : 'unknown',
+    refreshed_at: typeof row.refreshed_at === 'string' ? row.refreshed_at.slice(0, 80) : '',
+    providers,
+  };
 }
 
 function checkStatusToMilestone(status: string): InvestigationMilestoneStatus {
@@ -379,6 +464,61 @@ export function deriveInvestigationMilestoneSnapshot(
       byId.set(added.id, added);
     }
   }
+  const taskById = new Map<string, InvestigationLiveTask>();
+  const eventById = new Map<string, InvestigationLiveEvent>();
+  let modelDiscovery: InvestigationModelDiscovery | null = null;
+  for (const checkpoint of ordered) {
+    const task = normalizeLiveTask(checkpoint.safe_metadata?.current_task);
+    if (task) {
+      const previous = taskById.get(task.id);
+      if (previous && previous.status === 'active' && task.status === 'active') {
+        taskById.set(task.id, task);
+      } else {
+        taskById.set(task.id, task);
+      }
+    }
+    const checkpointEvents = Array.isArray(checkpoint.safe_metadata?.live_events)
+      ? checkpoint.safe_metadata.live_events
+      : [];
+    for (const value of checkpointEvents) {
+      const event = normalizeLiveEvent(value);
+      if (event) eventById.set(event.id, event);
+    }
+    const discovery = normalizeModelDiscovery(checkpoint.safe_metadata?.model_discovery);
+    if (discovery) modelDiscovery = discovery;
+  }
+
+  const latestTask = normalizeLiveTask(latest?.safe_metadata?.current_task)
+    ?? (latest
+      ? {
+          id: String(latest.safe_metadata?.phase || latest.stage),
+          label: String(latest.safe_metadata?.phase || latest.stage).replaceAll('_', ' '),
+          status: isLive ? 'active' as const : 'complete' as const,
+          detail: typeof latest.safe_metadata?.message === 'string' ? latest.safe_metadata.message : '',
+        }
+      : null);
+  if (latestTask) taskById.set(latestTask.id, latestTask);
+
+  const liveTasks = [...taskById.values()].slice(-12).map((task) => {
+    if (latestTask && task.id === latestTask.id) return latestTask;
+    return task.status === 'active' ? { ...task, status: 'complete' as const } : task;
+  });
+  const liveEvents = [...eventById.values()].slice(-12);
+  const renderStatus = typeof latest?.safe_metadata?.render_status === 'string'
+    ? latest.safe_metadata.render_status
+    : '';
+
+  if (!isLive && renderStatus) {
+    const artifact = rows.find((row) => row.id === 'module.private_artifact');
+    if (artifact) {
+      artifact.status = renderStatus === 'ready'
+        ? 'complete'
+        : renderStatus === 'render_failed'
+          ? 'failed'
+          : 'manual';
+    }
+  }
+
   return {
     rows,
     stage,
@@ -386,6 +526,11 @@ export function deriveInvestigationMilestoneSnapshot(
     phase: typeof latest?.safe_metadata?.phase === 'string' ? latest.safe_metadata.phase : '',
     message: typeof latest?.safe_metadata?.message === 'string' ? latest.safe_metadata.message : '',
     isLive,
+    currentTask: latestTask,
+    liveTasks,
+    liveEvents,
+    modelDiscovery,
+    renderStatus,
   };
 }
 
