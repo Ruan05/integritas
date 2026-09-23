@@ -146,7 +146,7 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.doesNotMatch(large, /synthesis-task/, 'large-case final assembly must not depend on a giant synthesis completion');
 });
 
-test('investigation profile uses only required provider SecretRefs and keeps the evidence workspace read-only', async () => {
+test('investigation profile resolves required provider env locally and keeps the evidence workspace read-only', async () => {
   const config = await readFile(new URL('../../integritas-investigation.json5', import.meta.url), 'utf8');
   const zenConfig = await readFile(new URL('../../integritas-investigation-zen.json5', import.meta.url), 'utf8');
   assert.doesNotMatch(config, /\$include:\s*["']\.\/openclaw\.json["']/, 'case workers must not inherit the operator config');
@@ -181,7 +181,9 @@ test('investigation profile uses only required provider SecretRefs and keeps the
   ]) {
     assert.ok(zenConfig.includes(`"${model}"`), `missing staged Zen model: ${model}`);
   }
-  assert.match(config, /apiKey: \{ source: "env", provider: "default", id: "OPENROUTER_API_KEY" \}/);
+  assert.match(config, /apiKey: "\$\{OPENROUTER_API_KEY\}"/, 'standalone OpenRouter auth must resolve from the runner environment without Gateway secrets.resolve');
+  assert.match(config, /apiKey: "\$\{NVIDIA_API_KEY\}"/, 'standalone NVIDIA auth must resolve from the runner environment without Gateway secrets.resolve');
+  assert.doesNotMatch(config, /apiKey: \{ source: "env"[\s\S]{0,120}id: "(?:OPENROUTER_API_KEY|NVIDIA_API_KEY)"/, 'case workers must not require Gateway SecretRef resolution for model credentials');
   assert.match(config, /id: "nvidia\/nemotron-3-ultra-550b-a55b:free"/);
   assert.match(config, /id: "nvidia\/nemotron-3-ultra-550b-a55b:free"[\s\S]*maxTokens: 65536/, 'Nemotron free fallback must expose its verified completion budget');
   assert.match(config, /id: "openrouter\/free"/);
