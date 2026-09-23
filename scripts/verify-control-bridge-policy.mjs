@@ -118,8 +118,10 @@ assert.match(investigationRunner, /--config/, 'runner must pin the dedicated exe
 assert.ok(!investigationRunner.includes("'--state-dir'"), 'runner must use OpenClaw isolated temporary exec state while the Gateway owns persistent state');
 assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/, 'runner may discover existing provider credentials only through the bounded OpenClaw environment');
 assert.ok(investigationRunner.includes("const NVIDIA_PRIMARY = 'integritas-nvidia/z-ai/glm-5.3'"), 'live-verified direct GLM 5.3 must be the bounded primary');
+assert.ok(investigationRunner.includes("const NVIDIA_SUPER = 'integritas-nvidia/nvidia/nemotron-3-super-120b-a12b'"), 'live-verified direct Nemotron Super must remain available as bounded recovery');
 assert.ok(investigationRunner.includes("const FREE_FAST = 'integritas-openrouter/nvidia/nemotron-3-super-120b-a12b:free'"), 'verified free Super must remain in the bounded fallback set');
-assert.ok(investigationRunner.includes("SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, ACTIVE_FREE_FALLBACKS)"), 'synthetic validation must use the verified explicit NVIDIA route plus conditionally activated bounded free fallbacks');
+assert.ok(investigationRunner.includes("RESILIENT_FREE_FALLBACKS = [NVIDIA_SUPER, ...ACTIVE_FREE_FALLBACKS]"), 'bounded fallback composition must retain a direct NVIDIA recovery route');
+assert.ok(investigationRunner.includes("SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, RESILIENT_FREE_FALLBACKS)"), 'synthetic validation must use the verified NVIDIA primary, independent provider fallback and direct NVIDIA recovery');
 assert.ok(!investigationRunner.includes('NVIDIA_LIGHTNING'), 'unhealthy Lightning route must not be auto-selected');
 assert.ok(investigationRunner.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash'"), 'real research must expose DeepSeek V4.1 Flash');
 assert.ok(investigationRunner.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3'"), 'real planning/critic must expose GLM 5.3');
