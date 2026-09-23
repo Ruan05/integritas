@@ -12,6 +12,7 @@ import { buildNoEvidenceReport, classifyDeterministicTextPreflight } from './wor
 import { applyEvidenceDrivenSpecialistRouting } from './specialist-router.mjs';
 import { validateInvestigationBundle } from './control-worker/src/bundle.mjs';
 import { providerFamily, runLargeInvestigationV2, selectProviderDiverseModels } from './large-investigation-agent-runner-v2.mjs';
+import { discoverProviderModels, modelAllowedByDiscovery, noteProviderFailure, providerCooldownRemainingMs } from './runtime-model-discovery.mjs';
 
 function runBoundedOpenClaw(args, { cwd, env, timeoutSeconds, maxBuffer }) {
   return new Promise((resolve, reject) => {
@@ -182,6 +183,7 @@ if (manifest.depth === 'maximum') {
   }
 }
 const trustedSynthetic = isTrustedSyntheticValidationManifest(manifest);
+const modelDiscovery = await discoverProviderModels({ jobDir, synthetic: trustedSynthetic });
 const route = (trustedSynthetic ? SYNTHETIC_MODEL_ROUTES : REAL_MODEL_ROUTES)[manifest.depth];
 if (!route) throw new Error('invalid investigation depth');
 if (!trustedSynthetic && !Object.values(route).every((phaseRoute) =>
@@ -221,6 +223,20 @@ async function writeProgress(stage, progress, phase, milestones = [], detail = '
       stage, progress, phase,
       milestones: Array.isArray(milestones) ? milestones.slice(0, 64) : [],
       detail: String(detail).slice(0, 500),
+      current_task: {
+        id: String(phase || stage).slice(0, 120),
+        label: String(phase || stage).replaceAll('_', ' ').slice(0, 180),
+        status: 'active',
+        detail: String(detail).replace(/\s+/g, ' ').trim().slice(0, 500),
+      },
+      live_events: detail ? [{
+        id: String(phase || stage) + '-' + progress,
+        category: phase === 'primary_research' ? 'VERIFYING' : phase === 'ready_for_deterministic_qa' ? 'REPORT' : 'LIVE',
+        message: String(detail).replace(/\s+/g, ' ').trim().slice(0, 420),
+        state: phase === 'primary_research' ? 'discovery' : 'info',
+        at: new Date().toISOString(),
+      }] : [],
+      model_discovery: modelDiscovery,
       updated_at: new Date().toISOString(),
     })}\n`,
   );
@@ -303,7 +319,8 @@ function standardModelConfigured(model) {
 
 function standardProviderModels(phaseRoute) {
   const configured = [phaseRoute.model, ...(phaseRoute.fallbacks ?? [])]
-    .filter(standardModelConfigured);
+    .filter(standardModelConfigured)
+    .filter(modelAllowedByDiscovery);
   return selectProviderDiverseModels(configured, 3);
 }
 
@@ -345,6 +362,15 @@ async function runAgent(messageFile, phaseRoute, progressState = null, validateR
   }
   try {
     for (const [index, model] of models.entries()) {
+      const cooldownMs = providerCooldownRemainingMs(model);
+      if (cooldownMs > 0) {
+        failures.push({
+          model,
+          family: providerFamily(model),
+          error: 'provider cooldown active for ' + Math.ceil(cooldownMs / 1000) + 's',
+        });
+        continue;
+      }
       const timeoutSeconds = standardAttemptTimeout(phaseRoute, model, progressState);
       activeAttempt = `${providerFamily(model)} attempt ${index + 1}/${models.length}`;
       try {
@@ -355,6 +381,7 @@ async function runAgent(messageFile, phaseRoute, progressState = null, validateR
         if (validateRaw) validateRaw(raw);
         return raw;
       } catch (error) {
+        noteProviderFailure(model, error);
         failures.push({
           model,
           family: providerFamily(model),
@@ -918,6 +945,15 @@ const finalEnvelope = parseEnvelope(finalStdout, 'final');
 const existingTools = Array.isArray(finalParsed.bundle?.execution?.tool_results)
   ? finalParsed.bundle.execution.tool_results
   : [];
+if (!existingTools.some((row) => row?.tool === 'integritas_model_discovery_v1')) {
+  const readyProviders = modelDiscovery?.providers?.filter((row) => row.status === 'ready').length ?? 0;
+  const discoveredModels = modelDiscovery?.providers?.reduce((sum, row) => sum + (row.model_count || 0), 0) ?? 0;
+  existingTools.unshift({
+    tool: 'integritas_model_discovery_v1',
+    status: 'completed',
+    summary: readyProviders + ' configured provider(s) ready; ' + discoveredModels + ' live model identifiers catalogued before routing.',
+  });
+}
 if (!existingTools.some((row) => row?.tool === 'integritas_forensics_v1')) {
   existingTools.unshift({
     tool: 'integritas_forensics_v1',
