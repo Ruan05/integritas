@@ -3,6 +3,7 @@ set -euo pipefail
 
 OPENCLAW_VERSION="2026.9.5"
 NODE_VERSION="24.19.0"
+SUMMARIZE_VERSION="0.23.0"
 TARGET_VERSION="${OPENCLAW_TARGET_VERSION:-${OPENCLAW_VERSION}}"
 PREFIX=/opt/openclaw
 SOURCE_DIR=/opt/openclaw-source
@@ -53,9 +54,37 @@ bash "${INSTALLER}" --prefix "${PREFIX}" --version "${TARGET_VERSION}" --node-ve
 chmod 0755 "${PREFIX}/bin/openclaw"
 "${PREFIX}/bin/openclaw" --version | grep -F "${TARGET_VERSION}" >/dev/null
 
-# Integritas investigation configs load the official Parallel plugin directly from
-# the pinned OpenClaw source checkout below. This avoids mutable plugin-registry
-# writes while keeping key-free web search reproducible.
+# Install the exact official Parallel plugin into OpenClaw's managed npm state.
+# A dedicated minimal config avoids mutating the production root-$include config
+# before the Gateway starts, while preserving verified npm provenance/integrity.
+PLUGIN_INSTALL_DIR="${STATE_DIR}/plugin-install"
+PLUGIN_INSTALL_CONFIG="${PLUGIN_INSTALL_DIR}/openclaw.json"
+install -d -m 0750 -o openclaw -g openclaw "${PLUGIN_INSTALL_DIR}"
+if [[ ! -f "${PLUGIN_INSTALL_CONFIG}" ]]; then
+  printf '{}\n' >"${PLUGIN_INSTALL_CONFIG}"
+fi
+chown openclaw:openclaw "${PLUGIN_INSTALL_CONFIG}"
+chmod 0600 "${PLUGIN_INSTALL_CONFIG}"
+runuser -u openclaw -- env \
+  HOME="${STATE_DIR}" OPENCLAW_HOME="${STATE_DIR}" \
+  OPENCLAW_STATE_DIR="${STATE_DIR}" OPENCLAW_CONFIG_PATH="${PLUGIN_INSTALL_CONFIG}" \
+  PATH="${PREFIX}/bin:${PREFIX}/tools/node-v${NODE_VERSION}/bin:/usr/local/bin:/usr/bin:/bin" \
+  "${PREFIX}/bin/openclaw" plugins install "npm:@openclaw/parallel-plugin@${TARGET_VERSION}" \
+  --pin --force --accept-capabilities
+runuser -u openclaw -- env \
+  HOME="${STATE_DIR}" OPENCLAW_HOME="${STATE_DIR}" \
+  OPENCLAW_STATE_DIR="${STATE_DIR}" OPENCLAW_CONFIG_PATH="${PLUGIN_INSTALL_CONFIG}" \
+  PATH="${PREFIX}/bin:${PREFIX}/tools/node-v${NODE_VERSION}/bin:/usr/local/bin:/usr/bin:/bin" \
+  "${PREFIX}/bin/openclaw" plugins registry --refresh --json >/dev/null
+
+# Make the bundled Summarize skill executable by installing its verified CLI at
+# the exact version tested on this OpenClaw/Node runtime.
+"${PREFIX}/tools/node-v${NODE_VERSION}/bin/npm" install -g \
+  --prefix "${PREFIX}/tools/node-v${NODE_VERSION}" \
+  "@steipete/summarize@${SUMMARIZE_VERSION}"
+"${PREFIX}/tools/node-v${NODE_VERSION}/bin/summarize" --version | grep -Fx "${SUMMARIZE_VERSION}" >/dev/null
+
+# Keep the pinned source checkout only for OpenClaw sandbox setup scripts.
 rm -rf "${SOURCE_DIR}"
 git clone --depth=1 --branch "v${TARGET_VERSION}" https://github.com/openclaw/openclaw.git "${SOURCE_DIR}"
 git -C "${SOURCE_DIR}" describe --tags --exact-match | grep -Fx "v${TARGET_VERSION}" >/dev/null
