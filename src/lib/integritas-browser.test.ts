@@ -116,21 +116,24 @@ describe('Integritas browser adapter', () => {
     });
   });
 
-  it('requires a fresh attested 0.3.0+ Oracle runtime with deterministic QA and atomic commit before enabling start', () => {
+  it('requires a fresh attested 0.4.1+ Oracle runtime with live model discovery and progress telemetry before enabling start', () => {
     const now = new Date('2026-09-16T22:00:00Z').getTime();
     const flags = {
       bounded_control: true, docker_socket: false, case_investigation: true,
       signed_manifests: true, durable_checkpoints: true, deterministic_qa: true,
       atomic_bundle_commit: true, arbitrary_shell: false,
+      model_discovery_v1: true, live_progress_feed_v1: true, independent_artifact_state_v1: true,
     };
-    const runtime = { worker_id: 'oracle-primary', worker_version: '0.3.6', openclaw_status: 'active', last_seen_at: '2026-09-16T21:59:30Z', capability_flags: flags };
+    const runtime = { worker_id: 'oracle-primary', worker_version: '0.4.1', openclaw_status: 'active', last_seen_at: '2026-09-16T21:59:30Z', capability_flags: flags };
     expect(isInvestigationRuntimeReady(runtime, now)).toBe(true);
     expect(isInvestigationRuntimeReady({ ...runtime, worker_version: '0.2.0' }, now)).toBe(false);
     expect(isInvestigationRuntimeReady({ ...runtime, worker_version: '0.3.1' }, now)).toBe(false);
-    expect(isInvestigationRuntimeReady({ ...runtime, worker_version: '0.3.2' }, now)).toBe(false);
-    expect(isInvestigationRuntimeReady({ ...runtime, worker_version: '0.3.5' }, now)).toBe(false);
+    expect(isInvestigationRuntimeReady({ ...runtime, worker_version: '0.4.0' }, now)).toBe(false);
     expect(isInvestigationRuntimeReady({ ...runtime, capability_flags: { ...flags, deterministic_qa: false } }, now)).toBe(false);
     expect(isInvestigationRuntimeReady({ ...runtime, capability_flags: { ...flags, atomic_bundle_commit: false } }, now)).toBe(false);
+    expect(isInvestigationRuntimeReady({ ...runtime, capability_flags: { ...flags, model_discovery_v1: false } }, now)).toBe(false);
+    expect(isInvestigationRuntimeReady({ ...runtime, capability_flags: { ...flags, live_progress_feed_v1: false } }, now)).toBe(false);
+    expect(isInvestigationRuntimeReady({ ...runtime, capability_flags: { ...flags, independent_artifact_state_v1: false } }, now)).toBe(false);
     expect(isInvestigationRuntimeReady({ ...runtime, last_seen_at: '2026-09-16T21:57:00Z' }, now)).toBe(false);
   });
 
