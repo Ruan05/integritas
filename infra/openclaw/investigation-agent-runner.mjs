@@ -637,10 +637,10 @@ ${outputGuard}
 
 For **every** research lane in ./investigation-plan.json, create exactly one corresponding structured check in the bundle with field check_key equal to lane.<lane_id>. Use the lane question as the check description, preserve its priority, name the strongest required source, and set status to complete, blocked, open, or in_progress based only on what was actually achieved. A manual-only lane should remain open/blocked unless authoritative manual confirmation was genuinely obtained. This check coverage is mandatory and drives the live admin milestone display.
 
-The report inside report.markdown must begin with:
-1. MASTER SUMMARY — READ THIS FIRST
-2. DIRECT NEXT STEPS — WHAT TO DO NOW
-and then the detailed Integritas report required by the skill.
+The report inside report.markdown must begin with these exact Markdown headings, including the leading # characters:
+# MASTER SUMMARY — READ THIS FIRST
+# DIRECT NEXT STEPS — WHAT TO DO NOW
+Do not emit either label as plain text. No other Markdown heading may appear between those two sections. After DIRECT NEXT STEPS, continue with the detailed Integritas report required by the skill.
 
 Your final response must be exactly one raw JSON object conforming to ./contracts/investigation-bundle-v1.schema.json with no Markdown fence and no prose before or after it.
 `;
