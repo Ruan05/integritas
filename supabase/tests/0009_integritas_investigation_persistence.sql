@@ -133,9 +133,14 @@ exception when others then
   if sqlerrm <> p_expected then raise; end if;
 end;
 $$;
-select pg_temp.assert_checkpoint_rejected(
-  :'runtime_control_command_id'::uuid, :'runtime_case_job_id'::uuid,
-  4, 'verifying', 40, 'investigation progress cannot move backwards'
+select public.integritas_checkpoint_case_investigation(
+  :'runtime_control_command_id'::uuid, 'oracle-primary', :'runtime_case_job_id'::uuid,
+  4, 'verifying', 40, '{}'::jsonb
+);
+select pg_temp.assert_true(
+  (select stage='researching' and progress=55
+   from public.integritas_case_jobs where id=:'runtime_case_job_id'::uuid),
+  'backward checkpoint replay is an idempotent no-op and cannot regress durable progress'
 );
 select public.integritas_checkpoint_case_investigation(
   :'runtime_control_command_id'::uuid, 'oracle-primary', :'runtime_case_job_id'::uuid,
