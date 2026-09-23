@@ -165,8 +165,11 @@ assert.ok(largeInvestigationRunner.includes("const MAX_OPENROUTER_FREE_USES = 4"
 assert.ok(largeInvestigationRunner.includes("const MAX_ZEN_FREE_USES = 4"), 'large-case Zen free usage must be bounded per investigation');
 assert.match(largeInvestigationRunner, /buildDocumentShards\(manifest, 1\)/, 'large-case runner must isolate each document so PDF-tool provenance is attributable');
 assert.match(investigationConfig, /provider:\s*\"parallel-free\"/, 'investigation web search must use the explicit key-free Parallel route');
-assert.match(investigationConfig, /load:\s*\{\s*paths:\s*\[\"\/opt\/openclaw-source\/extensions\/parallel\"\]/, 'investigation config must load the pinned official Parallel plugin source');
+assert.doesNotMatch(investigationConfig, /\/opt\/openclaw-source\/extensions\/parallel/, 'investigation config must not load an unverified Parallel source checkout');
 assert.match(investigationConfig, /entries:\s*\{\s*parallel:\s*\{\s*enabled:\s*true/, 'investigation config must explicitly enable the Parallel plugin');
+assert.match(nativeInstaller, /npm:@openclaw\/parallel-plugin@\$\{TARGET_VERSION\}/, 'native installer must pin the official Parallel npm package to the OpenClaw version');
+assert.match(nativeInstaller, /plugins registry --refresh/, 'native installer must refresh trusted plugin provenance after managed installation');
+assert.match(nativeInstaller, /@steipete\/summarize@\$\{SUMMARIZE_VERSION\}/, 'native installer must provision the verified Summarize CLI');
 assert.match(largeInvestigationRunner, /mapLimit\(shards, 2/, 'document shard concurrency must remain bounded at two to reduce provider-rate-limit cascades');
 assert.match(largeInvestigationRunner, /mapLimit\(plan\.research_lanes, 4/, 'research lane concurrency must remain bounded at four');
 assert.match(largeInvestigationRunner, /failed every validated model route/, 'large-case runner must fail over on validation failure, not only transport failure');
