@@ -143,6 +143,14 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.ok(large.includes('FREE_OPENROUTER_MODELS.has(model)'), 'free-fallback budget must apply only to free OpenRouter routes');
   assert.match(large, /MAX_OPENROUTER_FREE_USES = 4/, 'OpenRouter free fallback must remain synthetic-only and bounded');
   assert.match(large, /MAX_ZEN_FREE_USES = 4/, 'Zen free fallback must remain bounded per investigation');
+  assert.match(large, /investigationOpenRouterFreeUses/, 'OpenRouter free usage must use declared investigation-scoped state');
+  assert.match(large, /investigationZenFreeUses/, 'Zen free usage must use declared investigation-scoped state');
+  assert.doesNotMatch(large, /localOpenRouterFallbackUses|localZenFallbackUses/, 'removed local counter names must never regress into an undeclared ReferenceError');
+  assert.match(large, /providerCooldownRemainingMs/, 'large investigations must honor provider cooldowns');
+  assert.match(large, /modelAllowedByDiscovery/, 'large investigations must filter stale configured models after live discovery');
+  assert.match(large, /current_task/, 'large investigations must publish the current live task');
+  assert.match(large, /live_events/, 'large investigations must publish a bounded live evidence/status feed');
+  assert.match(large, /mapLimit\(orderedResearchLanes, 2/, 'real research must preserve free-tier capacity with bounded two-lane concurrency');
   assert.match(large, /const zen = ZEN_ENABLED/, 'large-case Zen activation must require the validated enable marker');
   assert.match(large, /ZEN_FREE_MODELS\.has\(model\)/, 'Zen free routes must use their own bounded budget');
   assert.match(large, /external research lane requires an observed web_search call in the same phase/, 'external discovery provenance must be phase-local');
@@ -266,6 +274,9 @@ test('investigation profile resolves required provider env locally and keeps the
 test('runner passes only approved provider credentials into OpenClaw', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
   assert.ok(source.includes("const providerNames = ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY', 'OPENCODE_ZEN_API_KEY', 'EXA_API_KEY', 'FIRECRAWL_API_KEY'];"));
+  assert.match(source, /discoverProviderModels/, 'every investigation must refresh configured provider catalogs before task routing');
+  assert.match(source, /modelAllowedByDiscovery/, 'standard investigations must ignore stale catalog entries when discovery is healthy');
+  assert.match(source, /providerCooldownRemainingMs/, 'standard investigations must respect provider cooldowns');
   assert.ok(source.includes('env: agentEnv()'));
   for (const name of ['GROQ_API_KEY', 'GEMINI_API_KEY', 'CEREBRAS_API_KEY', 'HF_TOKEN']) {
     assert.doesNotMatch(source, new RegExp(`'${name}'`));
