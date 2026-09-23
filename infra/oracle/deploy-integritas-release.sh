@@ -70,7 +70,7 @@ EOF
         --config /etc/openclaw/integritas-investigation.json \
         --cwd "${smoke_dir}" --message-file "${smoke_dir}/task.md" \
         --json --code-mode direct \
-        --model integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b --timeout 180 \
+        --model integritas-nvidia/z-ai/glm-5.3 --timeout 180 \
         >"${smoke_out}" 2>"${smoke_err}" \
       && /usr/bin/python3 - "${smoke_out}" <<'PYSMOKE'
 import json, sys
