@@ -271,22 +271,55 @@ function buildBundleTemplate(manifest, forensics = null) {
   };
 }
 
-async function cleanLegacyWorkspace(jobDir) {
+async function cleanRecoveryWorkspace(jobDir) {
+  // Continue/retry is checkpoint-resume, not a full replay. Preserve current
+  // phase artifacts so each phase can validate and reuse its own prior output.
+  // Remove only legacy/transient files that are never trusted as resumable state.
   for (const relative of [
     'report.html', 'make_bundle.py', 'evidence',
     'skills/integritas-dd', 'tools/dd/quality.py', 'docs/DD_EVIDENCE_CONTRACT.md',
+    'agent-progress.json',
   ]) {
     await rm(path.join(jobDir, relative), { recursive: true, force: true });
   }
 }
 
-async function cleanFullReplayWorkspace(jobDir) {
-  // Deep/Maximum retries are defined as a full deterministic replay. Preserve only
-  // immutable, digest-verified staged evidence; discard every prior derived/model
-  // artifact so stale bundle/report/phase outputs cannot satisfy a fresh run.
-  for (const entry of await readdir(jobDir)) {
-    if (entry === 'documents') continue;
-    await rm(path.join(jobDir, entry), { recursive: true, force: true });
+function sameDocumentIdentity(report, document) {
+  return report
+    && report.document_id === document.id
+    && report.sha256 === document.sha256
+    && report.size_bytes === document.size_bytes;
+}
+
+async function readReusableForensics(jobDir, localDocuments) {
+  try {
+    const parsed = JSON.parse(await readFile(path.join(jobDir, 'forensics.json'), 'utf8'));
+    if (parsed?.schema_version !== 1 || parsed?.tool !== 'integritas_forensics_v1'
+      || !Array.isArray(parsed.reports) || parsed.reports.length !== localDocuments.length) return null;
+    const byId = new Map(parsed.reports.map((row) => [row?.document_id, row]));
+    if (!localDocuments.every((document) => sameDocumentIdentity(byId.get(document.id), document))) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function readReusablePageExtraction(jobDir, localDocuments) {
+  try {
+    const parsed = JSON.parse(await readFile(path.join(jobDir, 'page-extraction.json'), 'utf8'));
+    if (parsed?.schema_version !== 1 || parsed?.tool !== 'integritas_page_extract_v1'
+      || !Array.isArray(parsed.reports) || parsed.reports.length !== localDocuments.length) return null;
+    const byId = new Map(parsed.reports.map((row) => [row?.document_id, row]));
+    if (!localDocuments.every((document) => {
+      const report = byId.get(document.id);
+      return sameDocumentIdentity(report, document)
+        && Number.isInteger(report?.page_count)
+        && Array.isArray(report?.pages)
+        && report.pages.length === report.page_count;
+    })) return null;
+    return parsed;
+  } catch {
+    return null;
   }
 }
 
@@ -693,17 +726,17 @@ export async function executeInvestigation(command, {
         const sourceDocument = manifest.documents.find((candidate) => candidate.id === document.id);
         await stageDocument(sourceDocument, path.join(jobDir, document.local_path), fetchImpl);
       }
-      if (safeManifest.depth === 'deep' || safeManifest.depth === 'maximum') {
-        await cleanFullReplayWorkspace(jobDir);
-      } else {
-        await cleanLegacyWorkspace(jobDir);
-      }
+      await cleanRecoveryWorkspace(jobDir);
       await writeFile(manifestPath, JSON.stringify(safeManifest, null, 2), { mode: SHARED_FILE_MODE });
       await chown(manifestPath, -1, process.getgid());
       await chmod(manifestPath, SHARED_FILE_MODE);
       await copySupport(repoRoot, jobDir);
-      const trustedForensics = await runTrustedForensics(jobDir, localDocuments);
-      if (safeManifest.depth === 'maximum') await runTrustedPageExtraction(jobDir, localDocuments);
+      const trustedForensics = await readReusableForensics(jobDir, localDocuments)
+        ?? await runTrustedForensics(jobDir, localDocuments);
+      if (safeManifest.depth === 'maximum') {
+        await readReusablePageExtraction(jobDir, localDocuments)
+          ?? await runTrustedPageExtraction(jobDir, localDocuments);
+      }
       const templatePath = path.join(jobDir, 'bundle-template.json');
       await writeFile(templatePath, JSON.stringify(buildBundleTemplate(safeManifest, trustedForensics), null, 2), { mode: SHARED_FILE_MODE });
       await chown(templatePath, -1, process.getgid());
