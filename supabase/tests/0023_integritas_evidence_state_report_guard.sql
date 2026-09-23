@@ -42,6 +42,9 @@ select * from public.integritas_start_case_investigation(
   '13131313-1313-4131-8131-131313131313', 'evidence-state-start-0001'
 ) \gset guard_job_
 
+create temp table guard_context(job_id uuid);
+insert into guard_context values (:'guard_job_case_job_id'::uuid);
+
 insert into public.integritas_sources(
   case_id, case_job_id, case_revision, source_key, source_type, title,
   document_id, excerpt, reliability_note, evidence_origin
@@ -93,7 +96,7 @@ do $guard$
 begin
   update public.integritas_sources
   set verification_state='validated'
-  where case_job_id=:'guard_job_case_job_id'::uuid and source_key='ext.discovery';
+  where case_job_id=(select job_id from guard_context) and source_key='ext.discovery';
   raise exception 'expected discovery promotion rejection';
 exception when others then
   if sqlerrm <> 'Discovery-only source cannot be stored as validated evidence' then raise; end if;
@@ -112,7 +115,7 @@ do $guard$
 begin
   update public.integritas_reports
   set status='reviewed', reviewed_at=now(), reviewed_by='13131313-1313-4131-8131-131313131313'
-  where case_job_id=:'guard_job_case_job_id'::uuid;
+  where case_job_id=(select job_id from guard_context);
   raise exception 'expected active-job review rejection';
 exception when others then
   if sqlerrm not like 'Report source investigation stage is not reviewable:%' then raise; end if;
@@ -125,7 +128,7 @@ where id=:'guard_job_case_job_id'::uuid;
 
 update public.integritas_reports
 set status='reviewed', reviewed_at=now(), reviewed_by='13131313-1313-4131-8131-131313131313'
-where case_job_id=:'guard_job_case_job_id'::uuid;
+where case_job_id=(select job_id from guard_context);
 
 update public.integritas_case_jobs
 set stage='cancelled', progress=100
@@ -135,7 +138,7 @@ do $guard$
 begin
   update public.integritas_reports
   set status='finalized', finalized_at=now(), finalized_by='13131313-1313-4131-8131-131313131313'
-  where case_job_id=:'guard_job_case_job_id'::uuid;
+  where case_job_id=(select job_id from guard_context);
   raise exception 'expected cancelled-job finalization rejection';
 exception when others then
   if sqlerrm <> 'Report source investigation stage is not reviewable: cancelled' then raise; end if;
@@ -148,7 +151,7 @@ where id=:'guard_job_case_job_id'::uuid;
 
 update public.integritas_reports
 set status='finalized', finalized_at=now(), finalized_by='13131313-1313-4131-8131-131313131313'
-where case_job_id=:'guard_job_case_job_id'::uuid;
+where case_job_id=(select job_id from guard_context);
 
 select pg_temp.assert_true(
   (select status='finalized'
