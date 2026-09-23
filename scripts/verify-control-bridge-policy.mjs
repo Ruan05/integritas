@@ -16,6 +16,7 @@ const investigation = read('infra/openclaw/control-worker/src/investigation.mjs'
 const investigationUnit = read('infra/openclaw/integritas-openclaw-investigation@.service');
 const releaseUnit = read('infra/openclaw/integritas-release-deploy@.service');
 const controlledDeploy = read('infra/oracle/deploy-integritas-controlled.sh');
+const releaseDeploy = read('infra/oracle/deploy-integritas-release.sh');
 const investigationRunner = read('infra/openclaw/investigation-agent-runner.mjs');
 const largeInvestigationRunner = read('infra/openclaw/large-investigation-agent-runner-v2.mjs');
 const investigationConfig = read('infra/openclaw/integritas-investigation.json5');
@@ -99,6 +100,12 @@ assert.match(controlledDeploy, /\[\[ "\$\{SHA\}" == "\$\{REMOTE_HEAD\}" \]\]/, '
 assert.match(controlledDeploy, /merge-base --is-ancestor/, 'controlled deployment must refuse automated non-fast-forward releases');
 assert.match(controlledDeploy, /git -C "\$\{SOURCE_REPO\}" archive "\$\{SHA\}"/, 'controlled deployment must extract the target release script from the exact requested commit');
 assert.ok(!controlledDeploy.match(/\b(eval|curl|wget)\b/), 'controlled deployment must not evaluate strings or download executable content');
+assert.match(releaseDeploy, /plugins inspect parallel --json/, 'release smoke must deterministically inspect the Parallel plugin');
+assert.match(releaseDeploy, /trustedOfficialInstall/, 'release smoke must require trusted official Parallel provenance');
+assert.match(releaseDeploy, /parallel-free/, 'release smoke must require the key-free Parallel provider');
+assert.match(releaseDeploy, /integrate\.api\.nvidia\.com\/v1\/chat\/completions/, 'release smoke must directly verify the configured NVIDIA provider route');
+assert.match(releaseDeploy, /--max-time 90/, 'release provider smoke must remain bounded');
+assert.ok(!releaseDeploy.includes('--message-file'), 'release admission must not depend on a model choosing whether to call web_search');
 
 assert.match(investigationRunner, /const args = \[\s*'agent', 'exec'/, 'runner arguments must begin with OpenClaw agent exec');
 assert.match(investigationRunner, /spawn\('\/opt\/openclaw\/bin\/openclaw'/, 'runner must execute only the fixed OpenClaw binary');
@@ -238,7 +245,7 @@ assert.match(verifyHost, /\/usr\/sbin\/ss -ltnp/, 'runtime verifier must use an 
 assert.ok(!verifyHost.includes('docker info'), 'runtime verifier must not require Docker daemon socket access');
 assert.ok(!verifyHost.match(/docker ps\b/), 'runtime verifier must not enumerate containers through the Docker socket');
 
-for (const file of [commands, worker, client, service, edge, investigationRunner, largeInvestigationRunner, investigationConfig, installer, investigationUnit, releaseUnit, controlledDeploy]) {
+for (const file of [commands, worker, client, service, edge, investigationRunner, largeInvestigationRunner, investigationConfig, installer, investigationUnit, releaseUnit, controlledDeploy, releaseDeploy]) {
   assert.ok(!file.match(/sb_service_role_[A-Za-z0-9_-]+/), 'service-role credential literal must not be committed');
   assert.ok(!file.match(/sk-[A-Za-z0-9_-]{16,}/), 'provider/API key literal must not be committed');
   assert.ok(!file.match(/gsk_[A-Za-z0-9_-]{16,}/), 'Groq key literal must not be committed');
