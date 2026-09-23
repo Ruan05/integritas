@@ -446,6 +446,7 @@ const LARGE_PLANNER_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_PLANNER !== 'f
 const LARGE_MODEL_ANALYSIS_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_MODEL_ANALYSIS !== 'false';
 const LARGE_MODEL_CRITIC_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_MODEL_CRITIC !== 'false';
 const LARGE_MODEL_REPORT_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_MODEL_REPORT !== 'false';
+const NVIDIA_GLM_FLASH = 'integritas-nvidia/z-ai/glm-5.3-flash';
 const NVIDIA_ULTRA = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b';
 const GROQ_BROWSER_MODEL = 'openai/gpt-oss-20b';
 const GROQ_BROWSER_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
@@ -542,16 +543,16 @@ function candidates(role, synthetic) {
     // NVIDIA is live-verified as the healthy primary route on this host. Paid
     // OpenRouter routes are opt-in so a billing/auth circuit cannot stall a case.
     const rows = {
-      shard: [nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
-      plan: [nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
-      analysis: [nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
-      lane: [nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
-      critic: [nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
-      report: [nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
+      shard: [nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
+      plan: [nvidia && NVIDIA_GLM_FLASH, nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
+      analysis: [nvidia && NVIDIA_GLM_FLASH, nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
+      lane: [nvidia && NVIDIA_GLM_FLASH, nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
+      critic: [nvidia && NVIDIA_GLM_FLASH, nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
+      report: [nvidia && NVIDIA_GLM_FLASH, nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
     }[role] ?? [];
     return uniq(rows);
   }
-  const rows = [nvidia && NVIDIA_ULTRA];
+  const rows = [nvidia && NVIDIA_GLM_FLASH, nvidia && NVIDIA_ULTRA];
   if (zen) rows.push(ZEN_BIG_PICKLE, ZEN_ULTRA, ZEN_DEEPSEEK, ZEN_MIMO, ZEN_LING, ZEN_LIGHTNING);
   if (openrouter) rows.push(
     OPENROUTER_SUPER, OPENROUTER_NEX, OPENROUTER_NORTH,
@@ -571,6 +572,10 @@ function isPaidOpenRouterModel(model) {
 }
 
 function timeoutForModel(role, model) {
+  // GLM Flash is live-verified on the direct NVIDIA route, including a successful
+  // Parallel web_search round trip. Bound it tightly enough for recovery while
+  // allowing the model -> tool -> model research cycle to finish.
+  if (model === NVIDIA_GLM_FLASH) return ({ shard: 150, plan: 120, analysis: 150, lane: 180, critic: 150, report: 180 }[role] ?? 150);
   // Paid OpenRouter is preferred when healthy, but a credit-limited or unavailable
   // account must not hold an investigation for the full phase timeout. The next
   // validated route (direct NVIDIA or a bounded free model) is the recovery path.
@@ -704,10 +709,11 @@ async function runGroqBrowserLane(lane) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('Groq browser fallback is not configured');
   return await withGroqBrowserSlot(async () => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 45_000);
-    try {
-      const response = await fetch(GROQ_BROWSER_ENDPOINT, {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 45_000);
+      try {
+        const response = await fetch(GROQ_BROWSER_ENDPOINT, {
         method: 'POST',
         signal: controller.signal,
         headers: {
@@ -726,15 +732,23 @@ async function runGroqBrowserLane(lane) {
           tools: [{ type: 'browser_search' }],
         }),
       });
-      if (!response.ok) {
-        const retryAfter = response.headers.get('retry-after');
-        throw new Error(`Groq browser fallback HTTP ${response.status}${retryAfter ? ` retry-after=${retryAfter}` : ''}`);
+        if (!response.ok) {
+          const retryAfter = response.headers.get('retry-after');
+          const retrySeconds = Number.parseInt(retryAfter || '', 10);
+          if (response.status === 429 && attempt === 0 && Number.isFinite(retrySeconds) && retrySeconds > 0 && retrySeconds <= 10) {
+            clearTimeout(timer);
+            await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+            continue;
+          }
+          throw new Error(`Groq browser fallback HTTP ${response.status}${retryAfter ? ` retry-after=${retryAfter}` : ''}`);
+        }
+        const payload = await response.json();
+        return buildGroqBrowserLaneResult(lane, payload);
+      } finally {
+        clearTimeout(timer);
       }
-      const payload = await response.json();
-      return buildGroqBrowserLaneResult(lane, payload);
-    } finally {
-      clearTimeout(timer);
     }
+    throw new Error('Groq browser fallback exhausted bounded retries');
   });
 }
 
