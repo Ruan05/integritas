@@ -123,7 +123,6 @@ describe('Integritas browser adapter', () => {
       signed_manifests: true, durable_checkpoints: true, deterministic_qa: true,
       atomic_bundle_commit: true, arbitrary_shell: false,
       model_discovery_v1: true, live_progress_feed_v1: true, independent_artifact_state_v1: true,
-      model_discovery_v1: true, live_progress_feed_v1: true, independent_artifact_state_v1: true,
     };
     const runtime = { worker_id: 'oracle-primary', worker_version: '0.4.1', openclaw_status: 'active', last_seen_at: '2026-09-16T21:59:30Z', capability_flags: flags };
     expect(isInvestigationRuntimeReady(runtime, now)).toBe(true);
