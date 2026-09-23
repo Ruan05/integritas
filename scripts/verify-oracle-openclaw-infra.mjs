@@ -100,8 +100,10 @@ if (!errors.length) {
     [releaseDeploy, 'plugins inspect parallel --json', 'deployment smoke must inspect trusted Parallel capability deterministically'],
     [releaseDeploy, 'trustedOfficialInstall', 'deployment smoke must require official Parallel trust provenance'],
     [releaseDeploy, 'parallel-free', 'deployment smoke must require Parallel Free search capability'],
-    [releaseDeploy, 'integrate.api.nvidia.com/v1/chat/completions', 'deployment smoke must verify the configured provider endpoint'],
-    [releaseDeploy, '--max-time 90', 'deployment provider smoke must remain bounded'],
+    [releaseDeploy, 'integrate.api.nvidia.com/v1/models', 'deployment smoke must verify the configured provider model catalog'],
+    [releaseDeploy, '--max-time 30', 'deployment provider capability smoke must remain tightly bounded'],
+    [releaseDeploy, 'provider.curlrc', 'deployment smoke must keep provider credentials out of process argv'],
+    [releaseDeploy, "'z-ai/glm-5.3' not in ids", 'deployment smoke must require the configured GLM 5.3 route'],
     [rollback, 'previous-version', 'rollback version record'],
     [provision, 'VM.Standard.A1.Flex', 'Always Free A1 shape'],
   ];
