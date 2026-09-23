@@ -10,6 +10,7 @@ import { reconcilePlanChecks } from './plan-checks.mjs';
 import { buildNoEvidenceReport, classifyInvestigationWorkload } from './workload-classifier.mjs';
 import { applyEvidenceDrivenSpecialistRouting } from './specialist-router.mjs';
 import { validateInvestigationBundle } from './control-worker/src/bundle.mjs';
+import { getModelDiscoverySummary, modelAllowedByDiscovery, noteProviderFailure, providerCooldownRemainingMs } from './runtime-model-discovery.mjs';
 import {
   LARGE_REPORT_SECTIONS,
   assembleLargeBundle,
@@ -755,7 +756,7 @@ function candidates(role, synthetic) {
       critic: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
       report: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
     }[role] ?? [];
-    return uniq(rows);
+    return uniq(rows).filter(modelAllowedByDiscovery);
   }
   const rows = [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH];
   if (zen) rows.push(ZEN_BIG_PICKLE, ZEN_ULTRA, ZEN_DEEPSEEK, ZEN_MIMO, ZEN_LING, ZEN_LIGHTNING);
@@ -763,7 +764,7 @@ function candidates(role, synthetic) {
     OPENROUTER_SUPER, OPENROUTER_NEX, OPENROUTER_NORTH,
     OPENROUTER_LING, OPENROUTER_LAGUNA, OPENROUTER_ULTRA, OPENROUTER_FREE,
   );
-  return uniq(rows);
+  return uniq(rows).filter(modelAllowedByDiscovery);
 }
 function timeoutFor(role) {
   // The deterministic v2 scheduler is a safe planner fallback. Keep optional
@@ -945,7 +946,9 @@ async function runGroqBrowserLane(lane) {
             await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
             continue;
           }
-          throw new Error(`Groq browser fallback HTTP ${response.status}${retryAfter ? ` retry-after=${retryAfter}` : ''}`);
+          const capacityError = new Error(`Groq browser fallback HTTP ${response.status}${retryAfter ? ` retry-after=${retryAfter}` : ''}`);
+          noteProviderFailure('groq', capacityError);
+          throw capacityError;
         }
         const payload = await response.json();
         return buildGroqBrowserLaneResult(lane, payload);
@@ -1052,24 +1055,30 @@ async function validated({
   }
   try {
     for (const [index, model] of models.entries()) {
+    const cooldownMs = providerCooldownRemainingMs(model);
+    if (cooldownMs > 0) {
+      failures.push({ model, error: 'skipped because provider cooldown remains active for ' + Math.ceil(cooldownMs / 1000) + 's' });
+      continue;
+    }
     if (openRouterPaidCircuitOpen && isPaidOpenRouterModel(model)) {
       failures.push({ model, error: 'skipped because the paid OpenRouter provider circuit is open for this investigation' });
       continue;
     }
-    if (ZEN_FREE_MODELS.has(model) && localZenFallbackUses >= MAX_ZEN_FREE_USES) {
+    if (ZEN_FREE_MODELS.has(model) && investigationZenFreeUses >= MAX_ZEN_FREE_USES) {
       failures.push({ model, error: 'skipped because per-investigation OpenCode Zen free fallback budget is exhausted' });
       continue;
     }
-    if (ZEN_FREE_MODELS.has(model)) localZenFallbackUses += 1;
-    if (FREE_OPENROUTER_MODELS.has(model) && localOpenRouterFallbackUses >= MAX_OPENROUTER_FREE_USES) {
+    if (ZEN_FREE_MODELS.has(model)) investigationZenFreeUses += 1;
+    if (FREE_OPENROUTER_MODELS.has(model) && investigationOpenRouterFreeUses >= MAX_OPENROUTER_FREE_USES) {
       failures.push({ model, error: 'skipped because per-investigation OpenRouter free fallback budget is exhausted' });
       continue;
     }
-    if (FREE_OPENROUTER_MODELS.has(model)) localOpenRouterFallbackUses += 1;
+    if (FREE_OPENROUTER_MODELS.has(model)) investigationOpenRouterFreeUses += 1;
     let raw;
     try {
       raw = await invoke(jobDir, taskName, model, timeoutForModel(role, model), synthetic);
     } catch (error) {
+      noteProviderFailure(model, error);
       if (isPaidOpenRouterModel(model) && isRetryableProviderRouteFailure(error)) openRouterPaidCircuitOpen = true;
       if (!isRetryableProviderRouteFailure(error)) throw error;
       failures.push({ model, error: String(error?.message ?? error).slice(0, 500) });
