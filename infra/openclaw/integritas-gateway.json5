@@ -78,11 +78,9 @@
       rememberAcrossConversations: true,
     },
   },
-  // The operator Gateway uses the same key-free Parallel Search path already
-  // proven by the isolated investigation runner. parallel-free must be selected
-  // explicitly; OpenClaw intentionally does not auto-select key-free providers.
+  // install-native provisions the pinned official Parallel npm plugin into the
+  // shared OpenClaw state. parallel-free must still be selected explicitly.
   plugins: {
-    load: { paths: ["/opt/openclaw-source/extensions/parallel"] },
     entries: {
       parallel: { enabled: true },
       "active-memory": {
