@@ -446,6 +446,7 @@ const LARGE_PLANNER_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_PLANNER !== 'f
 const LARGE_MODEL_ANALYSIS_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_MODEL_ANALYSIS !== 'false';
 const LARGE_MODEL_CRITIC_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_MODEL_CRITIC !== 'false';
 const LARGE_MODEL_REPORT_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_MODEL_REPORT !== 'false';
+const NVIDIA_GLM = 'integritas-nvidia/z-ai/glm-5.3';
 const NVIDIA_GLM_FLASH = 'integritas-nvidia/z-ai/glm-5.3-flash';
 const NVIDIA_ULTRA = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b';
 const GROQ_BROWSER_MODEL = 'openai/gpt-oss-20b';
@@ -543,16 +544,16 @@ function candidates(role, synthetic) {
     // NVIDIA is live-verified as the healthy primary route on this host. Paid
     // OpenRouter routes are opt-in so a billing/auth circuit cannot stall a case.
     const rows = {
-      shard: [nvidia && NVIDIA_ULTRA, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
-      plan: [nvidia && NVIDIA_GLM_FLASH, nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
-      analysis: [nvidia && NVIDIA_GLM_FLASH, nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
-      lane: [nvidia && NVIDIA_GLM_FLASH, nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
-      critic: [nvidia && NVIDIA_GLM_FLASH, nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
-      report: [nvidia && NVIDIA_GLM_FLASH, nvidia && NVIDIA_ULTRA, ...paid, ...healthyFree],
+      shard: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
+      plan: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
+      analysis: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
+      lane: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
+      critic: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
+      report: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
     }[role] ?? [];
     return uniq(rows);
   }
-  const rows = [nvidia && NVIDIA_GLM_FLASH, nvidia && NVIDIA_ULTRA];
+  const rows = [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH];
   if (zen) rows.push(ZEN_BIG_PICKLE, ZEN_ULTRA, ZEN_DEEPSEEK, ZEN_MIMO, ZEN_LING, ZEN_LIGHTNING);
   if (openrouter) rows.push(
     OPENROUTER_SUPER, OPENROUTER_NEX, OPENROUTER_NORTH,
