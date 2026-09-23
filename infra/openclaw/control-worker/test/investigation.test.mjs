@@ -50,6 +50,7 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
   await writeFile(path.join(spoolRoot, JOB_ID, 'tools', 'dd', 'quality.py'), 'legacy');
   await writeFile(path.join(spoolRoot, JOB_ID, 'report.html'), '<p>legacy</p>');
   await writeFile(path.join(spoolRoot, JOB_ID, 'bundle.json'), '{"report_id":"legacy"}');
+  await writeFile(path.join(spoolRoot, JOB_ID, 'large-v2-plan-exec.json'), '{"ok":true,"status":"ok","final":"retained-phase"}');
   const checkpoints = [];
   const outputs = [];
   const commits = [];
@@ -83,6 +84,11 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     }
     await assert.rejects(access(path.join(jobDir, 'bundle.json')));
     await assert.rejects(access(path.join(jobDir, 'report.html')));
+    assert.equal(
+      await readFile(path.join(jobDir, 'large-v2-plan-exec.json'), 'utf8'),
+      '{"ok":true,"status":"ok","final":"retained-phase"}',
+      'checkpoint resume must preserve per-phase artifacts for strict validation/reuse',
+    );
     const report = '# Synthetic DD report\n\nDraft evidence summary.';
     const bundle = {
       schema_version: 1, case_id: CASE_ID, case_job_id: JOB_ID, case_revision: 7, depth: 'deep',
@@ -136,6 +142,7 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     await assert.rejects(access(path.join(spoolRoot, JOB_ID, 'tools', 'dd', 'quality.py')));
     await assert.rejects(access(path.join(spoolRoot, JOB_ID, 'docs', 'DD_EVIDENCE_CONTRACT.md')));
     await assert.rejects(access(path.join(spoolRoot, JOB_ID, 'report.html')));
+    await access(path.join(spoolRoot, JOB_ID, 'large-v2-plan-exec.json'));
     assert.deepEqual(outputs.map((entry) => entry[3]), ['bundle', 'report_markdown']);
     assert.equal(await readFile(path.join(spoolRoot, JOB_ID, 'report.md'), 'utf8'), '# Synthetic DD report\n\nDraft evidence summary.');
     assert.equal(qaCalls.length, 1);
