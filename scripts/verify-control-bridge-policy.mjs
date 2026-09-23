@@ -23,6 +23,7 @@ const zenInvestigationConfig = read('infra/openclaw/integritas-investigation-zen
 const zenActivator = read('infra/openclaw/integritas-zen.sh');
 const installer = read('infra/openclaw/install-control-worker.sh');
 const nativeInstaller = read('infra/openclaw/install-native.sh');
+const checkpointResumeMigration = read('supabase/migrations/0024_integritas_checkpoint_resume.sql');
 
 assert.match(gateway, /bind:\s*["']loopback["']/, 'OpenClaw Gateway must remain loopback-only');
 assert.match(gateway, /allowHostControl:\s*false/, 'case sandbox browsers must not inherit the authenticated host browser');
@@ -204,6 +205,15 @@ assert.match(investigation, /document digest mismatch/, 'worker must verify down
 assert.match(investigation, /url\.hostname !== controlHost/, 'worker must bind signed downloads to the control-plane origin');
 assert.match(investigation, /systemctlRunner\('\/usr\/bin\/systemctl', \['start', '--no-block'/, 'worker must start only the fixed oneshot runner without blocking durable lease renewal');
 assert.match(investigation, /\['show', '--property=ActiveState', '--value', unit\]/, 'worker must poll and rejoin the scoped unit across worker restarts');
+assert.match(investigation, /cleanRecoveryWorkspace/, 'Continue must preserve resumable phase artifacts');
+assert.match(investigation, /readReusableForensics/, 'trusted forensics must be reusable on checkpoint resume');
+assert.match(investigation, /readReusablePageExtraction/, 'trusted page extraction must be reusable on checkpoint resume');
+assert.doesNotMatch(investigation, /cleanFullReplayWorkspace/, 'Continue must never invoke a full replay workspace wipe');
+assert.match(checkpointResumeMigration, /'replay_mode','checkpoint_resume'/, 'retry audit must record checkpoint-resume semantics');
+assert.match(checkpointResumeMigration, /v_resume_progress := 38/, 'analysis failures must resume from the pre-analysis trustworthy boundary');
+assert.match(checkpointResumeMigration, /v_resume_progress := 52/, 'failed research lanes must resume at the research boundary');
+assert.match(checkpointResumeMigration, /v_resume_progress := 68/, 'critic failures must resume at the independent-review boundary');
+assert.doesNotMatch(checkpointResumeMigration, /full_deterministic_replay/, 'checkpoint-resume migration must not restore full replay semantics');
 
 assert.match(worker, /INTEGRITAS_CONTROL_WORKER_TOKEN_FILE/, 'worker should support credential-file token loading');
 assert.ok(!worker.includes('console.log(workerToken)'), 'worker token must never be logged');
