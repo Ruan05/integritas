@@ -109,7 +109,7 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.match(parent, /large-investigation-agent-runner-v2\.mjs/);
   assert.match(large, /buildDocumentShards\(manifest, 1\)/, 'PDF extraction shards must isolate one evidence document so observed pdf-tool use is attributable');
   assert.match(large, /mapLimit\(shards, 2/, 'document shard concurrency must stay low enough to avoid provider-rate-limit cascades while retaining bounded parallel extraction');
-  assert.match(large, /mapLimit\(plan\.research_lanes, 4/, 'research lane concurrency must remain bounded while avoiding sequential bottlenecks');
+  assert.match(large, /mapLimit\(orderedResearchLanes, 2/, 'research lane concurrency must preserve free-tier capacity without becoming fully sequential');
   assert.match(large, /parseLargePlanFinal/, 'large plan must use a bounded contract');
   assert.match(large, /const LARGE_PLANNER_ENABLED = process\.env\.INTEGRITAS_ENABLE_LARGE_PLANNER !== 'false'/, 'maximum-depth model planning must be on by default and explicitly disableable');
   assert.match(large, /buildDeterministicLargePlan/, 'large investigations must have a deterministic scheduler fallback');
