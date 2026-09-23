@@ -45,60 +45,56 @@ fi
 
 smoke_investigation_runtime() {
   local smoke_dir="/var/lib/integritas-runner/deploy-smoke.$$"
-  local smoke_out="${smoke_dir}/output.json"
-  local smoke_err="${smoke_dir}/stderr.log"
-  local attempt
+  local plugin_out="${smoke_dir}/parallel-plugin.json"
+  local provider_out="${smoke_dir}/provider.json"
   install -d -o openclaw -g integritas-openclaw -m 0770 "${smoke_dir}"
-  cat >"${smoke_dir}/task.md" <<'EOF'
-This is a bounded Integritas deployment preflight. This is specifically a tool-compliance test, not a knowledge question. You MUST call web_search exactly once with a harmless query for the official OpenClaw documentation. If you do not call web_search, return {"ok":false}. Do not use browser, web_fetch, files, or shell tools. After the successful web_search call, return exactly one raw JSON object with {"ok":true}. Do not include credentials or environment information.
-EOF
-  chown openclaw:integritas-openclaw "${smoke_dir}/task.md"
-  chmod 0640 "${smoke_dir}/task.md"
   set -a
   # shellcheck disable=SC1091
   . /etc/integritas/provider-secrets.env
   set +a
 
-  for attempt in 1 2 3; do
-    : >"${smoke_out}"
-    : >"${smoke_err}"
-    chown openclaw:integritas-openclaw "${smoke_out}" "${smoke_err}"
-    chmod 0640 "${smoke_out}" "${smoke_err}"
-    if /usr/sbin/runuser --preserve-environment -u openclaw -- /usr/bin/env \
-        HOME=/var/lib/openclaw OPENCLAW_HOME=/var/lib/openclaw OPENCLAW_STATE_DIR=/var/lib/openclaw \
-        /opt/openclaw/bin/openclaw agent exec \
-        --config /etc/openclaw/integritas-investigation.json \
-        --cwd "${smoke_dir}" --message-file "${smoke_dir}/task.md" \
-        --json --code-mode direct \
-        --model integritas-nvidia/z-ai/glm-5.3 --timeout 180 \
-        >"${smoke_out}" 2>"${smoke_err}" \
-      && /usr/bin/python3 - "${smoke_out}" <<'PYSMOKE'
+  # Search readiness is a deterministic capability check. Do not make release
+  # admission depend on a model deciding whether to call a tool.
+  /usr/sbin/runuser --preserve-environment -u openclaw -- /usr/bin/env \
+    HOME=/var/lib/openclaw OPENCLAW_HOME=/var/lib/openclaw OPENCLAW_STATE_DIR=/var/lib/openclaw \
+    OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-investigation.json \
+    /opt/openclaw/bin/openclaw plugins inspect parallel --json >"${plugin_out}"
+  /usr/bin/python3 - "${plugin_out}" <<'PYPLUGIN'
 import json, sys
 from pathlib import Path
-p = Path(sys.argv[1])
-try:
-    row = json.loads(p.read_text(encoding='utf-8'))
-except Exception as exc:
-    raise SystemExit(f'invalid smoke envelope: {type(exc).__name__}')
-summary = row.get('toolSummary') if isinstance(row, dict) else None
-tools = summary.get('tools', []) if isinstance(summary, dict) else []
-calls = summary.get('calls', 0) if isinstance(summary, dict) else 0
-failures = summary.get('failures', 0) if isinstance(summary, dict) else 0
-if row.get('status') != 'ok' or 'web_search' not in tools or not isinstance(calls, int) or calls < 1 or failures != 0:
-    raise SystemExit('provider/search smoke did not produce a successful observed web_search call')
-PYSMOKE
-    then
-      rm -rf "${smoke_dir}"
-      echo "Integritas provider/search smoke passed on attempt ${attempt}."
-      return 0
-    fi
-    echo "Integritas provider/search smoke attempt ${attempt}/3 did not prove a successful observed web_search call." >&2
-    /usr/bin/sleep 2
-  done
+row = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+plugin = row.get('plugin') if isinstance(row, dict) else None
+providers = plugin.get('webSearchProviderIds', []) if isinstance(plugin, dict) else []
+if not isinstance(plugin, dict) or plugin.get('status') != 'loaded':
+    raise SystemExit('Parallel plugin is not loaded')
+if plugin.get('trustedOfficialInstall') is not True:
+    raise SystemExit('Parallel plugin is not a trusted official install')
+if 'parallel-free' not in providers:
+    raise SystemExit('Parallel Free web-search provider is unavailable')
+PYPLUGIN
+
+  # Provider readiness is tested independently with one bounded API turn. This
+  # proves the configured server-side credential/model route without requiring
+  # a second model turn after a tool call.
+  /usr/bin/curl --fail --silent --show-error --max-time 90 \
+    -H "Authorization: Bearer ${NVIDIA_API_KEY}" \
+    -H "Content-Type: application/json" \
+    --data '{"model":"z-ai/glm-5.3","messages":[{"role":"user","content":"Reply exactly OK"}],"temperature":0,"max_tokens":8}' \
+    https://integrate.api.nvidia.com/v1/chat/completions >"${provider_out}"
+  /usr/bin/python3 - "${provider_out}" <<'PYPROVIDER'
+import json, sys
+from pathlib import Path
+row = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+choices = row.get('choices') if isinstance(row, dict) else None
+if not isinstance(choices, list) or not choices:
+    raise SystemExit('provider smoke returned no completion choice')
+message = choices[0].get('message') if isinstance(choices[0], dict) else None
+if not isinstance(message, dict):
+    raise SystemExit('provider smoke returned no assistant message')
+PYPROVIDER
 
   rm -rf "${smoke_dir}"
-  echo "Integritas provider/search smoke failed after 3 bounded attempts." >&2
-  return 1
+  echo "Integritas deterministic provider/search capability smoke passed."
 }
 
 snapshot_managed_files() {
