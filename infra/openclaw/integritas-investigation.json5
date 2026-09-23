@@ -587,12 +587,10 @@
       },
     },
   },
-  // The pinned OpenClaw source checkout contains the official Parallel plugin.
-  // Load it explicitly so standalone investigation turns get key-free web_search
-  // without mutating the shared Gateway plugin registry.
+  // install-native provisions the pinned official Parallel npm plugin into the
+  // shared OpenClaw state. Standalone case turns enable that trusted install.
   plugins: {
     enabled: true,
-    load: { paths: ["/opt/openclaw-source/extensions/parallel"] },
     entries: { parallel: { enabled: true } },
   },
   tools: {
