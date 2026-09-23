@@ -162,4 +162,14 @@ select pg_temp.assert_true(
 
 reset role;
 
+-- Remove this test's synthetic provenance/report rows before the shared rollback
+-- preflight deletes OpenClaw jobs. Production reviewed/finalized reports remain
+-- intentionally protected from being orphaned by source-job deletion.
+delete from public.integritas_reports
+where case_id='12121212-1212-4121-8121-121212121212'::uuid;
+delete from public.integritas_sources
+where case_id='12121212-1212-4121-8121-121212121212'::uuid;
+delete from public.integritas_tool_invocations
+where case_id='12121212-1212-4121-8121-121212121212'::uuid;
+
 select 'evidence state and report guard assertions passed' as result;
