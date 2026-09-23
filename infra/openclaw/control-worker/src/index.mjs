@@ -73,6 +73,9 @@ async function sendHeartbeat() {
           deterministic_qa: true, atomic_bundle_commit: true,
           bounded_release_deploy: true,
           large_case_orchestration_v2: true,
+          model_discovery_v1: true,
+          live_progress_feed_v1: true,
+          independent_artifact_state_v1: true,
           deployed_release: readDeployedRelease(),
         },
       });
