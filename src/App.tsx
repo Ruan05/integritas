@@ -40,7 +40,7 @@ const investigationStages = [
   ['verifying', 'Verifying'], ['cross_checking', 'Cross-checking'],
   ['independent_review', 'Independent review'], ['drafting_report', 'Drafting report'],
 ] as const;
-const retryableInvestigationStages = new Set(['failed', 'incomplete', 'cancelled']);
+const retryableInvestigationStages = new Set(['failed', 'cancelled']);
 const terminalInvestigationStages = new Set(['completed', 'incomplete', 'failed', 'cancelled', 'research_limit_reached']);
 
 const openClawPreflight = [
@@ -191,7 +191,7 @@ export function App() {
             .eq('case_id', selectedCaseId)
             .maybeSingle(),
           dataClient.from('integritas_case_job_checkpoints')
-            .select('id,stage,progress,safe_metadata,created_at')
+            .select('id,stage,progress,safe_metadata,created_at,updated_at')
             .eq('case_id', selectedCaseId)
             .eq('case_job_id', job.id)
             .order('created_at'),
@@ -493,6 +493,7 @@ export function App() {
             {job && (
               <div className="actions">
                 {retryAllowed && <button type="button" className="secondary" onClick={() => void retryInvestigation()}>Continue investigation</button>}
+                {job.stage === 'incomplete' && <p className="muted job-summary">Workflow complete — analyst review required for unresolved verification gates.</p>}
                 {pauseAllowed && <button type="button" className="secondary" onClick={pauseInvestigation}>Pause safely</button>}
                 {resumeAllowed && <button type="button" className="secondary" onClick={resumeInvestigation}>Continue investigation</button>}
                 {cancelAllowed && <button type="button" className="secondary" onClick={cancelInvestigation}>Cancel investigation</button>}
