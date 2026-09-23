@@ -271,15 +271,20 @@ function buildBundleTemplate(manifest, forensics = null) {
   };
 }
 
-async function cleanRecoveryWorkspace(jobDir) {
-  // Continue/retry is checkpoint-resume, not a full replay. Preserve current
-  // phase artifacts so each phase can validate and reuse its own prior output.
-  // Remove only legacy/transient files that are never trusted as resumable state.
-  for (const relative of [
+async function cleanRecoveryWorkspace(jobDir, depth) {
+  // Continue/retry is checkpoint-resume, not a full replay. Preserve validated
+  // phase artifacts so each phase can independently reuse its prior output.
+  // Deep/Maximum rebuild only the final assembled bundle/report from those
+  // retained phases; Fast/Standard may safely reuse their validated final output.
+  const transient = [
     'report.html', 'make_bundle.py', 'evidence',
     'skills/integritas-dd', 'tools/dd/quality.py', 'docs/DD_EVIDENCE_CONTRACT.md',
     'agent-progress.json',
-  ]) {
+  ];
+  if (depth === 'deep' || depth === 'maximum') {
+    transient.push('bundle.json', 'report.md', 'agent-exec.json');
+  }
+  for (const relative of transient) {
     await rm(path.join(jobDir, relative), { recursive: true, force: true });
   }
 }
@@ -726,7 +731,7 @@ export async function executeInvestigation(command, {
         const sourceDocument = manifest.documents.find((candidate) => candidate.id === document.id);
         await stageDocument(sourceDocument, path.join(jobDir, document.local_path), fetchImpl);
       }
-      await cleanRecoveryWorkspace(jobDir);
+      await cleanRecoveryWorkspace(jobDir, safeManifest.depth);
       await writeFile(manifestPath, JSON.stringify(safeManifest, null, 2), { mode: SHARED_FILE_MODE });
       await chown(manifestPath, -1, process.getgid());
       await chmod(manifestPath, SHARED_FILE_MODE);
