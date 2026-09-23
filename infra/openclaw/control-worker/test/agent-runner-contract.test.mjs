@@ -88,8 +88,12 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.ok(source.includes('lane.${lane.lane_id}'), 'planner lane check keys must remain stable');
   assert.match(source, /planning_research/);
   assert.match(source, /agent-progress\.json/);
-  assert.match(source, /'--model', phaseRoute\.model/);
-  assert.match(source, /args\.push\('--fallback', fallback\)/);
+  assert.match(source, /standardProviderModels\(phaseRoute\)/, 'standard phases must resolve explicit bounded provider candidates');
+  assert.match(source, /selectProviderDiverseModels\(configured, 3\)/, 'standard phases must preserve cross-provider diversity');
+  assert.match(source, /process\.env\.OPENROUTER_API_KEY/, 'OpenRouter candidates must be gated on live configuration');
+  assert.match(source, /for \(const \[index, model\] of models\.entries\(\)\)/, 'standard phases must try provider routes independently');
+  assert.match(source, /moving to the next configured provider family/, 'a bounded provider failure must advance to another family');
+  assert.doesNotMatch(source, /args\.push\('--fallback'/, 'outer route timeout must not wrap an opaque internal fallback chain');
   assert.doesNotMatch(source, /opencode-go\/deepseek-v4-pro/);
 });
 
