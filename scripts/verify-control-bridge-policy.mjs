@@ -24,6 +24,7 @@ const zenActivator = read('infra/openclaw/integritas-zen.sh');
 const installer = read('infra/openclaw/install-control-worker.sh');
 const nativeInstaller = read('infra/openclaw/install-native.sh');
 const checkpointResumeMigration = read('supabase/migrations/0024_integritas_checkpoint_resume.sql');
+const attemptScopedResumeMigration = read('supabase/migrations/0025_integritas_attempt_scoped_resume.sql');
 
 assert.match(gateway, /bind:\s*["']loopback["']/, 'OpenClaw Gateway must remain loopback-only');
 assert.match(gateway, /allowHostControl:\s*false/, 'case sandbox browsers must not inherit the authenticated host browser');
@@ -214,6 +215,7 @@ assert.match(checkpointResumeMigration, /v_resume_progress := 38/, 'analysis fai
 assert.match(checkpointResumeMigration, /v_resume_progress := 52/, 'failed research lanes must resume at the research boundary');
 assert.match(checkpointResumeMigration, /v_resume_progress := 68/, 'critic failures must resume at the independent-review boundary');
 assert.doesNotMatch(checkpointResumeMigration, /full_deterministic_replay/, 'checkpoint-resume migration must not restore full replay semantics');
+assert.match(attemptScopedResumeMigration, /cp\.progress <= v_job\.progress/, 'failed/cancelled retries must not jump to an older attempt high-water checkpoint');
 
 assert.match(worker, /INTEGRITAS_CONTROL_WORKER_TOKEN_FILE/, 'worker should support credential-file token loading');
 assert.ok(!worker.includes('console.log(workerToken)'), 'worker token must never be logged');
