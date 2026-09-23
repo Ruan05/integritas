@@ -24,7 +24,7 @@ const execFileAsync = promisify(execFile);
 const MAX_AGENT_ENVELOPE_BYTES = 5 * 1024 * 1024;
 const RESEARCH_TOOLS = new Set(['web_search', 'web_fetch', 'browser']);
 
-const NVIDIA_PRIMARY = 'nvidia/nvidia/nemotron-3-ultra-550b-a55b';
+const NVIDIA_PRIMARY = 'integritas-nvidia/z-ai/glm-5.3';
 const GROQ_PRIMARY = 'integritas-groq/openai/gpt-oss-120b';
 const OR_NEMOTRON = 'integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free';
 const OR_FREE = 'integritas-openrouter/openrouter/free';
