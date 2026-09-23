@@ -60,8 +60,9 @@ select pg_temp.assert_true(
 );
 
 insert into public.integritas_tool_invocations(
-  case_id, case_job_id, tool_name, status, safe_metadata, invoked_at, completed_at
+  id, case_id, case_job_id, tool_name, status, safe_metadata, invoked_at, completed_at
 ) values (
+  '15151515-1515-4151-8151-151515151515',
   '12121212-1212-4121-8121-121212121212',
   :'guard_job_case_job_id'::uuid,
   'openclaw_external_research',
