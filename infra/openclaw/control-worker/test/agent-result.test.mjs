@@ -101,6 +101,29 @@ test('repairs exactly one omitted finding_key label but still validates the bund
   );
 });
 
+test('canonicalizes plain Integritas front-matter labels into QA-recognized Markdown headings', () => {
+  const value = bundle();
+  value.report.markdown = [
+    'MASTER SUMMARY — READ THIS FIRST',
+    'Synthetic decision summary.',
+    '',
+    'DIRECT NEXT STEPS — WHAT TO DO NOW',
+    'Verify the material claims independently.',
+    '',
+    '## Evidence Package Reviewed',
+    'Synthetic evidence.',
+  ].join('\n');
+
+  const parsed = parseAgentBundle(
+    JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }),
+    manifest,
+  );
+
+  assert.match(parsed.reportMarkdown, /^# MASTER SUMMARY — READ THIS FIRST\n/);
+  assert.match(parsed.reportMarkdown, /\n# DIRECT NEXT STEPS — WHAT TO DO NOW\n/);
+  assert.equal(parsed.bundle.report.markdown, parsed.reportMarkdown);
+});
+
 test('normalizes a completed model outcome to incomplete when unresolved work remains', () => {
   const value = bundle();
   value.execution.terminal_outcome = 'completed';
