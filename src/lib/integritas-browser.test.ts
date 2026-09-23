@@ -190,6 +190,33 @@ function fakeRlsClient(fixtures: Record<string, unknown[]>) {
 }
 
 describe('live investigation milestones', () => {
+  it('prefers the terminal checkpoint updated for the current attempt over a later inserted stale failure', () => {
+    const rows = deriveInvestigationMilestones(
+      [
+        {
+          id: 'terminal', stage: 'incomplete', progress: 100,
+          created_at: '2026-09-22T20:51:00Z', updated_at: '2026-09-23T08:00:20Z',
+          safe_metadata: { milestones: [
+            { id: 'module.document_shards', label: 'Page extraction and OCR', status: 'complete', priority: 'high' },
+            { id: 'module.private_artifact', label: 'Private PDF artifact', status: 'complete', priority: 'high' },
+          ] },
+        },
+        {
+          id: 'stale-failure', stage: 'failed', progress: 38,
+          created_at: '2026-09-23T06:34:00Z', updated_at: '2026-09-23T06:34:00Z',
+          safe_metadata: { message: 'execution_failed' },
+        },
+      ] as any,
+      [],
+      'incomplete',
+      100,
+    );
+    expect(rows).toEqual([
+      { id: 'module.document_shards', label: 'Page extraction and OCR', status: 'complete', priority: 'high' },
+      { id: 'module.private_artifact', label: 'Private PDF artifact', status: 'complete', priority: 'high' },
+    ]);
+  });
+
   it('uses the latest durable checkpoint and reconciles final structured lane checks', () => {
     const checkpoints = [
       {
