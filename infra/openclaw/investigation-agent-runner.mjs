@@ -72,7 +72,7 @@ const ZEN_ENABLE_MARKER = '/etc/openclaw/zen-enabled';
 const ZEN_ENABLED = !!process.env.OPENCODE_ZEN_API_KEY && existsSync(ZEN_ENABLE_MARKER);
 const ACTIVE_CONFIG_PATH = ZEN_ENABLED ? ZEN_CONFIG_PATH : BASE_CONFIG_PATH;
 
-const NVIDIA_PRIMARY = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b';
+const NVIDIA_PRIMARY = 'integritas-nvidia/z-ai/glm-5.3';
 const FREE_FAST = 'integritas-openrouter/nvidia/nemotron-3-super-120b-a12b:free';
 const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';
 const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';
