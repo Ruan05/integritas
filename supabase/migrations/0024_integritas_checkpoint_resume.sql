@@ -177,6 +177,10 @@ begin
   from public.integritas_case_job_checkpoints cp
   where cp.case_job_id=v_job.id
     and cp.stage not in ('completed','incomplete','failed','cancelled','paused','research_limit_reached')
+    and (
+      v_job.stage not in ('failed','cancelled')
+      or cp.progress <= v_job.progress
+    )
   order by cp.progress desc,cp.updated_at desc
   limit 1;
   if not found then
