@@ -40,13 +40,13 @@ const investigationStages = [
   ['verifying', 'Verifying'], ['cross_checking', 'Cross-checking'],
   ['independent_review', 'Independent review'], ['drafting_report', 'Drafting report'],
 ] as const;
-const retryableInvestigationStages = new Set(['failed', 'cancelled']);
+const retryableInvestigationStages = new Set(['failed', 'cancelled', 'incomplete', 'research_limit_reached']);
 const terminalInvestigationStages = new Set(['completed', 'incomplete', 'failed', 'cancelled', 'research_limit_reached']);
 
 const openClawPreflight = [
   'Fresh Oracle runtime heartbeat and verified bounded-worker release',
   'Integritas DD skill installed in the verified OpenClaw workspace',
-  'Signed manifest, durable checkpoints, and provider capability attested',
+  'Live provider/model discovery, durable checkpoints, and provider capability attested',
   'Explicit case access, case revision, and structured job payload verified',
   'Evidence/result persistence and analyst-review guards exercised',
 ] as const;
@@ -206,7 +206,7 @@ export function App() {
       } catch (error) { if (!cancelled) setNotice(error instanceof Error ? error.message : String(error)); }
     };
     void refresh();
-    const interval = window.setInterval(refresh, 5_000);
+    const interval = window.setInterval(refresh, 3_000);
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [token, browserClient, job?.id, job?.control_command_id, selectedCaseId]);
 
@@ -303,7 +303,7 @@ export function App() {
 
   const startInvestigation = async () => {
     if (!token || !browserClient || !selectedCase || !startAllowed) return;
-    setBusy(true); setNotice('Queueing Oracle/OpenClaw investigation…');
+    setBusy(true); setNotice('Queueing investigation; live provider/model discovery runs before AI task routing…');
     try {
       const idempotencyKey = `ui:${selectedCase.id}:rev:${selectedCase.revision}:depth:${depth}`;
       const investigation = await browserClient.startInvestigation(token, {
@@ -312,7 +312,7 @@ export function App() {
       setJob({ id: investigation.case_job_id, case_id: selectedCase.id, case_revision: selectedCase.revision, control_command_id: investigation.control_command_id, stage: 'queued', progress: 0, runtime_provider: 'openclaw-oracle' });
       setLiveCheckpoints([]);
       setCommandStatus('queued');
-      setNotice('Investigation queued. You can close this page; progress is durable server-side.');
+      setNotice('Investigation queued. Provider/model discovery and every later task are checkpointed server-side, so this page can be closed safely.');
     } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
   };
