@@ -44,14 +44,39 @@ describe('live investigation milestone presentation', () => {
             ],
             phase: 'large_research_lanes',
             message: 'Lane 5 of 9 is collecting authoritative sources.',
+            current_task: {
+              id: 'lane.core.corporate_identity',
+              label: 'Verify corporate identity',
+              status: 'active',
+              detail: 'Opening authoritative registry sources.',
+            },
+            live_events: [{
+              id: 'evt-1',
+              category: 'FILE DISCOVERY',
+              message: 'Submitted file names a corporate counterparty — verification is underway.',
+              state: 'discovery',
+              at: '2026-09-19T20:00:00Z',
+            }],
+            model_discovery: {
+              status: 'complete',
+              refreshed_at: '2026-09-19T19:59:55Z',
+              providers: [
+                { provider: 'nvidia', status: 'ready', model_count: 8, new_count: 1, removed_count: 0 },
+                { provider: 'openrouter', status: 'ready', model_count: 20, new_count: 2, removed_count: 1 },
+              ],
+            },
           },
         }]}
         checks={[]}
       />,
     );
-    expect(screen.getByRole('heading', { name: /live investigation milestones/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^live investigation$/i })).toBeInTheDocument();
     expect(screen.getByText('Bounded parallel specialist research')).toBeInTheDocument();
-    expect(screen.getByText('Current submodule')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Verify corporate identity' })).toBeInTheDocument();
+    expect(screen.getByText('FILE DISCOVERY')).toBeInTheDocument();
+    expect(screen.getByText(/Submitted file names a corporate counterparty/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 providers ready/i)).toBeInTheDocument();
+    expect(screen.getByText(/28 models discovered/i)).toBeInTheDocument();
     expect(screen.getByText(/60% live progress/i)).toBeInTheDocument();
     expect(screen.getAllByText('Complete').length).toBeGreaterThan(0);
     expect(screen.getAllByText('In progress').length).toBeGreaterThan(0);
@@ -97,5 +122,29 @@ describe('persisted investigation result presentation', () => {
     render(<InvestigationResultsView results={results} caseRevision={2} job={{ case_revision: 2, stage: 'failed' }} />);
     expect(screen.getByText(/investigation failed/i)).toBeInTheDocument();
     expect(screen.getByText(/registry timeout/i)).toBeInTheDocument();
+  });
+
+  it('keeps an incomplete investigation separate from a successfully committed draft PDF', () => {
+    const incompleteWithPdf = {
+      ...results,
+      checkpoints: [{
+        id: 'cp-pdf',
+        stage: 'incomplete',
+        progress: 100,
+        safe_metadata: { render_status: 'ready', message: 'Unresolved verification gates remain.' },
+        created_at: '2026-09-18T00:02:00Z',
+      }],
+    } as any;
+    render(
+      <InvestigationResultsView
+        results={incompleteWithPdf}
+        caseRevision={2}
+        job={{ case_revision: 2, stage: 'incomplete' }}
+        onOpenPdf={() => {}}
+      />,
+    );
+    expect(screen.getByText(/draft report ready — analyst review required/i)).toBeInTheDocument();
+    expect(screen.getByText(/private PDF artifact is ready/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /open draft integritas pdf/i })).toBeEnabled();
   });
 });
