@@ -176,6 +176,7 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
     }
     if (/\b(?:logistics|shipping)\b/.test(role)) return { role: 'logistics_party', subject_scope: 'in_scope', entity_type: 'company' };
     if (/\bbank\b/.test(role)) return { role: 'bank', subject_scope: 'in_scope', entity_type: 'bank' };
+    if (/\b(?:beneficiary|counterparty|payee)\b/.test(role)) return { role: 'counterparty', subject_scope: 'in_scope', entity_type: 'company' };
     if (/\brepresentative\b/.test(role)) return { role: 'representative', subject_scope: 'unknown', entity_type: 'person' };
     return { role: 'unknown', subject_scope: 'unknown', entity_type: 'organization' };
   };
@@ -190,6 +191,27 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
     if ((match = text.match(/^BUYER\s+SHIPPING\s+(.+)$/i))) return [{ name: match[1], role: 'Buyer Logistics' }];
     if ((match = text.match(/^Bank\s+Name\s*:\s*(.+)$/i))) return [{ name: match[1], role: 'Bank' }];
     if ((match = text.match(/^(?:Representative|Represented\s+By)\s*:?\s*(.+)$/i))) return [{ name: cleanPerson(match[1]), role: 'Representative', person: true }];
+    return [];
+  };
+
+  // A model-shard outage must not turn explicitly labelled, trusted page fields
+  // into an empty entity graph. Keep this deliberately narrow: it accepts only
+  // party-bearing fields, never free prose or an inferred identity from a domain.
+  const structuredFieldCandidate = (raw) => {
+    const text = clean(raw, 700).replace(/^p\.\d+\s*:\s*/i, '');
+    let match;
+    if ((match = text.match(/^(?:remit\s+to:\s*)?bank\s+name\s*:\s*(.+)$/i))) {
+      return [{ name: match[1], role: 'Bank' }];
+    }
+    if ((match = text.match(/^account\s+name\s*:\s*(.+)$/i))) {
+      return [{ name: match[1], role: 'Payment beneficiary counterparty' }];
+    }
+    // Invoice and contract headers commonly put the named client first, followed
+    // by an identifier. Require a corporate suffix and a labelled transaction
+    // field so ordinary capitalised prose cannot become an entity.
+    if ((match = text.match(/^([A-Z][A-Z0-9& .,'-]{1,100}?(?:LLC|L\.L\.C\.|LTD|LIMITED|INC\.?|CORP\.?|CORPORATION|PLC|B\.V\.|GMBH))\.?\s+(?:invoice|contract|account|reference)\s*(?:number|no\.?|#|:)/i))) {
+      return [{ name: match[1], role: 'Buyer / Client' }];
+    }
     return [];
   };
 
@@ -285,6 +307,15 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
     for (const party of Array.isArray(summary.parties) ? summary.parties : []) {
       if (typeof party !== 'string' || !party.trim()) continue;
       parsedCandidates.push(...parsePartyCandidates(party));
+    }
+    // Trusted deterministic extraction preserves labelled headers even when a
+    // model shard is unavailable. Recover only those constrained headers here.
+    for (const field of [
+      ...(Array.isArray(summary.identifiers) ? summary.identifiers : []),
+      ...(Array.isArray(summary.material_terms) ? summary.material_terms : []),
+    ]) {
+      if (typeof field !== 'string' || !field.trim()) continue;
+      parsedCandidates.push(...structuredFieldCandidate(field));
     }
     for (const candidate of parsedCandidates) {
       const entityKey = upsertEntity(candidate);
