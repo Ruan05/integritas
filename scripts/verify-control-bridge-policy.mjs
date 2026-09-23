@@ -204,7 +204,7 @@ assert.match(nativeInstaller, /npm:@openclaw\/\$\{plugin\}@\$\{TARGET_VERSION\}/
 assert.match(nativeInstaller, /plugins registry --refresh/, 'native installer must refresh trusted plugin provenance after managed installation');
 assert.match(nativeInstaller, /@steipete\/summarize@\$\{SUMMARIZE_VERSION\}/, 'native installer must provision the verified Summarize CLI');
 assert.match(largeInvestigationRunner, /mapLimit\(shards, 2/, 'document shard concurrency must remain bounded at two to reduce provider-rate-limit cascades');
-assert.match(largeInvestigationRunner, /mapLimit\(plan\.research_lanes, 4/, 'research lane concurrency must remain bounded at four');
+assert.match(largeInvestigationRunner, /mapLimit\(orderedResearchLanes, 2/, 'research lane concurrency must preserve free-tier capacity with bounded two-lane execution');
 assert.match(largeInvestigationRunner, /failed every validated model route/, 'large-case runner must fail over on validation failure, not only transport failure');
 assert.match(largeInvestigationRunner, /validateInvestigationBundle\(finalBundle, manifest, reportMarkdown\)/, 'large-case deterministic assembly must pass canonical validation');
 assert.ok(!largeInvestigationRunner.includes('synthesis-task'), 'large-case final canonical bundle must not depend on giant model synthesis');
