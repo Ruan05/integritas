@@ -11,7 +11,7 @@ import { buildSubmittedSources, shouldUseLargeInvestigation } from './large-inve
 import { buildNoEvidenceReport, classifyDeterministicTextPreflight } from './workload-classifier.mjs';
 import { applyEvidenceDrivenSpecialistRouting } from './specialist-router.mjs';
 import { validateInvestigationBundle } from './control-worker/src/bundle.mjs';
-import { runLargeInvestigationV2 } from './large-investigation-agent-runner-v2.mjs';
+import { providerFamily, runLargeInvestigationV2, selectProviderDiverseModels } from './large-investigation-agent-runner-v2.mjs';
 
 function runBoundedOpenClaw(args, { cwd, env, timeoutSeconds, maxBuffer }) {
   return new Promise((resolve, reject) => {
@@ -291,22 +291,45 @@ function milestoneSnapshot(phase, plan = null, bundle = null) {
   ];
 }
 
-function buildArgs(messageFile, phaseRoute) {
-  const args = [
+function standardModelConfigured(model) {
+  const family = providerFamily(model);
+  if (family === 'nvidia') return !!process.env.NVIDIA_API_KEY;
+  if (family === 'openrouter') return !!process.env.OPENROUTER_API_KEY;
+  if (family === 'opencode-zen') return ZEN_ENABLED;
+  return false;
+}
+
+function standardProviderModels(phaseRoute) {
+  const configured = [phaseRoute.model, ...(phaseRoute.fallbacks ?? [])]
+    .filter(standardModelConfigured);
+  return selectProviderDiverseModels(configured, 3);
+}
+
+function standardAttemptTimeout(phaseRoute, model, progressState) {
+  if (progressState?.phase === 'adaptive_planning' && providerFamily(model) === 'nvidia') {
+    return Math.min(phaseRoute.timeoutSeconds, 90);
+  }
+  return phaseRoute.timeoutSeconds;
+}
+
+function buildArgs(messageFile, model, timeoutSeconds) {
+  return [
     'agent', 'exec',
     '--config', ACTIVE_CONFIG_PATH,
     '--cwd', jobDir,
     '--message-file', path.join(jobDir, messageFile),
     '--json',
     '--code-mode', 'direct',
-    '--model', phaseRoute.model,
+    '--model', model,
+    '--timeout', String(timeoutSeconds),
   ];
-  for (const fallback of phaseRoute.fallbacks ?? []) args.push('--fallback', fallback);
-  args.push('--timeout', String(phaseRoute.timeoutSeconds));
-  return args;
 }
 
 async function runAgent(messageFile, phaseRoute, progressState = null) {
+  const models = standardProviderModels(phaseRoute);
+  if (!models.length) throw new Error(`${progressState?.phase ?? 'agent'} has no configured provider route`);
+  const failures = [];
+  let activeAttempt = 'initializing';
   let heartbeatTimer = null;
   if (progressState) {
     heartbeatTimer = setInterval(() => writeProgress(
@@ -314,14 +337,38 @@ async function runAgent(messageFile, phaseRoute, progressState = null) {
       progressState.progress,
       progressState.phase,
       [],
-      `Waiting for bounded ${progressState.phase} provider response; the child process remains time-limited.`,
+      `Waiting for bounded ${progressState.phase} provider response via ${activeAttempt}; the provider attempt remains time-limited.`,
     ).catch(() => {}), 15_000);
     heartbeatTimer.unref?.();
   }
   try {
-    return await runBoundedOpenClaw(buildArgs(messageFile, phaseRoute), {
-      cwd: jobDir, env: agentEnv(), timeoutSeconds: phaseRoute.timeoutSeconds, maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
-    });
+    for (const [index, model] of models.entries()) {
+      const timeoutSeconds = standardAttemptTimeout(phaseRoute, model, progressState);
+      activeAttempt = `${providerFamily(model)} attempt ${index + 1}/${models.length}`;
+      try {
+        const raw = await runBoundedOpenClaw(buildArgs(messageFile, model, timeoutSeconds), {
+          cwd: jobDir, env: agentEnv(), timeoutSeconds, maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
+        });
+        parseEnvelope(raw, progressState?.phase ?? 'agent');
+        return raw;
+      } catch (error) {
+        failures.push({
+          model,
+          family: providerFamily(model),
+          error: String(error?.message ?? error).slice(0, 500),
+        });
+        if (progressState) {
+          await writeProgress(
+            progressState.stage,
+            progressState.progress,
+            progressState.phase,
+            [],
+            `${activeAttempt} failed; moving to the next configured provider family where available.`,
+          );
+        }
+      }
+    }
+    throw new Error(`${progressState?.phase ?? 'agent'} exhausted provider routes: ${failures.map((row) => `${row.family}=${row.error}`).join(' | ')}`);
   } finally {
     if (heartbeatTimer) clearInterval(heartbeatTimer);
   }
