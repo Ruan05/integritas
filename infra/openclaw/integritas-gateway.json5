@@ -78,8 +78,13 @@
       rememberAcrossConversations: true,
     },
   },
+  // The operator Gateway uses the same key-free Parallel Search path already
+  // proven by the isolated investigation runner. parallel-free must be selected
+  // explicitly; OpenClaw intentionally does not auto-select key-free providers.
   plugins: {
+    load: { paths: ["/opt/openclaw-source/extensions/parallel"] },
     entries: {
+      parallel: { enabled: true },
       "active-memory": {
         enabled: true,
         config: {
@@ -100,6 +105,17 @@
           dreaming: { enabled: true },
         },
       },
+    },
+  },
+  tools: {
+    web: {
+      search: {
+        enabled: true,
+        provider: "parallel-free",
+        maxResults: 8,
+        timeoutSeconds: 45,
+      },
+      fetch: { enabled: true },
     },
   },
 }
