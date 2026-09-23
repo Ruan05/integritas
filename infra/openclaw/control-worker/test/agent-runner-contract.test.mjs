@@ -318,3 +318,27 @@ test('investigation prompts use the headless --cwd workspace boundary', async ()
   assert.doesNotMatch(runtime, /\/workspace\//, 'runtime prompt must not use writable /workspace paths');
   assert.doesNotMatch(skill, /\/workspace\//, 'skill must not use writable /workspace paths');
 });
+
+
+test('deterministic fallback recovers bounded entities from trusted shard party rows', async () => {
+  const { buildDeterministicCaseAnalysis } = await import('../../large-investigation-agent-runner-v2.mjs');
+  const result = buildDeterministicCaseAnalysis([{
+    document_id: '11111111-1111-4111-8111-111111111111',
+    parties: [
+      'ACME FUELS LLC — issuer/seller, Reg. No. 12345',
+      'LABCO MARIN LTD — remittance beneficiary/account holder, Atlanta GA',
+      'Chris Mayfield (Chief Accountant) — invoice contact',
+    ],
+    identifiers: ['Contract Number: TEST-001'],
+    material_terms: ['Product: EN590'],
+    risk_flags: ['Third-party payment beneficiary requires verification'],
+    evidence_excerpt: 'Trusted synthetic shard summary for deterministic fallback testing.',
+  }]);
+  const byName = new Map(result.entities.map((row) => [row.display_name, row]));
+  assert.ok(byName.has('ACME FUELS LLC'), 'seller entity must be recovered from the dedicated parties field');
+  assert.ok(byName.has('LABCO MARIN LTD'), 'beneficiary entity must be recovered from the dedicated parties field');
+  assert.ok(byName.has('Chris Mayfield'), 'named person must be recovered without retaining the parenthetical title');
+  assert.equal(byName.get('ACME FUELS LLC')?.identifiers?.role, 'seller_counterparty');
+  assert.equal(byName.get('LABCO MARIN LTD')?.identifiers?.role, 'counterparty');
+  assert.equal(byName.get('Chris Mayfield')?.entity_type, 'person');
+});
