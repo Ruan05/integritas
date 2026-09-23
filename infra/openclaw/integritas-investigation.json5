@@ -11,7 +11,7 @@
     providers: {
       "integritas-openrouter": {
         baseUrl: "https://openrouter.ai/api/v1",
-        apiKey: { source: "env", provider: "default", id: "OPENROUTER_API_KEY" },
+        apiKey: "${OPENROUTER_API_KEY}",
         api: "openai-completions",
         authHeader: true,
         timeoutSeconds: 90,
@@ -264,7 +264,7 @@
       },
       "integritas-nvidia": {
         baseUrl: "https://integrate.api.nvidia.com/v1",
-        apiKey: { source: "env", provider: "default", id: "NVIDIA_API_KEY" },
+        apiKey: "${NVIDIA_API_KEY}",
         api: "openai-completions",
         authHeader: true,
         timeoutSeconds: 90,
