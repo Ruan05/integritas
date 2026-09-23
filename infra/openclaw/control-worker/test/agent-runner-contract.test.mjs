@@ -17,7 +17,7 @@ test('OpenClaw runner materializes only validated structured final output', asyn
 
 test('OpenClaw runner uses evidence-first planning, bounded research and an independent critic for deep work', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
-  assert.match(source, /const NVIDIA_PRIMARY = 'integritas-nvidia\/nvidia\/nemotron-3-ultra-550b-a55b'/);
+  assert.match(source, /const NVIDIA_PRIMARY = 'integritas-nvidia\/z-ai\/glm-5\.3'/);
   assert.match(source, /const FREE_FAST = 'integritas-openrouter\/nvidia\/nemotron-3-super-120b-a12b:free'/);
   assert.match(source, /const ZEN_ENABLED = !!process\.env\.OPENCODE_ZEN_API_KEY && existsSync\(ZEN_ENABLE_MARKER\)/);
   assert.match(source, /const ZEN_ENABLE_MARKER = '\/etc\/openclaw\/zen-enabled'/);
