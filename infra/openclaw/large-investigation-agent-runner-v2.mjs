@@ -217,6 +217,28 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
     return [];
   };
 
+  const trustedShardPartyCandidate = (raw) => {
+    const text = clean(raw, 1200);
+    const match = text.match(/^(.{2,180}?)\s+(?:—|–|-)\s+(.{2,500})$/);
+    if (!match) return [];
+    const name = clean(match[1], 180);
+    const roleText = clean(match[2], 500);
+    if (!name || name.split(/\s+/).length > 16
+      || !/\b(?:buyer|seller|issuer|shipowner|charterer|beneficiary|account\s+holder|bank|representative|addressee|contact|counterparty|logistics|shipping|ceo|chief\s+accountant|director|officer|operations?\s+manager)\b/i.test(roleText)) return [];
+    const organizationName = /\b(?:llc|l\.l\.c\.?|ltd|limited|inc\.?|corp\.?|corporation|plc|gmbh|b\.v\.|fze|fzco|dmcc|bank)\b/i.test(name);
+    const person = !organizationName
+      && /\b(?:ceo|chief\s+accountant|director|officer|operations?\s+manager|representative|addressee|contact)\b/i.test(roleText);
+    let role = roleText;
+    if (person) role = 'Representative';
+    else if (/\b(?:issuer|seller|exporter|title\s*holder)\b/i.test(roleText)) role = 'Seller / Title Holder';
+    else if (/\b(?:beneficiary|account\s+holder|payee)\b/i.test(roleText)) role = 'Payment beneficiary counterparty';
+    else if (/\bbank\b/i.test(roleText)) role = 'Bank';
+    else if (/\b(?:logistics|shipping)\b/i.test(roleText)) role = 'Logistics';
+    else if (/\bbuyer\b/i.test(roleText)) role = 'Buyer / Client';
+    else if (/\bcounterparty\b/i.test(roleText)) role = 'Counterparty';
+    return [{ name: person ? cleanPerson(name) : name, role, person }];
+  };
+
   const parsePartyCandidates = (raw) => {
     const text = clean(raw, 1200);
     if (!text) return [];
@@ -251,6 +273,8 @@ export function buildDeterministicCaseAnalysis(documentSummaries) {
       }
       return rows;
     }
+    const trustedShardParty = trustedShardPartyCandidate(text);
+    if (trustedShardParty.length) return trustedShardParty;
     return explicitLabelCandidate(text);
   };
 
