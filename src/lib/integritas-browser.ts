@@ -49,7 +49,7 @@ function versionAtLeast(version: string | undefined, minimum: [number, number, n
 }
 
 export function isInvestigationRuntimeReady(runtime: RuntimeStatus | null | undefined, now = Date.now()) {
-  if (!runtime || runtime.openclaw_status !== 'active' || !versionAtLeast(runtime.worker_version, [0, 3, 6])) return false;
+  if (!runtime || runtime.openclaw_status !== 'active' || !versionAtLeast(runtime.worker_version, [0, 4, 1])) return false;
   const seen = Date.parse(runtime.last_seen_at ?? '');
   const age = now - seen;
   if (!Number.isFinite(seen) || age < 0 || age > 90_000) return false;
@@ -61,7 +61,10 @@ export function isInvestigationRuntimeReady(runtime: RuntimeStatus | null | unde
     && flags.signed_manifests === true
     && flags.durable_checkpoints === true
     && flags.deterministic_qa === true
-    && flags.atomic_bundle_commit === true;
+    && flags.atomic_bundle_commit === true
+    && flags.model_discovery_v1 === true
+    && flags.live_progress_feed_v1 === true
+    && flags.independent_artifact_state_v1 === true;
 }
 
 export function validateCaseDocumentSelection(existingCount: number, files: File[]) {
