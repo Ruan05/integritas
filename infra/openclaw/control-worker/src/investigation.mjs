@@ -245,6 +245,22 @@ function normalizeTerminalOutcome(bundle) {
   };
 }
 
+function assertReportAdmission(bundle, manifest) {
+  const documents = Array.isArray(manifest?.documents) ? manifest.documents : [];
+  const entities = Array.isArray(bundle?.entities) ? bundle.entities : [];
+  const findings = Array.isArray(bundle?.findings) ? bundle.findings : [];
+  // A substantive evidence package with named-party/transaction findings cannot
+  // be presented as a due-diligence report without a normalized subject graph.
+  // Preserve the durable workspace for recovery, but block publication so a
+  // template-heavy PDF never disguises a failed entity-normalisation phase.
+  const hasSubstantiveEvidence = documents.length > 0 && findings.some((row) =>
+    ['identity', 'authority', 'banking', 'transaction', 'document_forensics', 'corporate'].some((term) =>
+      String(row?.finding_type ?? '').toLowerCase().includes(term)));
+  if (hasSubstantiveEvidence && entities.length === 0) {
+    throw new Error('report_admission_failed: substantive evidence has no normalized entities');
+  }
+}
+
 function buildBundleTemplate(manifest, forensics = null) {
   const now = new Date().toISOString();
   return {
@@ -866,6 +882,7 @@ export async function executeInvestigation(command, {
       await chmod(bundlePath, SHARED_FILE_MODE);
     }
     validateInvestigationBundle(bundleJson, safeManifest, report.toString('utf8'));
+    assertReportAdmission(bundleJson, safeManifest);
     if (bundle.includes('/storage/v1/object/sign/') || report.includes('/storage/v1/object/sign/')) throw new Error('signed URL leaked into investigation output');
     const latestAgentProgress = await readAgentProgress(jobDir);
     let finalMilestones = sanitizeMilestones(latestAgentProgress?.milestones);
