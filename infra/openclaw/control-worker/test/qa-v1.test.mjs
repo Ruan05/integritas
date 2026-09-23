@@ -99,3 +99,39 @@ test('v1 deterministic QA rejects report divergence and unsupported completed ga
     },
   );
 });
+
+test('maximum QA rejects discovery-only evidence presented as validated research', async () => {
+  const report = '# MASTER SUMMARY — READ THIS FIRST\nCase incomplete. The report contains 1 validated external source.\n\n# DIRECT NEXT STEPS — WHAT TO DO NOW\nOpen and verify the underlying source.';
+  const bad = bundle(report, {
+    depth: 'maximum',
+    sources: [
+      {
+        source_key: 'source-1', source_type: 'document', title: 'Source',
+        url: null, document_id: '44444444-4444-4444-8444-444444444444',
+        page_reference: 'p1', excerpt: 'Evidence', reliability_note: 'direct',
+        evidence_origin: 'submitted_document', verification_state: 'submitted',
+        retrieved_at: '2026-09-18T05:00:00Z',
+      },
+      {
+        source_key: 'ext.discovery', source_type: 'secondary', title: 'Search discovery',
+        url: 'https://example.test/discovery', document_id: null, page_reference: null,
+        excerpt: 'Search snippet', reliability_note: 'Search discovery only. The underlying URL was not opened.',
+        evidence_origin: 'external_research', verification_state: 'discovered',
+        retrieved_at: '2026-09-18T05:00:00Z',
+      },
+    ],
+    execution: {
+      started_at: '2026-09-18T04:00:00Z', completed_at: '2026-09-18T05:00:00Z',
+      stages: ['researching'], tool_results: [], warnings: [], terminal_outcome: 'incomplete',
+    },
+  });
+  await assert.rejects(
+    runQa(bad, report),
+    (error) => {
+      const parsed = JSON.parse(error.stdout);
+      assert.equal(parsed.valid, false);
+      assert.ok(parsed.errors.some((entry) => /report claims 1 validated external source/i.test(entry)));
+      return true;
+    },
+  );
+});

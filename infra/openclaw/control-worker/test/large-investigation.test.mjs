@@ -18,7 +18,7 @@ import {
   parseReportSectionFinal,
   shouldUseLargeInvestigation,
 } from '../../large-investigation.mjs';
-import { artifactFingerprint, buildDeterministicCaseAnalysis, buildGroqBrowserLaneResult, deterministicSyntheticCaseAnalysis, deterministicSyntheticCritic, deterministicProviderReportSection, providerBlockedCritic, providerBlockedLane } from '../../large-investigation-agent-runner-v2.mjs';
+import { artifactFingerprint, buildDeterministicCaseAnalysis, buildGroqBrowserLaneResult, deterministicSyntheticCaseAnalysis, deterministicSyntheticCritic, deterministicProviderReportSection, providerBlockedCritic, providerBlockedLane, providerFamily, selectProviderDiverseModels } from '../../large-investigation-agent-runner-v2.mjs';
 
 const CASE_ID='11111111-1111-4111-8111-111111111111';
 const JOB_ID='22222222-2222-4222-8222-222222222222';
@@ -30,6 +30,37 @@ test('phase artifact fingerprint invalidates a changed procedure or input', () =
   assert.equal(artifactFingerprint(base), artifactFingerprint({ ...base }));
   assert.notEqual(artifactFingerprint(base), artifactFingerprint({ ...base, task: 'evidence=B' }));
   assert.notEqual(artifactFingerprint(base), artifactFingerprint({ ...base, procedureVersion: 'v2' }));
+});
+
+test('provider attempt limit preserves provider-family diversity', () => {
+  const models = [
+    'integritas-nvidia/z-ai/glm-5.3',
+    'integritas-nvidia/z-ai/glm-5.3-flash',
+    'integritas-openrouter/openrouter/free',
+    'integritas-opencode-zen/big-pickle',
+  ];
+  const selected = selectProviderDiverseModels(models, 3);
+  assert.deepEqual(selected, [
+    'integritas-nvidia/z-ai/glm-5.3',
+    'integritas-openrouter/openrouter/free',
+    'integritas-opencode-zen/big-pickle',
+  ]);
+  assert.deepEqual(selected.map(providerFamily), ['nvidia', 'openrouter', 'opencode-zen']);
+});
+
+test('provider attempt budget preserves provider-family diversity before same-family retries', () => {
+  const models = [
+    'integritas-nvidia/z-ai/glm-5.3',
+    'integritas-nvidia/z-ai/glm-5.3-flash',
+    'integritas-openrouter/openrouter/free',
+    'integritas-openrouter/nex-agi/nex-n2.5-pro:free',
+    'integritas-opencode-zen/big-pickle',
+  ];
+  assert.equal(providerFamily(models[0]), 'nvidia');
+  assert.equal(providerFamily(models[2]), 'openrouter');
+  assert.equal(providerFamily(models[4]), 'opencode-zen');
+  assert.deepEqual(selectProviderDiverseModels(models, 2), [models[0], models[2]]);
+  assert.deepEqual(selectProviderDiverseModels(models, 3), [models[0], models[2], models[4]]);
 });
 
 test('Groq browser fallback keeps search discoveries out of verified source status', () => {
@@ -50,6 +81,7 @@ test('Groq browser fallback keeps search discoveries out of verified source stat
   assert.equal(result.lane_id, lane.lane_id);
   assert.equal(result.sources.length, 2);
   assert.equal(result.sources[0].source_type, 'secondary');
+  assert.equal(result.sources[0].verification_state, 'discovered');
   assert.equal(result.sources[0].retrieved_at, '2026-09-22T16:00:00.000Z');
   assert.equal(result.findings[0].evidence_status, 'uncertain');
   assert.equal(result.findings[0].reliability, 'low');
@@ -84,7 +116,7 @@ test('provider failure preserves revision-required critic and a structured repor
   assert.match(text, /# MASTER SUMMARY — READ THIS FIRST/);
   assert.match(text, /Executive Decision Summary/);
   assert.match(text, /## DIRECT NEXT STEPS — WHAT TO DO NOW/);
-  assert.ok(text.length < 1800, 'deterministic fallback must not pad evidence-free sections to a target length');
+  assert.ok(text.length < 2400, 'deterministic fallback must stay compact rather than padding evidence-free sections');
   assert.doesNotMatch(text, /Evidence completeness note:.*Evidence completeness note:/s, 'fallback must not repeat boilerplate to satisfy length');
 });
 
@@ -295,6 +327,27 @@ test('deterministic case-analysis fallback recovers labelled parties from truste
   const beneficiary=result.entities.find((row)=>row.display_name==='LABCO MARIN LTD');
   assert.equal(beneficiary.identifiers.role,'counterparty');
   assert.equal(beneficiary.identifiers.subject_scope,'in_scope');
+  assert.ok(result.relationships.some((row)=>row.relationship_type==='banking_relationship_claim'));
+  assert.ok(result.relationships.some((row)=>row.relationship_type==='payment_counterparty_claim'));
+});
+
+test('deterministic case-analysis fallback preserves explicit cross-document identifier contradictions', () => {
+  const result=buildDeterministicCaseAnalysis([
+    {
+      document_id:DOC1, parties:[],
+      identifiers:['p.1: Registration Number: 2020/123','p.1: SWIFT BIC: UPNBUS44XXX'],
+      material_terms:['p.1: Contract No: DOC-001'], risk_flags:[], evidence_excerpt:'Document one.'
+    },
+    {
+      document_id:DOC2, parties:[],
+      identifiers:['p.1: Registration Number: 2020/999','p.1: SWIFT BIC: ABCDUS33XXX'],
+      material_terms:['p.1: Contract No: DOC-001'], risk_flags:[], evidence_excerpt:'Document two.'
+    },
+  ]);
+  assert.ok(result.contradictions.some((row)=>row.contradiction_key==='contradiction.registration-number'));
+  assert.ok(result.contradictions.some((row)=>row.contradiction_key==='contradiction.bic'));
+  assert.equal(result.contradictions.some((row)=>row.contradiction_key==='contradiction.contract-number'),false);
+  assert.ok(result.findings.filter((row)=>row.finding_type==='cross_document_identifier_conflict').length>=4);
 });
 
 test('trusted synthetic case analysis deterministically separates conflicting same-name identities', () => {

@@ -320,6 +320,7 @@ Deno.serve(async (req) => {
         const sourceKey = typeof body.source_key === 'string' ? body.source_key : '';
         const url = typeof body.url === 'string' ? body.url : '';
         const title = typeof body.title === 'string' ? body.title.trim().slice(0, 500) : '';
+        const verificationState = typeof body.verification_state === 'string' ? body.verification_state : '';
         const retrievedAt = typeof body.retrieved_at === 'string' ? body.retrieved_at : '';
         const toolSummary = isObject(body.tool_summary) ? body.tool_summary : {};
         const tools = Array.isArray(toolSummary.tools)
@@ -334,7 +335,8 @@ Deno.serve(async (req) => {
           || !Number.isInteger(caseRevision) || Number(caseRevision) < 0
           || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(sourceKey)
           || !parsedUrl || parsedUrl.protocol !== 'https:' || url.length > 2048
-          || !title || !Number.isFinite(retrievedMs)
+          || !title || !['discovered', 'opened', 'validated', 'claim_supporting'].includes(verificationState)
+          || !Number.isFinite(retrievedMs)
           || !Number.isInteger(calls) || calls < 1 || calls > 500
           || !Number.isInteger(failures) || failures < 0 || failures > calls
           || tools.length < 1) {
@@ -346,14 +348,14 @@ Deno.serve(async (req) => {
         if (!isObject(context) || !validUuid(context.case_id) || context.case_revision !== caseRevision) {
           throw new Error('invalid research source job context');
         }
-        const safeMetadata = { source_key: sourceKey, url, tools: [...new Set(tools)], calls, failures };
+        const safeMetadata = { source_key: sourceKey, url, verification_state: verificationState, tools: [...new Set(tools)], calls, failures };
         const existing = await service.from('integritas_tool_invocations')
           .select('id')
           .eq('case_id', context.case_id)
           .eq('case_job_id', caseJobId)
           .eq('tool_name', 'openclaw_external_research')
           .eq('status', 'completed')
-          .contains('safe_metadata', { source_key: sourceKey, url })
+          .contains('safe_metadata', { source_key: sourceKey, url, verification_state: verificationState })
           .order('completed_at', { ascending: false })
           .limit(1)
           .maybeSingle();

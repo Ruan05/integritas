@@ -23,8 +23,8 @@ function bundle(markdown) {
     ],
     checks: [{ check_key: 'deterministic.iban.01.check', check_type: 'iban_checksum', description: 'IBAN structural check', status: 'complete', outcome: 'Remainder 35; invalid.' }, { check_key: 'lane.transaction.trade_finance', check_type: 'research_lane', description: 'Verify trade-finance structure', status: 'blocked', outcome: 'Issuer confirmation required.' }],
     sources: [
-      { source_key: 'doc-one', evidence_origin: 'submitted_document', title: 'Submitted invoice', page_reference: 'p.3', reliability_note: 'Submitted evidence; authenticity not assumed.' },
-      { source_key: 'web-one', evidence_origin: 'external_research', title: 'Official registry', page_reference: null, reliability_note: 'Official public source.' },
+      { source_key: 'doc-one', evidence_origin: 'submitted_document', verification_state: 'submitted', title: 'Submitted invoice', page_reference: 'p.3', reliability_note: 'Submitted evidence; authenticity not assumed.' },
+      { source_key: 'web-one', evidence_origin: 'external_research', verification_state: 'validated', title: 'Official registry', page_reference: null, reliability_note: 'Official public source.' },
     ],
     contradictions: [{ contradiction_key: 'registration', description: 'Two registration numbers are claimed.', finding_keys: ['registration-a', 'registration-b'] }],
     unresolved_checks: [{ description: 'Confirm beneficiary ownership.', blocker: 'Direct bank confirmation unavailable.', next_manual_action: 'Ask the bank through independently sourced contact details.' }],
@@ -55,6 +55,8 @@ test('template derives visual metrics from structured evidence', () => {
   assert.equal(spec.counts.entities, 2);
   assert.equal(spec.counts.findings, 2);
   assert.equal(spec.counts.external_sources, 1);
+  assert.equal(spec.counts.validated_external_sources, 1);
+  assert.equal(spec.counts.discovery_external_sources, 0);
   assert.equal(spec.counts.unresolved, 1);
   assert.equal(spec.check_completion_percent, 50);
   const html = buildIndexHtml(value);
@@ -64,6 +66,8 @@ test('template derives visual metrics from structured evidence', () => {
   assert.match(html, /Claim-to-evidence matrix/);
   assert.match(html, /Banking, logistics & trade checks/);
   assert.match(html, /Source coverage/);
+  assert.match(html, /Verification/);
+  assert.match(html, /validated/);
   assert.match(html, /Contradiction matrix/);
   assert.match(html, /Unresolved verification gates/);
   assert.match(html, /Investigation timeline/);

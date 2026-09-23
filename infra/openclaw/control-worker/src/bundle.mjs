@@ -121,7 +121,7 @@ export function validateInvestigationBundle(bundle, manifest, reportMarkdown) {
   }
   const entities = keyed(entityRows, 'entity_key', 'entity');
 
-  const sourceFields = new Set(['source_key', 'source_type', 'title', 'url', 'document_id', 'page_reference', 'excerpt', 'reliability_note', 'evidence_origin', 'retrieved_at']);
+  const sourceFields = new Set(['source_key', 'source_type', 'title', 'url', 'document_id', 'page_reference', 'excerpt', 'reliability_note', 'evidence_origin', 'verification_state', 'retrieved_at']);
   const manifestDocumentIds = new Set((manifest.documents ?? []).map((document) => document.id));
   for (const source of sourceRows) {
     assertAllowedKeys(source, sourceFields, 'source');
@@ -132,10 +132,12 @@ export function validateInvestigationBundle(bundle, manifest, reportMarkdown) {
     if (source.evidence_origin === 'submitted_document') {
       if (source.source_type !== 'document') throw new Error('submitted document evidence requires document source type');
       if (source.document_id == null) throw new Error('submitted document evidence requires a document_id');
+      if (source.verification_state != null && source.verification_state !== 'submitted') throw new Error('submitted document verification_state is invalid');
     }
     if (source.evidence_origin === 'external_research') {
       if (source.url == null) throw new Error('external research evidence requires an https url');
       if (source.document_id != null) throw new Error('external research evidence cannot reference a submitted document');
+      if (source.verification_state != null && !['discovered', 'opened', 'validated', 'claim_supporting'].includes(source.verification_state)) throw new Error('external research verification_state is invalid');
     }
     if (source.page_reference != null) assertString(source.page_reference, 'source.page_reference', 500, { allowEmpty: true });
     if (typeof source.excerpt !== 'string') throw new Error('source.excerpt is invalid');

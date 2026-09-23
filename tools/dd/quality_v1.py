@@ -169,7 +169,7 @@ def validate_entities(bundle, errors):
 
 
 def validate_sources(bundle, manifest, errors):
-    fields = {'source_key', 'source_type', 'title', 'url', 'document_id', 'page_reference', 'excerpt', 'reliability_note', 'evidence_origin', 'retrieved_at'}
+    fields = {'source_key', 'source_type', 'title', 'url', 'document_id', 'page_reference', 'excerpt', 'reliability_note', 'evidence_origin', 'verification_state', 'retrieved_at'}
     sources = keyed(bundle.get('sources'), 'source_key', 'sources', errors)
     document_ids = {row.get('id') for row in manifest.get('documents', []) if isinstance(row, dict)}
     submitted_ids = set()
@@ -189,6 +189,13 @@ def validate_sources(bundle, manifest, errors):
         origin = row.get('evidence_origin')
         if origin not in {'submitted_document', 'external_research'}:
             errors.append(f'source {key}: invalid evidence_origin')
+        state = row.get('verification_state')
+        if state is not None and state not in {'submitted', 'discovered', 'opened', 'validated', 'claim_supporting'}:
+            errors.append(f'source {key}: invalid verification_state')
+        if origin == 'submitted_document' and state not in {None, 'submitted'}:
+            errors.append(f'source {key}: submitted evidence must use submitted verification_state')
+        if origin == 'external_research' and state == 'submitted':
+            errors.append(f'source {key}: external research cannot use submitted verification_state')
         elif origin == 'submitted_document':
             if row.get('source_type') != 'document':
                 errors.append(f'source {key}: submitted document must use source_type document')
@@ -542,6 +549,18 @@ def validate_semantic_maximum(bundle, manifest, report_text, errors, plan=None, 
     checks = bundle.get('checks') if isinstance(bundle.get('checks'), list) else []
     external = [row for row in sources if isinstance(row, dict) and row.get('evidence_origin') == 'external_research']
     submitted = [row for row in sources if isinstance(row, dict) and row.get('evidence_origin') == 'submitted_document']
+    def source_state(row):
+        explicit = row.get('verification_state') if isinstance(row, dict) else None
+        if explicit in {'submitted', 'discovered', 'opened', 'validated', 'claim_supporting'}:
+            return explicit
+        if isinstance(row, dict) and row.get('evidence_origin') == 'submitted_document':
+            return 'submitted'
+        note = str(row.get('reliability_note', '') if isinstance(row, dict) else '').lower()
+        if 'search discovery only' in note or 'underlying url was not opened' in note:
+            return 'discovered'
+        return 'validated'
+    validated_external = [row for row in external if source_state(row) in {'validated', 'claim_supporting'}]
+    discovery_external = [row for row in external if source_state(row) == 'discovered']
     outcome = (bundle.get('execution') or {}).get('terminal_outcome') if isinstance(bundle.get('execution'), dict) else None
 
     # A Maximum investigation must never collapse into a single generic research lane.
@@ -604,12 +623,18 @@ def validate_semantic_maximum(bundle, manifest, report_text, errors, plan=None, 
 
     # A completed external due-diligence case needs independent public-source evidence.
     if outcome == 'completed':
-        if len(external) < 2:
+        if len(validated_external) < 2:
             errors.append('semantic QA: completed maximum investigation requires at least two validated external research sources')
-        if external and not any(row.get('source_type') in {'official', 'primary'} for row in external):
-            errors.append('semantic QA: completed maximum investigation lacks an official/primary external source')
-    elif len(external) == 0 and not re.search(r'\bincomplete\b|research\s+(?:was\s+)?(?:blocked|unavailable)|no validated external', report_text, flags=re.I):
-        errors.append('semantic QA: zero-external-source maximum report must be explicitly labelled incomplete/blocked')
+        if validated_external and not any(row.get('source_type') in {'official', 'primary'} for row in validated_external):
+            errors.append('semantic QA: completed maximum investigation lacks an official/primary validated external source')
+    elif len(validated_external) == 0 and not re.search(r'\bincomplete\b|research\s+(?:was\s+)?(?:blocked|unavailable)|no validated external|discovery-only', report_text, flags=re.I):
+        errors.append('semantic QA: zero-validated-external-source maximum report must be explicitly labelled incomplete/blocked')
+
+    claimed_validated_counts = [int(value) for value in re.findall(r'\b(\d+)\s+validated external(?: research)? source', report_text, flags=re.I)]
+    if claimed_validated_counts and max(claimed_validated_counts) > len(validated_external):
+        errors.append(f'semantic QA: report claims {max(claimed_validated_counts)} validated external source(s) but only {len(validated_external)} are validation-grade')
+    if discovery_external and len(validated_external) == 0 and re.search(r'validated external research sources are present', report_text, flags=re.I):
+        errors.append('semantic QA: discovery-only sources were presented as validated external research')
 
     # Comprehensive reports must visibly anchor their analysis to the canonical source ledger.
     source_keys = [row.get('source_key') for row in sources if isinstance(row, dict) and isinstance(row.get('source_key'), str)]
@@ -633,16 +658,25 @@ def validate_semantic_maximum(bundle, manifest, report_text, errors, plan=None, 
         if duplicate_ratio > 0.12:
             errors.append(f'semantic QA: repeated boilerplate ratio is too high ({duplicate_ratio:.2f})')
 
-    # A provider-availability critic cannot certify a completed comprehensive case.
-    if outcome == 'completed' and isinstance(agent_exec, dict):
+    # Provider-blocked critic/report synthesis must be visible and cannot certify a completed comprehensive case.
+    if isinstance(agent_exec, dict):
         phases = agent_exec.get('phases') if isinstance(agent_exec.get('phases'), list) else []
         critic = next((row for row in phases if isinstance(row, dict) and row.get('phase') == 'large-critic'), None)
-        if critic and str(critic.get('model', '')).startswith('deterministic-review-gate'):
-            errors.append('semantic QA: completed maximum report requires a real independent critic, not deterministic provider fallback')
+        critic_degraded = bool(critic and (str(critic.get('model', '')).startswith('deterministic-review-gate') or critic.get('failed_candidates')))
+        report_phases = [row for row in phases if isinstance(row, dict) and str(row.get('phase', '')).startswith('report-')]
+        report_degraded = any(row.get('failed_candidates') or str(row.get('model', '')).startswith('deterministic-report-section') for row in report_phases)
+        if outcome == 'completed' and critic_degraded:
+            errors.append('semantic QA: completed maximum report requires a real independent critic, not provider-blocked fallback')
+        if outcome == 'completed' and report_degraded:
+            errors.append('semantic QA: completed maximum report cannot rely on degraded deterministic report synthesis')
+        if report_degraded and 'DEGRADED DETERMINISTIC FALLBACK' not in report_text:
+            errors.append('semantic QA: degraded deterministic report synthesis must be explicitly disclosed in the report')
 
     return {
         'research_lanes': len(lanes),
         'external_sources': len(external),
+        'validated_external_sources': len(validated_external),
+        'discovery_external_sources': len(discovery_external),
         'source_anchor_ratio': (len(mentioned) / len(source_keys)) if source_keys else 1.0,
         'duplicate_paragraph_ratio': round(duplicate_ratio, 4),
         'pdf_tool_observed': pdf_tool_observed,

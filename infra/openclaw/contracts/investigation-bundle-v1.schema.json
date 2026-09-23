@@ -70,6 +70,7 @@
         "excerpt": { "type": "string", "maxLength": 8000 },
         "reliability_note": { "type": "string", "maxLength": 4000 },
         "evidence_origin": { "enum": ["submitted_document", "external_research"] },
+        "verification_state": { "enum": ["submitted", "discovered", "opened", "validated", "claim_supporting"] },
         "retrieved_at": { "type": "string", "format": "date-time" }
       }
     },

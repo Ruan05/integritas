@@ -40,7 +40,7 @@ test('investigation methods use bounded worker actions without embedding credent
     '11111111-1111-4111-8111-111111111111',
     '22222222-2222-4222-8222-222222222222',
     4,
-    { source_key: 'source-web', url: 'https://example.com/source', title: 'Example source', retrieved_at: '2026-09-18T20:00:00Z' },
+    { source_key: 'source-web', url: 'https://example.com/source', title: 'Example source', verification_state: 'validated', retrieved_at: '2026-09-18T20:00:00Z' },
     { calls: 2, failures: 0, tools: ['web_fetch'] },
   );
   await client.commitBundle('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 4, 'a'.repeat(64), 'b'.repeat(64), { schema_version: 1 });

@@ -211,6 +211,7 @@ export function buildSubmittedSources(manifest, documentSummaries, retrievedAt) 
       excerpt: detailLines.join('\\n'),
       reliability_note: 'Submitted evidence; authenticity and claims require independent verification unless otherwise established.',
       evidence_origin: 'submitted_document',
+      verification_state: 'submitted',
       retrieved_at: retrievedAt,
     };
   });
@@ -369,7 +370,7 @@ export function parseLaneFinal(finalText, expectedLaneId, allowedEntityKeys, all
   const sourceRefs = new Set();
   for (const row0 of arr(parsed.sources, 'lane sources', 8)) {
     const row = obj(row0, 'lane source');
-    allowedKeys(row, new Set(['source_ref','source_type','title','url','excerpt','reliability_note','retrieved_at']), 'lane source');
+    allowedKeys(row, new Set(['source_ref','source_type','title','url','excerpt','reliability_note','verification_state','retrieved_at']), 'lane source');
     key(row.source_ref, 'source_ref');
     if (sourceRefs.has(row.source_ref)) fail('duplicate source_ref');
     sourceRefs.add(row.source_ref);
@@ -378,6 +379,7 @@ export function parseLaneFinal(finalText, expectedLaneId, allowedEntityKeys, all
     if (typeof row.url !== 'string' || !row.url.startsWith('https://') || row.url.length > 2048) fail('lane source url is invalid');
     str(row.excerpt, 'lane source excerpt', 1500, true);
     str(row.reliability_note, 'lane reliability_note', 1000, true);
+    if (row.verification_state != null) enumValue(row.verification_state, ['discovered','opened','validated','claim_supporting'], 'lane verification_state');
     isoDate(row.retrieved_at, 'lane retrieved_at');
   }
   for (const row0 of arr(parsed.findings, 'lane findings', 8)) {
@@ -431,6 +433,7 @@ export function materializeLaneResult(parsed, lane, laneIndex) {
       excerpt: row.excerpt,
       reliability_note: row.reliability_note,
       evidence_origin: 'external_research',
+      verification_state: row.verification_state,
       retrieved_at: row.retrieved_at,
     };
   });

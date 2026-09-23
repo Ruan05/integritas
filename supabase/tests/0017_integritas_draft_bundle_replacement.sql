@@ -157,8 +157,16 @@ select pg_temp.assert_true(
   'replacement atomically updates the one draft report'
 );
 
+update public.integritas_case_jobs
+set stage='incomplete', progress=100
+where id=:'rep_case_job_id'::uuid;
+
 update public.integritas_reports
-set status='finalized'
+set status='reviewed', reviewed_at=now()
+where case_job_id=:'rep_case_job_id'::uuid;
+
+update public.integritas_reports
+set status='finalized', finalized_at=now()
 where case_job_id=:'rep_case_job_id'::uuid;
 
 select public.integritas_register_case_job_output(

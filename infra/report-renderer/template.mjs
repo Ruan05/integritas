@@ -39,7 +39,9 @@ export function buildRenderSpec(bundle) {
   const contradictions = Array.isArray(bundle?.contradictions) ? bundle.contradictions : [];
   const unresolved = Array.isArray(bundle?.unresolved_checks) ? bundle.unresolved_checks : [];
   const completedChecks = checks.filter((row) => row?.status === 'complete').length;
-  const externalSources = sources.filter((row) => row?.evidence_origin === 'external_research').length;
+  const externalSources = sources.filter((row) => row?.evidence_origin === 'external_research');
+  const validatedExternalSources = externalSources.filter((row) => ['validated', 'claim_supporting'].includes(row?.verification_state)).length;
+  const discoveryExternalSources = externalSources.filter((row) => row?.verification_state === 'discovered').length;
   return {
     template_version: TEMPLATE_VERSION,
     terminal_outcome: bundle?.execution?.terminal_outcome ?? 'unknown',
@@ -51,7 +53,9 @@ export function buildRenderSpec(bundle) {
       checks: checks.length,
       completed_checks: completedChecks,
       sources: sources.length,
-      external_sources: externalSources,
+      external_sources: externalSources.length,
+      validated_external_sources: validatedExternalSources,
+      discovery_external_sources: discoveryExternalSources,
     },
     check_completion_percent: percent(completedChecks, checks.length),
     finding_statuses: countBy(findings, 'evidence_status'),
@@ -90,7 +94,7 @@ function summaryVisuals(bundle, spec) {
   <div class="metrics">
     ${metric('Entities', spec.counts.entities)}
     ${metric('Findings', spec.counts.findings)}
-    ${metric('Sources', spec.counts.sources, `${spec.counts.external_sources} external`)}
+    ${metric('Sources', spec.counts.sources, `${spec.counts.validated_external_sources} validated · ${spec.counts.discovery_external_sources} discovery-only`)}
     ${metric('Contradictions', spec.counts.contradictions)}
     ${metric('Unresolved gates', spec.counts.unresolved)}
     ${metric('Checks complete', `${spec.check_completion_percent}%`, `${spec.counts.completed_checks}/${spec.counts.checks}`)}
@@ -151,8 +155,8 @@ function transactionControlMatrix(bundle) {
 function evidenceRegister(bundle) {
   const sources = (bundle?.sources ?? []).slice(0, 50);
   if (!sources.length) return '';
-  const rows = sources.map((row) => `<tr><td class="mono-key">${escapeHtml(row?.source_key || '')}</td><td>${escapeHtml(row?.evidence_origin || '')}</td><td>${escapeHtml(compact(row?.title, 220))}</td><td>${escapeHtml(row?.page_reference || '—')}</td><td>${escapeHtml(compact(row?.reliability_note, 280))}</td></tr>`).join('');
-  return `<section class="report-visual"><div class="visual-title"><div><div class="eyebrow">Evidence register</div><h2>Source coverage</h2></div><span>${(bundle?.sources ?? []).length} source(s)</span></div><table><thead><tr><th>Source key</th><th>Origin</th><th>Title</th><th>Page</th><th>Reliability / caveat</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  const rows = sources.map((row) => `<tr><td class="mono-key">${escapeHtml(row?.source_key || '')}</td><td>${escapeHtml(row?.evidence_origin || '')}</td><td>${escapeHtml(row?.verification_state || (row?.evidence_origin === 'submitted_document' ? 'submitted' : 'unknown'))}</td><td>${escapeHtml(compact(row?.title, 220))}</td><td>${escapeHtml(row?.page_reference || '—')}</td><td>${escapeHtml(compact(row?.reliability_note, 280))}</td></tr>`).join('');
+  return `<section class="report-visual"><div class="visual-title"><div><div class="eyebrow">Evidence register</div><h2>Source coverage</h2></div><span>${(bundle?.sources ?? []).length} source(s)</span></div><table><thead><tr><th>Source key</th><th>Origin</th><th>Verification</th><th>Title</th><th>Page</th><th>Reliability / caveat</th></tr></thead><tbody>${rows}</tbody></table></section>`;
 }
 
 function relationshipMap(bundle) {

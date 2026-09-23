@@ -929,6 +929,22 @@ async function reportAction(uid: string, body: any, finalize = false) {
     q.data.case_id,
     finalize ? ["owner", "reviewer"] : ["owner", "analyst", "reviewer"],
   );
+  if (!q.data.case_job_id)
+    throw Object.assign(new Error("Report is not bound to an investigation job"), { status: 409 });
+  const job = await admin
+    .from("integritas_case_jobs")
+    .select("id,case_id,case_revision,stage")
+    .eq("id", q.data.case_job_id)
+    .maybeSingle();
+  if (job.error) throw job.error;
+  if (!job.data
+    || job.data.case_id !== q.data.case_id
+    || Number(job.data.case_revision) !== Number(q.data.based_on_revision)) {
+    throw Object.assign(new Error("Report source investigation does not match the report revision"), { status: 409 });
+  }
+  if (!["completed", "incomplete", "research_limit_reached"].includes(job.data.stage)) {
+    throw Object.assign(new Error(`Report source investigation is ${job.data.stage}; review/finalization is blocked`), { status: 409 });
+  }
   if (finalize && q.data.status !== "reviewed")
     throw Object.assign(new Error("Report must be reviewed first"), {
       status: 409,
@@ -948,8 +964,11 @@ async function reportAction(uid: string, body: any, finalize = false) {
     .from("integritas_reports")
     .update(patch)
     .eq("id", id)
-    .eq("status", finalize ? "reviewed" : "draft");
+    .eq("status", finalize ? "reviewed" : "draft")
+    .select("id,status")
+    .maybeSingle();
   if (u.error) throw u.error;
+  if (!u.data) throw Object.assign(new Error("Report status changed; refresh before retrying"), { status: 409 });
   await audit(
     q.data.case_id,
     uid,

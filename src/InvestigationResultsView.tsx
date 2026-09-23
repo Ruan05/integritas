@@ -94,7 +94,7 @@ export function InvestigationResultsView({
           {results.sources.map((source) => (
             <li key={source.id}>
               <strong>{source.source_key}</strong>
-              <small>{source.source_type}{source.page_reference ? ' · page ' + source.page_reference : ''}</small>
+              <small>{source.source_type}{source.verification_state ? ' · ' + source.verification_state.replaceAll('_', ' ') : ''}{source.page_reference ? ' · page ' + source.page_reference : ''}</small>
               <span>{source.excerpt || 'No excerpt persisted.'}</span>
             </li>
           ))}

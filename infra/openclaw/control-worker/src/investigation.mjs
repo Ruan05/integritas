@@ -896,21 +896,28 @@ export async function executeInvestigation(command, {
     let finalMilestones = sanitizeMilestones(latestAgentProgress?.milestones);
     if (finalMilestones.length === 0) finalMilestones = currentMilestones;
     if (finalMilestones.length === 0) finalMilestones = initialMilestones('analyzing_documents');
+    const finalChecks = Array.isArray(bundleJson.checks) ? bundleJson.checks : [];
+    const finalUnresolved = Array.isArray(bundleJson.unresolved_checks) ? bundleJson.unresolved_checks : [];
+    const researchChecks = finalChecks.filter((row) => row?.check_type === 'research_lane');
+    const researchBlocked = researchChecks.some((row) => row?.status === 'blocked' || row?.status === 'open' || row?.status === 'in_progress');
+    const analysisBlocked = finalUnresolved.some((row) => row?.unresolved_key === 'analysis.deterministic_review');
+    const criticBlocked = finalUnresolved.some((row) => String(row?.unresolved_key || '').startsWith('critic.'));
+    const reportDegraded = report.includes('DEGRADED DETERMINISTIC FALLBACK');
     finalMilestones = advanceMilestones(finalMilestones, {
       'core.evidence': 'complete',
       'core.forensics': 'complete',
-      'core.classification': 'complete',
+      'core.classification': analysisBlocked ? 'blocked' : 'complete',
       'core.plan': 'complete',
-      'core.research': 'complete',
-      'core.crosscheck': 'complete',
-      'core.review': 'complete',
+      'core.research': researchBlocked ? 'blocked' : 'complete',
+      'core.crosscheck': analysisBlocked ? 'blocked' : 'complete',
+      'core.review': criticBlocked ? 'blocked' : 'complete',
       'core.qa': 'active',
       'module.document_shards': 'complete',
       'module.adaptive_plan': 'complete',
-      'module.case_analysis': 'complete',
-      'module.research_lanes': 'complete',
-      'module.critic': 'complete',
-      'module.report': 'complete',
+      'module.case_analysis': analysisBlocked ? 'blocked' : 'complete',
+      'module.research_lanes': researchBlocked ? 'blocked' : 'complete',
+      'module.critic': criticBlocked ? 'blocked' : 'complete',
+      'module.report': reportDegraded ? 'blocked' : 'complete',
       'module.semantic_qa': 'active',
     });
     await checkpoint('verifying', 80, { milestones: finalMilestones });

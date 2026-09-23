@@ -62,7 +62,7 @@ export function InvestigationMilestones({
   const progressLabel = snapshot.isLive
     ? `${pct}% live progress`
     : jobStage === 'incomplete'
-      ? `${pct}% workflow complete`
+      ? `${pct}% execution complete · investigation incomplete`
       : (total > 0 ? `${completed}/${total} complete` : `${pct}%`);
 
   return (

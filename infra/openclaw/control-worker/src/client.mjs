@@ -62,6 +62,7 @@ export class ControlClient {
       source_key: source.source_key,
       url: source.url,
       title: source.title,
+      verification_state: source.verification_state,
       retrieved_at: source.retrieved_at,
       tool_summary: toolSummary,
     });

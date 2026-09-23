@@ -263,7 +263,7 @@ export type CheckpointRow = {
 export type EntityResultRow = { id: string; entity_key: string; entity_type: string; display_name: string; match_status: string; match_confidence: number | null; identifiers: Record<string, unknown>; aliases: string[] };
 export type RelationshipResultRow = { id: string; relationship_key: string; from_entity_id: string; to_entity_id: string; relationship_type: string; claim: string; evidence_status: string; confidence: number | null };
 export type FindingResultRow = { id: string; finding_key: string; finding_type: string; claim: string; evidence_status: string; materiality: string; reliability: string; source_ids: string[] };
-export type SourceResultRow = { id: string; source_key: string; source_type: string; title: string; url?: string | null; page_reference?: string | null; excerpt: string; reliability_note: string };
+export type SourceResultRow = { id: string; source_key: string; source_type: string; title: string; url?: string | null; page_reference?: string | null; excerpt: string; reliability_note: string; verification_state?: string | null };
 export type FindingSourceLinkRow = { finding_id: string; source_id: string };
 export type CheckResultRow = { id: string; check_key: string; check_type: string; description: string; status: string; outcome: string };
 export type ReportResultRow = { id: string; status: string; based_on_revision: number; summary: string; content_markdown: string; limitations: string };
@@ -427,7 +427,7 @@ export async function loadPersistedInvestigationResults(
     readRlsRows(client, 'integritas_relationships', 'id,relationship_key,from_entity_id,to_entity_id,relationship_type,claim,evidence_status,confidence', caseId, jobId),
 
     readRlsRows(client, 'integritas_findings', 'id,finding_key,finding_type,claim,evidence_status,materiality,reliability', caseId, jobId),
-    readRlsRows(client, 'integritas_sources', 'id,source_key,source_type,title,url,page_reference,excerpt,reliability_note', caseId, jobId),
+    readRlsRows(client, 'integritas_sources', 'id,source_key,source_type,title,url,page_reference,excerpt,reliability_note,verification_state', caseId, jobId),
     readRlsRows(client, 'integritas_finding_source_links', 'finding_id,source_id', caseId, jobId),
     readRlsRows(client, 'integritas_checks', 'id,check_key,check_type,description,status,outcome', caseId, jobId),
     readRlsRows(client, 'integritas_reports', 'id,status,based_on_revision,summary,content_markdown,limitations,updated_at', caseId, jobId),
