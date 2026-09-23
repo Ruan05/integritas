@@ -32,7 +32,7 @@ begin
   if p_progress is null or p_progress < 0 or p_progress > 100 then raise exception 'invalid investigation progress'; end if;
   if p_safe_metadata is null or jsonb_typeof(p_safe_metadata) <> 'object' or octet_length(p_safe_metadata::text) > 16384 then raise exception 'invalid checkpoint metadata'; end if;
 
-  select j.*, cmd.attempt into v_job, v_attempt
+  select j.* into v_job
   from public.integritas_case_jobs j
   join public.integritas_control_commands cmd on cmd.id=j.control_command_id
   join public.integritas_cases c on c.id=j.case_id
@@ -41,6 +41,7 @@ begin
     and cmd.status in ('leased','running') and c.revision=j.case_revision
   for update of j;
   if not found then raise exception 'investigation checkpoint access denied'; end if;
+  select attempt into v_attempt from public.integritas_control_commands where id=p_command_id;
   if v_job.stage = any(v_terminal) and p_stage <> v_job.stage then raise exception 'terminal investigation stage is immutable'; end if;
 
   if p_progress < v_job.progress or (not (p_stage=any(v_terminal)) and not (v_job.stage=any(v_terminal)) and array_position(v_order,p_stage) < array_position(v_order,v_job.stage)) then
