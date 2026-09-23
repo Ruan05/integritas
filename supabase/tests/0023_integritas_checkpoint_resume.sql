@@ -309,9 +309,12 @@ select public.integritas_checkpoint_case_investigation(
 update public.integritas_case_jobs
 set stage='failed',progress=38,updated_at=now()
 where id=:'d_case_job_id'::uuid;
-update public.integritas_control_commands
-set status='failed',lease_owner=null,lease_expires_at=null,updated_at=now()
-where id=:'d_control_command_id'::uuid;
+select pg_temp.assert_true(
+  public.integritas_control_fail(
+    :'d_control_command_id'::uuid,'oracle-primary','synthetic_current_attempt_failure','synthetic current attempt failure'
+  ),
+  'fixture settles the current attempt through the worker failure API'
+);
 
 select public.integritas_retry_case_investigation(
   :'d_case_job_id'::uuid,'b23b23b2-2222-4222-8222-222222222222'
