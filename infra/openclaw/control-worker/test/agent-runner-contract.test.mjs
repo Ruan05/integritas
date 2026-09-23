@@ -18,11 +18,13 @@ test('OpenClaw runner materializes only validated structured final output', asyn
 test('OpenClaw runner uses evidence-first planning, bounded research and an independent critic for deep work', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
   assert.match(source, /const NVIDIA_PRIMARY = 'integritas-nvidia\/z-ai\/glm-5\.3'/);
+  assert.match(source, /const NVIDIA_SUPER = 'integritas-nvidia\/nvidia\/nemotron-3-super-120b-a12b'/);
   assert.match(source, /const FREE_FAST = 'integritas-openrouter\/nvidia\/nemotron-3-super-120b-a12b:free'/);
   assert.match(source, /const ZEN_ENABLED = !!process\.env\.OPENCODE_ZEN_API_KEY && existsSync\(ZEN_ENABLE_MARKER\)/);
   assert.match(source, /const ZEN_ENABLE_MARKER = '\/etc\/openclaw\/zen-enabled'/);
   assert.match(source, /ACTIVE_FREE_FALLBACKS = ZEN_ENABLED/);
-  assert.match(source, /SYNTHETIC_MODEL_ROUTES = routes\(NVIDIA_PRIMARY, ACTIVE_FREE_FALLBACKS\)/);
+  assert.match(source, /RESILIENT_FREE_FALLBACKS = \[NVIDIA_SUPER, \.\.\.ACTIVE_FREE_FALLBACKS\]/);
+  assert.match(source, /SYNTHETIC_MODEL_ROUTES = routes\(NVIDIA_PRIMARY, RESILIENT_FREE_FALLBACKS\)/);
   assert.doesNotMatch(source, /NVIDIA_LIGHTNING/, 'unhealthy Lightning route must not be auto-selected');
   assert.ok(source.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';"));
   assert.ok(source.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';"));
@@ -92,7 +94,7 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.match(source, /selectProviderDiverseModels\(configured, 3\)/, 'standard phases must preserve cross-provider diversity');
   assert.match(source, /process\.env\.OPENROUTER_API_KEY/, 'OpenRouter candidates must be gated on live configuration');
   assert.match(source, /for \(const \[index, model\] of models\.entries\(\)\)/, 'standard phases must try provider routes independently');
-  assert.match(source, /moving to the next configured provider family/, 'a bounded provider failure must advance to another family');
+  assert.match(source, /moving to the next configured provider\/model route/, 'a bounded provider failure must advance to another configured route');
   assert.doesNotMatch(source, /args\.push\('--fallback'/, 'outer route timeout must not wrap an opaque internal fallback chain');
   assert.doesNotMatch(source, /opencode-go\/deepseek-v4-pro/);
 });
