@@ -22,18 +22,29 @@ export function InvestigationResultsView({
   const unresolved = results.checks.filter((check) => check.check_type === 'unresolved' || check.status !== 'complete');
   const stale = isInvestigationResultStale(caseRevision, job.case_revision, results.report?.based_on_revision ?? null);
   const latestCheckpoint = results.checkpoints.at(-1);
+  const renderStatus = typeof latestCheckpoint?.safe_metadata?.render_status === 'string'
+    ? latestCheckpoint.safe_metadata.render_status
+    : '';
+  const draftPdfReady = renderStatus === 'ready';
   const terminalLabels: Record<string, string> = {
     failed: 'Investigation failed',
     cancelled: 'Investigation cancelled',
-    incomplete: 'Investigation incomplete — comprehensive verification is not complete',
-    research_limit_reached: 'Research limit reached — comprehensive verification is not complete',
+    incomplete: draftPdfReady
+      ? 'Draft report ready — analyst review required'
+      : 'Investigation incomplete — comprehensive verification is not complete',
+    research_limit_reached: draftPdfReady
+      ? 'Draft report ready — research limit reached'
+      : 'Research limit reached — comprehensive verification is not complete',
   };
   const terminalLabel = terminalLabels[job.stage];
+  const terminalTone = (job.stage === 'incomplete' || job.stage === 'research_limit_reached') && draftPdfReady
+    ? 'warn'
+    : 'danger';
 
   return (
     <>
       {terminalLabel && (
-        <div className="result-banner danger" role="alert">
+        <div className={`result-banner ${terminalTone}`} role="alert">
           <strong>{terminalLabel}</strong>
           {typeof latestCheckpoint?.safe_metadata?.message === 'string' && <span>{latestCheckpoint.safe_metadata.message}</span>}
         </div>
@@ -131,10 +142,13 @@ export function InvestigationResultsView({
           <>
             <div className="report-actions">
               <button type="button" onClick={onOpenPdf} disabled={!onOpenPdf || pdfBusy || stale}>
-                {pdfBusy ? 'Preparing canonical PDF…' : 'Open canonical Integritas PDF'}
+                {pdfBusy ? 'Preparing canonical PDF…' : draftPdfReady && job.stage !== 'completed' ? 'Open draft Integritas PDF' : 'Open canonical Integritas PDF'}
               </button>
               {stale && <small>PDF access is disabled because this report predates the current case revision.</small>}
             </div>
+            {draftPdfReady && job.stage !== 'completed' && (
+              <p className="muted">The private PDF artifact is ready. Open verification gates remain visible below and must be reviewed before finalisation.</p>
+            )}
             <p className="muted">{results.report.summary}</p>
             <div className="report-document">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{results.report.content_markdown}</ReactMarkdown>
