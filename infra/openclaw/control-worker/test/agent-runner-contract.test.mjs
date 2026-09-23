@@ -128,7 +128,9 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.match(large, /timeoutForModel\(role, model\)/, 'provider routes must use bounded per-provider timeouts');
   assert.match(large, /openRouterPaidCircuitOpen/, 'credit-limited OpenRouter must open a per-investigation circuit');
   assert.match(large, /looksLikeProviderCapacityFailure/, 'provider capacity failures must fail over without waiting for every route');
-  assert.ok(large.includes("const NVIDIA_ULTRA = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b';"), 'large investigations must use the explicit verified NVIDIA Ultra route');
+  assert.ok(large.includes("const NVIDIA_GLM = 'integritas-nvidia/z-ai/glm-5.3';"), 'large investigations must use the live-verified direct GLM 5.3 route');
+  assert.match(large, /shard:\s*\[nvidia && NVIDIA_GLM/, 'document shards must prefer the live-verified GLM route');
+  assert.match(large, /lane:\s*\[nvidia && NVIDIA_GLM/, 'research lanes must prefer the live-verified GLM route');
   assert.ok(large.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';"), 'large research lanes must expose DeepSeek V4.1 Flash');
   assert.ok(large.includes("const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';"), 'large planning and critic lanes must expose GLM 5.3');
   assert.ok(large.includes("const GLM_53_FLASH = 'integritas-openrouter/z-ai/glm-5.3-flash';"), 'large investigations must expose the low-cost GLM fallback');
