@@ -509,6 +509,47 @@ function advanceMilestones(value, updates) {
   return [...map.values()];
 }
 
+function safeLiveTask(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const id = typeof value.id === 'string' ? value.id.slice(0, 120) : '';
+  const label = typeof value.label === 'string' ? value.label.replace(/\s+/g, ' ').trim().slice(0, 180) : '';
+  const status = typeof value.status === 'string' ? value.status : 'active';
+  if (!id || !label || !['waiting', 'active', 'complete', 'blocked', 'failed', 'manual'].includes(status)) return null;
+  return {
+    id, label, status,
+    detail: typeof value.detail === 'string' ? value.detail.replace(/\s+/g, ' ').trim().slice(0, 500) : '',
+    ...(typeof value.provider === 'string' ? { provider: value.provider.slice(0, 80) } : {}),
+    ...(typeof value.model === 'string' ? { model: value.model.slice(0, 180) } : {}),
+  };
+}
+function safeLiveEvent(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const id = typeof value.id === 'string' ? value.id.slice(0, 120) : '';
+  const category = typeof value.category === 'string' ? value.category.replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+  const message = typeof value.message === 'string' ? value.message.replace(/\s+/g, ' ').trim().slice(0, 420) : '';
+  if (!id || !category || !message) return null;
+  return {
+    id, category, message,
+    state: ['info', 'discovery', 'verified', 'warning', 'success'].includes(value.state) ? value.state : 'info',
+    at: typeof value.at === 'string' ? value.at.slice(0, 80) : '',
+  };
+}
+function safeModelDiscovery(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const providers = Array.isArray(value.providers) ? value.providers.slice(0, 8).map((row) => ({
+    provider: typeof row?.provider === 'string' ? row.provider.slice(0, 40) : 'unknown',
+    status: typeof row?.status === 'string' ? row.status.slice(0, 40) : 'unknown',
+    model_count: Number.isInteger(row?.model_count) ? Math.max(0, Math.min(row.model_count, 5000)) : 0,
+    new_count: Number.isInteger(row?.new_count) ? Math.max(0, Math.min(row.new_count, 5000)) : 0,
+    removed_count: Number.isInteger(row?.removed_count) ? Math.max(0, Math.min(row.removed_count, 5000)) : 0,
+  })) : [];
+  return {
+    status: typeof value.status === 'string' ? value.status.slice(0, 40) : 'unknown',
+    refreshed_at: typeof value.refreshed_at === 'string' ? value.refreshed_at.slice(0, 80) : '',
+    providers,
+  };
+}
+
 async function readAgentProgress(jobDir) {
   try {
     const raw = await readFile(path.join(jobDir, 'agent-progress.json'), 'utf8');
@@ -527,6 +568,9 @@ async function readAgentProgress(jobDir) {
       detail: typeof progress.detail === 'string' ? progress.detail.slice(0, 500) : '',
       updated_at: updatedAt,
       milestones: sanitizeMilestones(progress.milestones),
+      current_task: safeLiveTask(progress.current_task),
+      live_events: Array.isArray(progress.live_events) ? progress.live_events.map(safeLiveEvent).filter(Boolean).slice(-8) : [],
+      model_discovery: safeModelDiscovery(progress.model_discovery),
     };
   } catch {
     return null;
@@ -575,6 +619,8 @@ async function runAgentWithRecovery({
         agentProgress.phase,
         agentProgress.detail,
         JSON.stringify(agentProgress.milestones.map((row) => [row.id, row.status])),
+        JSON.stringify(agentProgress.current_task),
+        JSON.stringify(agentProgress.live_events.map((row) => row.id)),
       ].join(':');
       if (typeof onProgress === 'function' && key !== lastAgentProgress) {
         await onProgress(agentProgress.stage, agentProgress.progress, {
@@ -582,6 +628,9 @@ async function runAgentWithRecovery({
           message: agentProgress.detail,
           heartbeat_at: agentProgress.updated_at,
           milestones: agentProgress.milestones,
+          current_task: agentProgress.current_task,
+          live_events: agentProgress.live_events,
+          model_discovery: agentProgress.model_discovery,
         });
         lastAgentProgress = key;
       }
@@ -920,7 +969,12 @@ export async function executeInvestigation(command, {
       'module.report': reportDegraded ? 'blocked' : 'complete',
       'module.semantic_qa': 'active',
     });
-    await checkpoint('verifying', 80, { milestones: finalMilestones });
+    const liveCheckpointMetadata = {
+      ...(latestAgentProgress?.current_task ? { current_task: latestAgentProgress.current_task } : {}),
+      ...(latestAgentProgress?.live_events?.length ? { live_events: latestAgentProgress.live_events } : {}),
+      ...(latestAgentProgress?.model_discovery ? { model_discovery: latestAgentProgress.model_discovery } : {}),
+    };
+    await checkpoint('verifying', 80, { ...liveCheckpointMetadata, milestones: finalMilestones });
     const qa = await qaRunner({
       jobDir,
       bundlePath,
@@ -935,7 +989,7 @@ export async function executeInvestigation(command, {
       'module.semantic_qa': 'complete',
       'module.private_artifact': 'active',
     });
-    await checkpoint('drafting_report', 90, { milestones: finalMilestones });
+    await checkpoint('drafting_report', 90, { ...liveCheckpointMetadata, milestones: finalMilestones });
     const bundleSha = createHash('sha256').update(bundle).digest('hex');
     const reportSha = createHash('sha256').update(report).digest('hex');
     const externalSources = bundleJson.sources.filter((source) => source.evidence_origin === 'external_research');
@@ -1019,8 +1073,40 @@ export async function executeInvestigation(command, {
       }
     }
 
-    finalMilestones = advanceMilestones(finalMilestones, { 'core.persist': 'complete', 'module.private_artifact': 'complete' });
+    const artifactMilestoneStatus = renderStatus === 'ready'
+      ? 'complete'
+      : renderStatus === 'render_failed'
+        ? 'failed'
+        : 'manual';
+    finalMilestones = advanceMilestones(finalMilestones, {
+      'core.persist': 'complete',
+      'module.private_artifact': artifactMilestoneStatus,
+    });
+    const terminalLiveEvents = [
+      ...(latestAgentProgress?.live_events ?? []),
+      {
+        id: 'report-' + revision + '-' + renderStatus,
+        category: 'REPORT',
+        message: renderStatus === 'ready'
+          ? 'Draft PDF rendered and committed to private case storage.'
+          : renderStatus === 'render_failed'
+            ? 'Draft report was saved, but PDF rendering or persistence requires technical recovery.'
+            : 'Draft report was saved; private PDF rendering is not configured for this runtime.',
+        state: renderStatus === 'ready' ? 'success' : 'warning',
+        at: new Date().toISOString(),
+      },
+    ].slice(-8);
     await checkpoint(terminalOutcome, 100, {
+      ...liveCheckpointMetadata,
+      current_task: {
+        id: 'report.artifact',
+        label: renderStatus === 'ready' ? 'Draft report and PDF ready' : 'Report artifact requires attention',
+        status: renderStatus === 'ready' ? 'complete' : renderStatus === 'render_failed' ? 'failed' : 'manual',
+        detail: renderStatus === 'ready'
+          ? 'The canonical private PDF is available for analyst review.'
+          : 'The evidence bundle and Markdown report remain preserved.',
+      },
+      live_events: terminalLiveEvents,
       bundle_sha256: bundleSha,
       report_sha256: reportSha,
       ...(pdfSha ? { pdf_sha256: pdfSha } : {}),
