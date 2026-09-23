@@ -108,9 +108,12 @@ assert.match(releaseDeploy, /--max-time 30/, 'release provider smoke must remain
 assert.ok(!releaseDeploy.includes('/v1/chat/completions'), 'release admission must not depend on a generative provider inference');
 assert.ok(!releaseDeploy.includes('--message-file'), 'release admission must not depend on a model choosing whether to call web_search');
 
-assert.match(investigationRunner, /const args = \[\s*'agent', 'exec'/, 'runner arguments must begin with OpenClaw agent exec');
+assert.match(investigationRunner, /function buildArgs\(messageFile, model, timeoutSeconds\)[\s\S]*return \[\s*'agent', 'exec'/, 'runner arguments must begin with OpenClaw agent exec');
 assert.match(investigationRunner, /spawn\('\/opt\/openclaw\/bin\/openclaw'/, 'runner must execute only the fixed OpenClaw binary');
-assert.match(investigationRunner, /runBoundedOpenClaw\(buildArgs\(messageFile, phaseRoute\)/, 'runner must execute bounded phase arguments through the process-group wrapper');
+assert.match(investigationRunner, /runBoundedOpenClaw\(buildArgs\(messageFile, model, timeoutSeconds\)/, 'runner must execute each bounded provider attempt through the process-group wrapper');
+assert.match(investigationRunner, /selectProviderDiverseModels\(configured, 3\)/, 'standard phases must preserve provider-family diversity');
+assert.match(investigationRunner, /providerFamily\(model\)/, 'standard provider attempts must record and route by provider family');
+assert.ok(!investigationRunner.includes("args.push('--fallback'"), 'standard phases must not hide all provider fallbacks behind one outer timeout');
 assert.match(investigationRunner, /--config/, 'runner must pin the dedicated exec config');
 assert.ok(!investigationRunner.includes("'--state-dir'"), 'runner must use OpenClaw isolated temporary exec state while the Gateway owns persistent state');
 assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/, 'runner may discover existing provider credentials only through the bounded OpenClaw environment');
@@ -132,8 +135,10 @@ assert.ok(investigationRunner.includes("const ZEN_ENABLE_MARKER = '/etc/openclaw
 assert.ok(investigationRunner.includes('const ZEN_ENABLED = !!process.env.OPENCODE_ZEN_API_KEY && existsSync(ZEN_ENABLE_MARKER)'), 'Zen fallback activation must require both key and marker');
 assert.ok(investigationRunner.includes('ACTIVE_FREE_FALLBACKS = ZEN_ENABLED'), 'Zen fallbacks must remain dormant until explicit activation');
 assert.ok(investigationRunner.includes("'integritas-opencode-zen/big-pickle'"), 'Big Pickle must be staged as a conditional Zen fallback');
-assert.ok(investigationRunner.includes("'--model', phaseRoute.model"), 'runner must explicitly pin each bounded phase model');
-assert.ok(investigationRunner.includes("args.push('--fallback', fallback)"), 'legacy bounded phases must use only their explicit fallback chain');
+assert.ok(investigationRunner.includes("'--model', model"), 'runner must explicitly pin the active bounded provider-attempt model');
+assert.match(investigationRunner, /standardProviderModels\(phaseRoute\)/, 'standard phases must resolve explicit configured provider candidates');
+assert.match(investigationRunner, /selectProviderDiverseModels\(configured, 3\)/, 'standard phases must preserve provider-family diversity');
+assert.ok(!investigationRunner.includes("args.push('--fallback', fallback)"), 'standard phases must not hide every fallback behind one process-wide timeout');
 assert.ok(investigationRunner.includes("'integritas-openrouter/openrouter/free'"), 'dynamic OpenRouter free routing may be used only as synthetic emergency fallback');
 assert.ok(!investigationRunner.includes("model: 'integritas-openrouter/openrouter/free'"), 'dynamic OpenRouter free routing must never be a primary investigation route');
 assert.ok(!investigationRunner.includes('opencode-go/deepseek-v4-pro'), 'DeepSeek Pro must not be a default investigation fallback');
