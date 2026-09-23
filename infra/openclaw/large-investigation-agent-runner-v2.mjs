@@ -991,10 +991,50 @@ async function writeAtomic(jobDir, name, content) {
   }
   throw lastError;
 }
-async function progress(jobDir, stage, pct, phase, detail = '') {
-  await writeAtomic(jobDir, 'agent-progress.json', `${JSON.stringify({
-    stage, progress: pct, phase, detail: String(detail).slice(0, 500), updated_at: new Date().toISOString(),
-  })}\n`);
+function phaseTaskLabel(phase) {
+  const labels = {
+    large_document_shards: 'Page extraction, OCR and document review',
+    large_bounded_plan: 'Build evidence-led investigation route',
+    large_case_analysis: 'Normalize entities, roles and transaction claims',
+    large_research_lanes: 'Run specialist verification lanes',
+    large_independent_critic: 'Independent critic and revision review',
+    large_sectioned_report: 'Assemble due-diligence report',
+    ready_for_deterministic_qa: 'Run semantic and deterministic QA',
+  };
+  return labels[phase] || String(phase || 'Investigation task').replaceAll('_', ' ');
+}
+function safeLiveText(value, max = 420) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+async function progress(jobDir, stage, pct, phase, detail = '', live = {}) {
+  const discovery = getModelDiscoverySummary();
+  const currentTask = live.current_task ?? {
+    id: String(phase || stage).slice(0, 120),
+    label: phaseTaskLabel(phase),
+    status: 'active',
+    detail: safeLiveText(detail, 500),
+  };
+  const liveEvents = Array.isArray(live.live_events)
+    ? live.live_events.slice(-4).map((row, index) => ({
+        id: safeLiveText(row?.id || (String(phase) + '-' + pct + '-' + index), 120),
+        category: safeLiveText(row?.category || 'LIVE', 40).toUpperCase(),
+        message: safeLiveText(row?.message || detail, 420),
+        state: ['info', 'discovery', 'verified', 'warning', 'success'].includes(row?.state) ? row.state : 'info',
+        at: typeof row?.at === 'string' ? row.at : new Date().toISOString(),
+      }))
+    : detail
+      ? [{ id: String(phase) + '-' + pct, category: 'LIVE', message: safeLiveText(detail, 420), state: 'info', at: new Date().toISOString() }]
+      : [];
+  await writeAtomic(jobDir, 'agent-progress.json', JSON.stringify({
+    stage,
+    progress: pct,
+    phase,
+    detail: safeLiveText(detail, 500),
+    current_task: currentTask,
+    live_events: liveEvents,
+    ...(discovery ? { model_discovery: discovery } : {}),
+    updated_at: new Date().toISOString(),
+  }) + '\n');
 }
 function parseEnvelope(stdout, label) {
   if (typeof stdout !== 'string' || Buffer.byteLength(stdout) < 2 || Buffer.byteLength(stdout) > MAX_AGENT_ENVELOPE_BYTES) {
@@ -1815,13 +1855,20 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
   await mkdir(jobDir, { recursive: true, mode: 0o750 });
   const startedAt = new Date().toISOString();
   const phases = [];
+  const discovery = getModelDiscoverySummary();
+  const readyProviders = discovery?.providers?.filter((row) => row.status === 'ready').length ?? 0;
+  const discoveredModels = discovery?.providers?.reduce((sum, row) => sum + (row.model_count || 0), 0) ?? 0;
   const executionTools = [
+    toolResult('integritas_model_discovery_v1', 'completed', readyProviders + ' configured provider(s) ready; ' + discoveredModels + ' live model identifiers catalogued before routing.'),
     toolResult('integritas_forensics_v1', 'completed', `Trusted forensic pre-pass covered ${trustedForensics.reports.length} submitted document(s).`),
     ...(trustedPageExtraction ? [toolResult('integritas_page_extract_v1', 'completed', `Trusted page-level native-text/OCR extraction covered ${trustedPageExtraction.reports.length} submitted document(s).`)] : []),
     toolResult('integritas_large_orchestrator_v2', 'completed', 'Bounded sharded orchestration with validation-aware provider failover and deterministic final assembly.'),
   ];
 
-  await progress(jobDir, 'extracting', 18, 'large_document_shards');
+  await progress(jobDir, 'extracting', 18, 'large_document_shards', 'Reviewing submitted evidence page-by-page.', {
+    current_task: { id: 'documents.review', label: 'Page extraction, OCR and document review', status: 'active', detail: 'Submitted evidence is being extracted and checked page-by-page.' },
+    live_events: [{ category: 'FILE DISCOVERY', message: 'Submitted evidence is being extracted and checked page-by-page.', state: 'discovery' }],
+  });
   const shards = buildDocumentShards(manifest, 1);
   const shardRows = await mapLimit(shards, 2, async (shard, index) => {
     const trustedContext = shardTrustedContext(shard, trustedForensics, trustedPageExtraction);
@@ -1969,7 +2016,10 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
     return;
   }
 
-  await progress(jobDir, 'mapping_entities', 38, 'large_bounded_plan');
+  await progress(jobDir, 'mapping_entities', 38, 'large_bounded_plan', 'Building an evidence-led investigation route.', {
+    current_task: { id: 'investigation.plan', label: 'Build evidence-led investigation route', status: 'active', detail: 'Selecting checks from the submitted evidence.' },
+    live_events: [{ category: 'FOLLOW-UP', message: 'Building the case-specific verification plan from extracted evidence.', state: 'info' }],
+  });
   let planResult;
   if (LARGE_PLANNER_ENABLED) {
     try {
@@ -2027,7 +2077,10 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
 
   const submittedSources = buildSubmittedSources(manifest, documentSummaries, new Date().toISOString());
   const docSourceKeys = new Set(submittedSources.map((row) => row.source_key));
-  await progress(jobDir, 'analyzing_documents', 45, 'large_case_analysis');
+  await progress(jobDir, 'analyzing_documents', 45, 'large_case_analysis', 'Normalizing entities, roles, identifiers and transaction claims.', {
+    current_task: { id: 'analysis.entities', label: 'Normalize entities, roles and transaction claims', status: 'active', detail: 'Separating identities and linking claims to submitted evidence.' },
+    live_events: [{ category: 'FILE DISCOVERY', message: 'Entity and transaction claims are being normalized from the submitted files.', state: 'discovery' }],
+  });
   let analysisResult;
   let caseAnalysis;
   if (synthetic) {
@@ -2098,9 +2151,15 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
     throw new Error('entity_normalization_failed: substantive submitted evidence produced no normalized entities');
   }
 
-  await progress(jobDir, 'researching', 52, 'large_research_lanes', `${plan.research_lanes.length} lanes`);
+  const priorityRank = { critical: 0, high: 1, medium: 2, low: 3 };
+  const orderedResearchLanes = [...plan.research_lanes].sort((a, b) =>
+    (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9));
+  await progress(jobDir, 'researching', 52, 'large_research_lanes', orderedResearchLanes.length + ' evidence-led lanes; critical checks first.', {
+    current_task: { id: 'research.route', label: 'Run specialist verification lanes', status: 'active', detail: orderedResearchLanes.length + ' lane(s) scheduled with bounded concurrency.' },
+    live_events: [{ category: 'VERIFYING', message: orderedResearchLanes.length + ' specialist verification lane(s) scheduled with critical checks first.', state: 'info' }],
+  });
   const entityKeys = new Set(caseAnalysis.entities.map((row) => row.entity_key));
-  const laneResults = await mapLimit(plan.research_lanes, 4, async (lane, index) => {
+  const laneResults = await mapLimit(orderedResearchLanes, 2, async (lane, index) => {
     if (lane.manual_only) return manualLane(lane);
     if (synthetic) {
       const result = {
@@ -2127,9 +2186,13 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
         failures: [],
       };
       phases.push({ phase: `lane-${lane.lane_id}`, ...result });
-      await progress(jobDir, 'researching', 52 + Math.round(((index + 1) / Math.max(1, plan.research_lanes.length)) * 14), 'large_research_lanes', `lane ${index + 1}/${plan.research_lanes.length}`);
+      await progress(jobDir, 'researching', 52 + Math.round(((index + 1) / Math.max(1, orderedResearchLanes.length)) * 14), 'large_research_lanes', `lane ${index + 1}/${orderedResearchLanes.length}: ${lane.lane_id}`);
       return materializeLaneResult(result.value, lane, index);
     }
+    await progress(jobDir, 'researching', 52 + Math.round((index / Math.max(1, orderedResearchLanes.length)) * 14), 'large_research_lanes', `lane ${index + 1}/${orderedResearchLanes.length}: ${lane.lane_id}`, {
+      current_task: { id: 'lane.' + lane.lane_id, label: safeLiveText(lane.question, 180), status: 'active', detail: 'Searching and opening authoritative sources where available.' },
+      live_events: [{ category: 'VERIFYING', message: safeLiveText(lane.question, 320), state: 'info' }],
+    });
     let result;
     try {
       result = await validated({
@@ -2210,7 +2273,23 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
     }
     if (synthetic && externalTools(result.envelope).length) throw new Error('synthetic lane performed external research');
     phases.push({ phase: `lane-${lane.lane_id}`, ...result });
-    await progress(jobDir, 'researching', 52 + Math.round(((index + 1) / Math.max(1, plan.research_lanes.length)) * 14), 'large_research_lanes', `lane ${index + 1}/${plan.research_lanes.length}`);
+    const liveFinding = Array.isArray(result.value?.findings) ? result.value.findings[0] : null;
+    const hasValidatedSource = Array.isArray(result.value?.sources)
+      && result.value.sources.some((source) => ['validated', 'claim_supporting'].includes(source?.verification_state));
+    const laneComplete = result.value?.check?.status === 'complete';
+    const laneEvent = liveFinding?.claim
+      ? {
+          category: liveFinding.evidence_status === 'verified' && hasValidatedSource ? 'VERIFIED' : 'SOURCE FOUND',
+          message: (liveFinding.evidence_status === 'verified' && hasValidatedSource ? '' : 'Unverified discovery: ') + safeLiveText(liveFinding.claim, 320),
+          state: liveFinding.evidence_status === 'verified' && hasValidatedSource ? 'verified' : 'discovery',
+        }
+      : laneComplete
+        ? { category: 'VERIFYING', message: safeLiveText(lane.question, 280) + ' completed.', state: 'success' }
+        : { category: 'FOLLOW-UP', message: safeLiveText(lane.question, 280) + ' remains unresolved and was retained for follow-up.', state: 'warning' };
+    await progress(jobDir, 'researching', 52 + Math.round(((index + 1) / Math.max(1, orderedResearchLanes.length)) * 14), 'large_research_lanes', `lane ${index + 1}/${orderedResearchLanes.length}: ${lane.lane_id}`, {
+      current_task: { id: 'lane.' + lane.lane_id, label: safeLiveText(lane.question, 180), status: laneComplete ? 'complete' : 'blocked', detail: safeLiveText(result.value?.check?.outcome || '', 420) },
+      live_events: [laneEvent],
+    });
     return materializeLaneResult(result.value, lane, index);
   });
   executionTools.push(toolResult('integritas_lane_research_v2', 'completed', `${plan.research_lanes.length} research lanes completed or retained as manual gates.`));
@@ -2224,7 +2303,10 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
   reconcilePlanChecks(preCritic, plan);
   await writeAtomic(jobDir, 'large-bundle-precritic.json', `${JSON.stringify(preCritic, null, 2)}\n`);
 
-  await progress(jobDir, 'independent_review', 68, 'large_independent_critic');
+  await progress(jobDir, 'independent_review', 68, 'large_independent_critic', 'Independent review is challenging evidence, omissions and overclaims.', {
+    current_task: { id: 'review.critic', label: 'Independent critic and revision review', status: 'active', detail: 'Testing evidence support, contradictions and unresolved gates.' },
+    live_events: [{ category: 'VERIFYING', message: 'Independent critic review started to challenge unsupported or incomplete conclusions.', state: 'info' }],
+  });
   let criticResult;
   let critic;
   if (synthetic) {
@@ -2296,7 +2378,10 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
   reconcilePlanChecks(reviewed, plan);
   await writeAtomic(jobDir, 'large-final-evidence.json', `${JSON.stringify(reviewed, null, 2)}\n`);
 
-  await progress(jobDir, 'drafting_report', 76, 'large_sectioned_report');
+  await progress(jobDir, 'drafting_report', 76, 'large_sectioned_report', 'Assembling the evidence-led due-diligence dossier.', {
+    current_task: { id: 'report.assembly', label: 'Assemble due-diligence report', status: 'active', detail: 'Building the dossier from the canonical evidence bundle.' },
+    live_events: [{ category: 'REPORT', message: 'Structured due-diligence dossier assembly has started.', state: 'info' }],
+  });
   const sectionPairs = await mapLimit(LARGE_REPORT_SECTIONS, 2, async (spec, index) => {
     const result = synthetic
       ? (() => {
@@ -2387,5 +2472,8 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
   await writeAtomic(jobDir, 'agent-exec.json', `${JSON.stringify(provenance)}\n`);
   await writeAtomic(jobDir, 'bundle.json', `${JSON.stringify(finalBundle, null, 2)}\n`);
   await writeAtomic(jobDir, 'report.md', reportMarkdown);
-  await progress(jobDir, 'drafting_report', 82, 'ready_for_deterministic_qa', 'large-case deterministic assembly complete');
+  await progress(jobDir, 'drafting_report', 82, 'ready_for_deterministic_qa', 'Large-case dossier assembly complete; deterministic QA is next.', {
+    current_task: { id: 'report.qa', label: 'Run semantic and deterministic QA', status: 'active', detail: 'Draft dossier assembled and ready for release checks.' },
+    live_events: [{ category: 'REPORT', message: 'Draft due-diligence dossier assembled; deterministic and semantic QA are next.', state: 'success' }],
+  });
 }
