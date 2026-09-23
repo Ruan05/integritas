@@ -18,14 +18,21 @@ import {
   parseReportSectionFinal,
   shouldUseLargeInvestigation,
 } from '../../large-investigation.mjs';
-import { buildDeterministicCaseAnalysis, buildGroqBrowserLaneResult, deterministicSyntheticCaseAnalysis, deterministicSyntheticCritic, deterministicProviderReportSection, providerBlockedCritic, providerBlockedLane } from '../../large-investigation-agent-runner-v2.mjs';
+import { artifactFingerprint, buildDeterministicCaseAnalysis, buildGroqBrowserLaneResult, deterministicSyntheticCaseAnalysis, deterministicSyntheticCritic, deterministicProviderReportSection, providerBlockedCritic, providerBlockedLane } from '../../large-investigation-agent-runner-v2.mjs';
 
 const CASE_ID='11111111-1111-4111-8111-111111111111';
 const JOB_ID='22222222-2222-4222-8222-222222222222';
 const DOC1='33333333-3333-4333-8333-333333333333';
 const DOC2='44444444-4444-4444-8444-444444444444';
 
-test('Groq browser fallback preserves bounded HTTPS provenance and keeps claims cautious', () => {
+test('phase artifact fingerprint invalidates a changed procedure or input', () => {
+  const base = { id: 'large-case-analysis', role: 'analysis', task: 'evidence=A', procedureVersion: 'v1' };
+  assert.equal(artifactFingerprint(base), artifactFingerprint({ ...base }));
+  assert.notEqual(artifactFingerprint(base), artifactFingerprint({ ...base, task: 'evidence=B' }));
+  assert.notEqual(artifactFingerprint(base), artifactFingerprint({ ...base, procedureVersion: 'v2' }));
+});
+
+test('Groq browser fallback keeps search discoveries out of verified source status', () => {
   const lane = {
     lane_id: 'core.corporate_identity', priority: 'critical', question: 'Verify legal identity.',
     preferred_sources: ['Official company registry'], stop_condition: 'Obtain official registry confirmation.',
@@ -42,13 +49,13 @@ test('Groq browser fallback preserves bounded HTTPS provenance and keeps claims 
   }, '2026-09-22T16:00:00.000Z');
   assert.equal(result.lane_id, lane.lane_id);
   assert.equal(result.sources.length, 2);
-  assert.equal(result.sources[0].source_type, 'official');
+  assert.equal(result.sources[0].source_type, 'secondary');
   assert.equal(result.sources[0].retrieved_at, '2026-09-22T16:00:00.000Z');
   assert.equal(result.findings[0].evidence_status, 'uncertain');
-  assert.equal(result.findings[0].reliability, 'high');
+  assert.equal(result.findings[0].reliability, 'low');
   assert.deepEqual(result.findings[0].source_refs, ['groq01', 'groq02']);
-  assert.equal(result.check.status, 'complete');
-  assert.equal(result.unresolved_checks.length, 0);
+  assert.equal(result.check.status, 'blocked');
+  assert.equal(result.unresolved_checks.length, 1);
 });
 
 test('provider failure becomes a blocked lane without fabricated evidence', () => {

@@ -398,7 +398,7 @@ async function readUnitState(systemctlRunner, unit) {
   return state;
 }
 
-const MILESTONE_STATUSES = new Set(['waiting', 'active', 'complete', 'blocked', 'manual']);
+const MILESTONE_STATUSES = new Set(['waiting', 'active', 'complete', 'reused', 'blocked', 'failed', 'manual']);
 const MILESTONE_PRIORITIES = new Set(['low', 'medium', 'high', 'critical']);
 const CORE_MILESTONE_DEFS = Object.freeze([
   ['core.evidence', 'Evidence securely staged'],
@@ -483,7 +483,12 @@ function runtimeMilestones(stage, phase = '', prior = []) {
   const defined = [...CORE_MILESTONE_DEFS, ...WORKFLOW_MODULE_DEFS].map(([id, label]) => ({
     id,
     label,
-    status: status.get(id),
+    // A phase result reported by the runner is more precise than a broad
+    // stage label.  In particular, do not repaint a failed/blocked/reused
+    // phase as complete merely because a later stage was entered.
+    status: ['blocked', 'failed', 'manual', 'reused'].includes(existing.get(id)?.status)
+      ? existing.get(id).status
+      : status.get(id),
     priority: id.startsWith('core.') ? 'high' : 'medium',
   }));
   const extras = [...existing.values()].filter((row) => !status.has(row.id));

@@ -235,7 +235,7 @@ export function createIntegritasBrowserClient(options: BrowserClientOptions) {
   };
 }
 
-export type InvestigationMilestoneStatus = 'waiting' | 'active' | 'complete' | 'blocked' | 'manual';
+export type InvestigationMilestoneStatus = 'waiting' | 'active' | 'complete' | 'reused' | 'blocked' | 'failed' | 'manual';
 export type InvestigationMilestonePriority = 'low' | 'medium' | 'high' | 'critical';
 export type InvestigationMilestone = {
   id: string;
@@ -253,6 +253,7 @@ export type InvestigationMilestoneSnapshot = {
 };
 export type CheckpointRow = {
   id: string;
+  attempt?: number;
   stage: string;
   progress: number;
   safe_metadata: Record<string, unknown>;
@@ -280,7 +281,7 @@ export type PersistedInvestigationResults = {
   auditEvents: AuditEventRow[];
 };
 
-const milestoneStatuses = new Set<InvestigationMilestoneStatus>(['waiting', 'active', 'complete', 'blocked', 'manual']);
+const milestoneStatuses = new Set<InvestigationMilestoneStatus>(['waiting', 'active', 'complete', 'reused', 'blocked', 'failed', 'manual']);
 const milestonePriorities = new Set<InvestigationMilestonePriority>(['low', 'medium', 'high', 'critical']);
 
 function normalizeMilestone(value: unknown): InvestigationMilestone | null {
@@ -329,8 +330,14 @@ export function deriveInvestigationMilestoneSnapshot(
   checks: CheckResultRow[],
   jobStage?: string,
   jobProgress?: number,
+  currentAttempt?: number,
 ): InvestigationMilestoneSnapshot {
-  const ordered = orderedCheckpoints(checkpoints);
+  // Only rows created for this leased command attempt can describe live work.
+  // Older rows remain audit history and cannot lend a terminal state to a retry.
+  const attemptRows = Number.isInteger(currentAttempt)
+    ? checkpoints.filter((checkpoint) => checkpoint.attempt === currentAttempt)
+    : checkpoints;
+  const ordered = orderedCheckpoints(attemptRows);
   const latest = authoritativeCheckpoint(ordered, jobStage);
   const latestWithMilestones = latest && Array.isArray(latest.safe_metadata?.milestones)
     ? latest
@@ -387,8 +394,9 @@ export function deriveInvestigationMilestones(
   checks: CheckResultRow[],
   jobStage?: string,
   jobProgress?: number,
+  currentAttempt?: number,
 ): InvestigationMilestone[] {
-  return deriveInvestigationMilestoneSnapshot(checkpoints, checks, jobStage, jobProgress).rows;
+  return deriveInvestigationMilestoneSnapshot(checkpoints, checks, jobStage, jobProgress, currentAttempt).rows;
 }
 
 export function isInvestigationResultStale(caseRevision: number, jobRevision: number, reportRevision: number | null) {
@@ -414,7 +422,7 @@ export async function loadPersistedInvestigationResults(
     checkpoints, entities, relationships, findings, sources,
     sourceLinks, checks, reports, auditEvents,
   ] = await Promise.all([
-    readRlsRows(client, 'integritas_case_job_checkpoints', 'id,stage,progress,safe_metadata,created_at,updated_at', caseId, jobId),
+    readRlsRows(client, 'integritas_case_job_checkpoints', 'id,attempt,stage,progress,safe_metadata,created_at,updated_at', caseId, jobId),
     readRlsRows(client, 'integritas_entities', 'id,entity_key,entity_type,display_name,match_status,match_confidence,identifiers,aliases', caseId, jobId),
     readRlsRows(client, 'integritas_relationships', 'id,relationship_key,from_entity_id,to_entity_id,relationship_type,claim,evidence_status,confidence', caseId, jobId),
 

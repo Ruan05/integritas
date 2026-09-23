@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -556,6 +557,47 @@ const SECTION_MAX = 24000;
 
 function uniq(values) { return [...new Set(values.filter(Boolean))]; }
 function safePart(value) { return String(value).replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 80) || 'phase'; }
+
+// A parseable retained envelope is not enough to trust a phase result.  The
+// phase contract binds the exact task/procedure revision to the result so a
+// changed normaliser, route policy or prompt cannot silently reuse stale work.
+const PHASE_ARTIFACT_CONTRACT_VERSION = 1;
+export function artifactFingerprint({ id, role, task, procedureVersion }) {
+  return createHash('sha256').update(JSON.stringify({
+    contract_version: PHASE_ARTIFACT_CONTRACT_VERSION,
+    id,
+    role,
+    procedure_version: procedureVersion,
+    task,
+  })).digest('hex');
+}
+function artifactMetaName(id) { return `large-v2-artifact-${safePart(id)}.json`; }
+async function readReusableArtifact(jobDir, { id, role, task, procedureVersion, execName }) {
+  const expected = artifactFingerprint({ id, role, task, procedureVersion });
+  try {
+    const [raw, metaRaw] = await Promise.all([
+      readFile(path.join(jobDir, execName), 'utf8'),
+      readFile(path.join(jobDir, artifactMetaName(id)), 'utf8'),
+    ]);
+    const meta = JSON.parse(metaRaw);
+    if (meta?.contract_version !== PHASE_ARTIFACT_CONTRACT_VERSION
+      || meta?.fingerprint !== expected
+      || meta?.exec_sha256 !== createHash('sha256').update(raw).digest('hex')) return null;
+    return raw;
+  } catch {
+    return null;
+  }
+}
+async function writeArtifactContract(jobDir, { id, role, task, procedureVersion, execName, raw }) {
+  const fingerprint = artifactFingerprint({ id, role, task, procedureVersion });
+  await writeAtomic(jobDir, artifactMetaName(id), `${JSON.stringify({
+    contract_version: PHASE_ARTIFACT_CONTRACT_VERSION,
+    fingerprint,
+    exec_name: execName,
+    exec_sha256: createHash('sha256').update(raw).digest('hex'),
+    created_at: new Date().toISOString(),
+  })}\n`);
+}
 function toolResult(tool, status, summary) { return { tool, status, summary: String(summary).slice(0, 4000) }; }
 
 function candidates(role, synthetic) {
@@ -688,26 +730,25 @@ export function buildGroqBrowserLaneResult(lane, payload, retrievedAt = new Date
   const rows = groqSearchRows(payload);
   if (!memo || rows.length < 1) throw new Error('Groq browser fallback returned no citable search evidence');
   const sources = rows.map((row, index) => {
-    const sourceType = classifyGroqBrowserSource(row.url);
     return {
       source_ref: `groq${String(index + 1).padStart(2, '0')}`,
-      source_type: sourceType,
+      // browser_search is discovery, not an opened primary source.  A result
+      // cannot inherit "official" status until the underlying HTTPS page has
+      // been opened and recorded by a source-open capable phase.
+      source_type: 'secondary',
       title: String(row.title || row.url).replace(/\s+/g, ' ').trim().slice(0, 500),
       url: row.url,
       excerpt: String(row.content || '').replace(/\s+/g, ' ').trim().slice(0, 1200),
-      reliability_note: sourceType === 'official'
-        ? 'Official-domain result discovered by Groq server-side browser search; preserve the underlying URL for direct review.'
-        : 'External search result discovered by Groq server-side browser search; corroborate material claims with official or primary evidence where available.',
+      reliability_note: 'Search discovery only. The underlying URL was not opened in this phase and cannot substantiate a verified or official claim.',
       retrieved_at: retrievedAt,
     };
   });
   const sourceRefs = sources.map((row) => row.source_ref);
-  const hasOfficial = sources.some((row) => row.source_type === 'official');
-  const unresolved = hasOfficial ? [] : [{
+  const unresolved = [{
     description: `${lane.lane_id} requires authoritative confirmation before dispositive reliance.`,
-    reason: 'The fallback search returned external sources but none were classified as an official-domain source.',
+    reason: 'The fallback produced search discoveries only; no underlying source-open verification was recorded.',
     attempted_methods: ['Groq server-side browser_search fallback'],
-    blocker: 'Primary or official corroboration remains outstanding.',
+    blocker: 'Primary or official source-open corroboration remains outstanding.',
     next_manual_action: lane.stop_condition || 'Obtain and verify the relevant official or primary source.',
   }];
   const materiality = lane.priority === 'critical' ? 'high' : lane.priority === 'high' ? 'medium' : 'informational';
@@ -720,19 +761,19 @@ export function buildGroqBrowserLaneResult(lane, payload, retrievedAt = new Date
       claim: memo.slice(0, 2000),
       evidence_status: 'uncertain',
       materiality,
-      reliability: hasOfficial ? 'high' : 'medium',
+      reliability: 'low',
       evidence_excerpt: memo.slice(0, 800),
       source_refs: sourceRefs,
       document_source_keys: [],
     }],
     check: {
-      status: 'complete',
-      outcome: memo,
+      status: 'blocked',
+      outcome: 'Search discovery completed, but no underlying source-open verification was recorded. ' + memo,
       required_source: lane.preferred_sources?.[0] || 'authoritative primary evidence',
     },
     unresolved_checks: unresolved,
     limitations: [
-      'This lane used the bounded Groq server-side browser_search fallback after the primary research route failed. Search-discovered sources and URLs are preserved; material conclusions should prefer direct official/primary corroboration.',
+      'This lane used the bounded Groq server-side browser_search fallback after the primary research route failed. Results are discovery-only and cannot close the lane until the underlying source is opened and validated.',
     ],
   };
 }
@@ -848,12 +889,14 @@ async function invoke(jobDir, messageFile, model, timeoutSeconds, synthetic) {
 }
 async function validated({
   jobDir, id, role, task, execName, validator, synthetic, allowExternal = false, progressState = null, maxModelAttempts = null,
+  procedureVersion = 'v1',
 }) {
   const taskName = `large-v2-task-${safePart(id)}.md`;
   await writeAtomic(jobDir, taskName, task);
   const failures = [];
   try {
-    const raw = await readFile(path.join(jobDir, execName), 'utf8');
+    const raw = await readReusableArtifact(jobDir, { id, role, task, procedureVersion, execName });
+    if (!raw) throw new Error('retained phase artifact contract is missing or no longer matches current inputs');
     const envelope = parseEnvelope(raw, `${id} retained`);
     if (!allowExternal && externalTools(envelope).length) throw new Error('retained artifact used forbidden external research');
     return { envelope, value: validator(envelope.final, envelope), reused: true, failures };
@@ -918,6 +961,7 @@ async function validated({
     }
     const value = validator(envelope.final, envelope);
     await writeAtomic(jobDir, execName, raw);
+    await writeArtifactContract(jobDir, { id, role, task, procedureVersion, execName, raw });
     return { envelope, value, reused: false, failures };
     }
     await progress(
@@ -1872,6 +1916,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
         validator: (final) => parseCaseAnalysisFinal(final, docSourceKeys),
         progressState: { stage: 'analyzing_documents', progress: 45, phase: 'large_case_analysis' },
         maxModelAttempts: 2,
+        procedureVersion: 'case-analysis-v2.1-labelled-field-recovery',
       });
       caseAnalysis = analysisResult.value;
     } catch (error) {
@@ -1902,6 +1947,13 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
   }
   phases.push({ phase: 'large-case-analysis', ...analysisResult });
   await writeAtomic(jobDir, 'large-case-analysis.json', `${JSON.stringify(caseAnalysis, null, 2)}\n`);
+
+  // Do not burn the external-research/report budget when submitted evidence
+  // contains substantive claims but the normalisation contract produced no
+  // entity anchors.  This is a technical failure, not an "incomplete" result.
+  if (documentSummaries.length > 0 && caseAnalysis.findings.length > 0 && caseAnalysis.entities.length === 0) {
+    throw new Error('entity_normalization_failed: substantive submitted evidence produced no normalized entities');
+  }
 
   await progress(jobDir, 'researching', 52, 'large_research_lanes', `${plan.research_lanes.length} lanes`);
   const entityKeys = new Set(caseAnalysis.entities.map((row) => row.entity_key));

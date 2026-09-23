@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, AlertTriangle, BookOpenCheck, ClipboardCheck, FileSearch,
   FolderOpen, Gavel, History, Network, Play, SearchCheck, Shield, UploadCloud,
@@ -18,13 +18,13 @@ import {
   type RuntimeStatus,
 } from './lib/integritas-browser';
 import { InvestigationMilestones } from './InvestigationMilestones';
-import { InvestigationResultsView } from './InvestigationResultsView';
 import { isSupabaseConfigured, supabase, supabaseUrl } from './lib/supabase';
 export { InvestigationResultsView } from './InvestigationResultsView';
+const InvestigationResultsView = lazy(() => import('./InvestigationResultsView').then((module) => ({ default: module.InvestigationResultsView })));
 
 type CaseRow = { id: string; title: string; revision: number; created_at: string };
 type DocumentRow = { id: string; case_id: string; name: string; created_at: string };
-type JobRow = { id: string; case_id: string; case_revision: number; control_command_id: string | null; stage: string; progress: number; runtime_provider: string; depth?: string; created_at?: string; updated_at?: string };
+type JobRow = { id: string; case_id: string; case_revision: number; control_command_id: string | null; stage: string; progress: number; current_attempt?: number; runtime_provider: string; depth?: string; created_at?: string; updated_at?: string };
 const navigation = [
   ['Dashboard', '#dashboard', Activity], ['Cases', '#cases', FolderOpen],
   ['Documents', '#documents', FileSearch], ['Entities', '#entities', Network],
@@ -160,7 +160,7 @@ export function App() {
     let cancelled = false;
     Promise.all([
       supabase.from('integritas_documents').select('id,case_id,name,created_at').eq('case_id', selectedCaseId).order('created_at'),
-      supabase.from('integritas_case_jobs').select('id,case_id,case_revision,control_command_id,stage,progress,runtime_provider,depth,created_at,updated_at').eq('case_id', selectedCaseId).eq('runtime_provider', 'openclaw-oracle').order('created_at', { ascending: false }),
+      supabase.from('integritas_case_jobs').select('id,case_id,case_revision,control_command_id,stage,progress,current_attempt,runtime_provider,depth,created_at,updated_at').eq('case_id', selectedCaseId).eq('runtime_provider', 'openclaw-oracle').order('created_at', { ascending: false }),
     ]).then(([documentResult, jobResult]) => {
       if (cancelled) return;
       if (documentResult.error) { setNotice(documentResult.error.message); return; }
@@ -186,12 +186,12 @@ export function App() {
         const [command, jobResult, checkpointResult] = await Promise.all([
           browserClient.commandStatus(token, job.control_command_id as string),
           dataClient.from('integritas_case_jobs')
-            .select('id,case_id,case_revision,control_command_id,stage,progress,runtime_provider')
+            .select('id,case_id,case_revision,control_command_id,stage,progress,current_attempt,runtime_provider')
             .eq('id', job.id)
             .eq('case_id', selectedCaseId)
             .maybeSingle(),
           dataClient.from('integritas_case_job_checkpoints')
-            .select('id,stage,progress,safe_metadata,created_at,updated_at')
+            .select('id,attempt,stage,progress,safe_metadata,created_at,updated_at')
             .eq('case_id', selectedCaseId)
             .eq('case_job_id', job.id)
             .order('created_at'),
@@ -507,6 +507,7 @@ export function App() {
               checks={results?.checks ?? []}
               jobStage={job.stage}
               jobProgress={job.progress ?? 0}
+              currentAttempt={job.current_attempt}
             />
           )}
 
@@ -528,13 +529,15 @@ export function App() {
           </article>
 
           {results && selectedCase && job ? (
-            <InvestigationResultsView
-              results={results}
-              caseRevision={selectedCase.revision}
-              job={{ case_revision: job.case_revision, stage: job.stage }}
-              onOpenPdf={() => { void openReportPdf(); }}
-              pdfBusy={pdfBusy}
-            />
+            <Suspense fallback={<article className="panel wide"><p className="muted">Loading investigation results…</p></article>}>
+              <InvestigationResultsView
+                results={results}
+                caseRevision={selectedCase.revision}
+                job={{ case_revision: job.case_revision, stage: job.stage }}
+                onOpenPdf={() => { void openReportPdf(); }}
+                pdfBusy={pdfBusy}
+              />
+            </Suspense>
           ) : (
             <article className="panel" id="entities">
               <div className="panel-head"><h2>Persisted investigation results</h2><span>Awaiting results</span></div>

@@ -4,7 +4,9 @@ const statusLabels: Record<InvestigationMilestone['status'], string> = {
   waiting: 'Waiting',
   active: 'In progress',
   complete: 'Complete',
+  reused: 'Reused',
   blocked: 'Blocked',
+  failed: 'Failed',
   manual: 'Manual check',
 };
 
@@ -22,7 +24,7 @@ function MilestoneGroup({
       <ol className="milestone-list">
         {rows.map((row) => (
           <li className={`milestone-item ${row.status}`} key={row.id}>
-            <span className="milestone-check" aria-hidden="true">{row.status === 'complete' ? '✓' : row.status === 'active' ? '•' : ' '}</span>
+            <span className="milestone-check" aria-hidden="true">{row.status === 'complete' || row.status === 'reused' ? '✓' : row.status === 'failed' ? '!' : row.status === 'active' ? '•' : ' '}</span>
             <div className="milestone-copy">
               <strong>{row.label}</strong>
               <small>{row.priority} priority · {statusLabels[row.status]}</small>
@@ -40,19 +42,21 @@ export function InvestigationMilestones({
   checks,
   jobStage,
   jobProgress,
+  currentAttempt,
 }: {
   checkpoints: CheckpointRow[];
   checks: CheckResultRow[];
   jobStage: string;
   jobProgress: number;
+  currentAttempt?: number;
 }) {
-  const snapshot = deriveInvestigationMilestoneSnapshot(checkpoints, checks, jobStage, jobProgress);
+  const snapshot = deriveInvestigationMilestoneSnapshot(checkpoints, checks, jobStage, jobProgress, currentAttempt);
   const { rows } = snapshot;
   const core = rows.filter((row) => row.id.startsWith('core.'));
   const modules = rows.filter((row) => row.id.startsWith('module.'));
   const research = rows.filter((row) => row.id.startsWith('lane.'));
-  const completed = rows.filter((row) => row.status === 'complete').length;
-  const blocked = rows.filter((row) => row.status === 'blocked' || row.status === 'manual').length;
+  const completed = rows.filter((row) => row.status === 'complete' || row.status === 'reused').length;
+  const blocked = rows.filter((row) => row.status === 'blocked' || row.status === 'failed' || row.status === 'manual').length;
   const total = rows.length;
   const pct = snapshot.progress;
   const progressLabel = snapshot.isLive
