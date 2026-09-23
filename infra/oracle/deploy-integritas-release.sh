@@ -10,6 +10,7 @@ SHA="${1:-}"
 SOURCE_REPO="${INTEGRITAS_SOURCE_REPO:-/home/opc/integritas-e2e-investigation}"
 RELEASES=/opt/integritas/releases
 CURRENT=/opt/integritas/current
+RELEASES_TO_KEEP=12
 WORKER=integritas-control-worker.service
 GATEWAY=openclaw-gateway.service
 PROVIDER_STAGING_FILE=${INTEGRITAS_PROVIDER_SECRET_STAGING:-/home/opc/.integritas-provider-secrets.env}
@@ -35,6 +36,24 @@ MANAGED_FILES=(
   /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
   /opt/integritas/deployed-release
 )
+
+prune_old_releases() {
+  local current_target dir
+  local -a ordered_releases=()
+  current_target="$(readlink -f "${CURRENT}")"
+  mapfile -t ordered_releases < <(
+    find "${RELEASES}" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+      | sort -nr \
+      | cut -d' ' -f2-
+  )
+  if (( ${#ordered_releases[@]} <= RELEASES_TO_KEEP )); then
+    return 0
+  fi
+  for dir in "${ordered_releases[@]:RELEASES_TO_KEEP}"; do
+    [[ "${dir}" == "${current_target}" ]] && continue
+    rm -rf --one-file-system -- "${dir}" || return 1
+  done
+}
 
 case "${FAULT_INJECT_PHASE}" in
   ""|after-install) ;;
@@ -279,6 +298,9 @@ if [[ -n "${ROLLBACK_STATE}" && -d "${ROLLBACK_STATE}" ]]; then
   rm -rf "${ROLLBACK_STATE}"
 fi
 trap - ERR
+if ! prune_old_releases; then
+  echo "Warning: release retention cleanup failed; live deployment remains active." >&2
+fi
 
 echo "Integritas release ${SHA} deployed successfully."
 echo "Worker and OpenClaw Gateway are active. Public-site configuration was not modified."
