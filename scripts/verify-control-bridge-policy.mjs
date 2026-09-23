@@ -103,8 +103,9 @@ assert.ok(!controlledDeploy.match(/\b(eval|curl|wget)\b/), 'controlled deploymen
 assert.match(releaseDeploy, /plugins inspect parallel --json/, 'release smoke must deterministically inspect the Parallel plugin');
 assert.match(releaseDeploy, /trustedOfficialInstall/, 'release smoke must require trusted official Parallel provenance');
 assert.match(releaseDeploy, /parallel-free/, 'release smoke must require the key-free Parallel provider');
-assert.match(releaseDeploy, /integrate\.api\.nvidia\.com\/v1\/chat\/completions/, 'release smoke must directly verify the configured NVIDIA provider route');
-assert.match(releaseDeploy, /--max-time 90/, 'release provider smoke must remain bounded');
+assert.match(releaseDeploy, /integrate\.api\.nvidia\.com\/v1\/models/, 'release smoke must deterministically verify the configured NVIDIA provider catalog');
+assert.match(releaseDeploy, /--max-time 30/, 'release provider smoke must remain bounded');
+assert.ok(!releaseDeploy.includes('/v1/chat/completions'), 'release admission must not depend on a generative provider inference');
 assert.ok(!releaseDeploy.includes('--message-file'), 'release admission must not depend on a model choosing whether to call web_search');
 
 assert.match(investigationRunner, /const args = \[\s*'agent', 'exec'/, 'runner arguments must begin with OpenClaw agent exec');
