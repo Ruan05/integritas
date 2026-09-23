@@ -21,6 +21,9 @@ RUNNER_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-investigation.json5"
 ZEN_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-investigation-zen.json5"
 ZEN_TOOL_SRC="$REPO_ROOT/infra/openclaw/integritas-zen.sh"
 POLKIT_SRC="$REPO_ROOT/infra/openclaw/49-integritas-openclaw-control.rules"
+PERSONAL_ADMIN_ORCHESTRATOR_SRC="$REPO_ROOT/infra/openclaw/personal-admin-skills/integritas-operator-orchestrator/SKILL.md"
+PERSONAL_ADMIN_WORKSPACE=/var/lib/openclaw/workspace-personal-admin
+PERSONAL_ADMIN_ORCHESTRATOR_DIR="$PERSONAL_ADMIN_WORKSPACE/skills/integritas-operator-orchestrator"
 ENV_DIR=/etc/integritas
 ENV_FILE="$ENV_DIR/control-worker.env"
 TOKEN_FILE="$ENV_DIR/control-worker.token"
@@ -109,7 +112,7 @@ validate_openclaw_with_provider_env() {
 for required in /usr/bin/node /usr/bin/python3 /usr/bin/pdftotext /usr/bin/pdfinfo /usr/bin/pdftoppm /usr/bin/tesseract /usr/bin/systemctl /usr/bin/systemd-analyze /usr/bin/getent /usr/bin/env /usr/bin/bash /usr/bin/grep /usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/sbin/runuser; do
   [[ -x "$required" ]] || { echo "Missing required executable: $required" >&2; exit 1; }
 done
-for required in "$SERVICE_SRC" "$GATEWAY_SERVICE_SRC" "$BROWSER_SERVICE_SRC" "$BROWSER_HELPER_SRC" "$RUNNER_SERVICE_SRC" "$DEPLOY_SERVICE_SRC" "$CONTROLLED_DEPLOY_SRC" "$RUNNER_SCRIPT_SRC" "$GATEWAY_CONFIG_SRC" "$RUNNER_CONFIG_SRC" "$ZEN_CONFIG_SRC" "$ZEN_TOOL_SRC" "$POLKIT_SRC"; do
+for required in "$SERVICE_SRC" "$GATEWAY_SERVICE_SRC" "$BROWSER_SERVICE_SRC" "$BROWSER_HELPER_SRC" "$RUNNER_SERVICE_SRC" "$DEPLOY_SERVICE_SRC" "$CONTROLLED_DEPLOY_SRC" "$RUNNER_SCRIPT_SRC" "$GATEWAY_CONFIG_SRC" "$RUNNER_CONFIG_SRC" "$ZEN_CONFIG_SRC" "$ZEN_TOOL_SRC" "$POLKIT_SRC" "$PERSONAL_ADMIN_ORCHESTRATOR_SRC"; do
   [[ -f "$required" ]] || { echo "Missing required file: $required" >&2; exit 1; }
 done
 [[ -d /etc/polkit-1/rules.d ]] || { echo "Polkit rules directory is unavailable" >&2; exit 1; }
@@ -147,6 +150,8 @@ install -o root -g openclaw -m 0640 "$GATEWAY_CONFIG_SRC" "$GATEWAY_CONFIG_DEST"
 install -o root -g openclaw -m 0640 "$RUNNER_CONFIG_SRC" "$RUNNER_CONFIG_DEST"
 install -o root -g openclaw -m 0640 "$ZEN_CONFIG_SRC" "$ZEN_CONFIG_DEST"
 install -o root -g root -m 0755 "$ZEN_TOOL_SRC" "$ZEN_TOOL_DEST"
+install -d -o openclaw -g openclaw -m 0750 "$PERSONAL_ADMIN_WORKSPACE" "$PERSONAL_ADMIN_WORKSPACE/skills" "$PERSONAL_ADMIN_ORCHESTRATOR_DIR"
+install -o openclaw -g openclaw -m 0640 "$PERSONAL_ADMIN_ORCHESTRATOR_SRC" "$PERSONAL_ADMIN_ORCHESTRATOR_DIR/SKILL.md"
 repair_openclaw_config_permissions
 install -o root -g root -m 0644 "$POLKIT_SRC" /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
 
@@ -174,6 +179,13 @@ fi
 
 validate_openclaw_with_provider_env "$GATEWAY_CONFIG_DEST"
 validate_openclaw_with_provider_env "$RUNNER_CONFIG_DEST"
+
+# Keep the vetted research methodology pinned in the operator workspace. The
+# ClawHub security audit remains authoritative; --force only replaces the local
+# workspace copy and does not bypass install-policy checks.
+if ! /usr/bin/env -i PATH=/usr/local/bin:/usr/bin:/bin:/opt/openclaw/bin:/opt/openclaw/tools/node-v24.19.0/bin   HOME=/var/lib/openclaw OPENCLAW_HOME=/var/lib/openclaw OPENCLAW_STATE_DIR=/var/lib/openclaw   OPENCLAW_CONFIG_PATH="$GATEWAY_CONFIG_DEST"   /usr/sbin/runuser --preserve-environment -u openclaw --   /opt/openclaw/bin/openclaw skills install @ivangdavila/in-depth-research   --agent personal-admin --version 1.0.0 --force; then
+  echo "Warning: pinned Deep Research skill refresh failed; existing workspace copy was preserved if present." >&2
+fi
 if grep -Eq '^OPENCODE_ZEN_API_KEY=.+' "$PROVIDER_ENV_FILE"; then
   validate_openclaw_with_provider_env "$ZEN_CONFIG_DEST"
 else
