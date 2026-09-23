@@ -9,6 +9,8 @@ fi
 REPO_ROOT=${INTEGRITAS_REPO_ROOT:-/opt/integritas/current}
 SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-control-worker.service"
 GATEWAY_SERVICE_SRC="$REPO_ROOT/infra/openclaw/openclaw-gateway.service"
+GATEWAY_CONFIG_DROPIN_SRC="$REPO_ROOT/infra/openclaw/openclaw-gateway-integritas.conf"
+GATEWAY_CONFIG_DROPIN_DEST=/etc/systemd/system/openclaw-gateway.service.d/99-integritas-config.conf
 BROWSER_SERVICE_SRC="$REPO_ROOT/infra/openclaw/openclaw-browser.service"
 BROWSER_HELPER_SRC="$REPO_ROOT/infra/openclaw/integritas-browser-start.sh"
 RUNNER_SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-openclaw-investigation@.service"
@@ -21,9 +23,10 @@ RUNNER_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-investigation.json5"
 ZEN_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-investigation-zen.json5"
 ZEN_TOOL_SRC="$REPO_ROOT/infra/openclaw/integritas-zen.sh"
 POLKIT_SRC="$REPO_ROOT/infra/openclaw/49-integritas-openclaw-control.rules"
-PERSONAL_ADMIN_ORCHESTRATOR_SRC="$REPO_ROOT/infra/openclaw/personal-admin-skills/integritas-operator-orchestrator/SKILL.md"
+DATADOG_INSTALLER_SRC="$REPO_ROOT/infra/oracle/install-datadog-agent.sh"
+DATADOG_INSTALLER_DEST=/usr/local/sbin/integritas-datadog-install
+PERSONAL_ADMIN_SKILLS_SRC_DIR="$REPO_ROOT/infra/openclaw/personal-admin-skills"
 PERSONAL_ADMIN_WORKSPACE=/var/lib/openclaw/workspace-personal-admin
-PERSONAL_ADMIN_ORCHESTRATOR_DIR="$PERSONAL_ADMIN_WORKSPACE/skills/integritas-operator-orchestrator"
 ENV_DIR=/etc/integritas
 ENV_FILE="$ENV_DIR/control-worker.env"
 TOKEN_FILE="$ENV_DIR/control-worker.token"
@@ -80,7 +83,7 @@ validate_provider_env_file() {
     }
     name="${BASH_REMATCH[1]}"
     case "$name" in
-      OPENROUTER_API_KEY|NVIDIA_API_KEY|GROQ_API_KEY|OPENCODE_ZEN_API_KEY) ;;
+      OPENROUTER_API_KEY|NVIDIA_API_KEY|GROQ_API_KEY|OPENCODE_ZEN_API_KEY|EXA_API_KEY|FIRECRAWL_API_KEY|BRAVE_API_KEY|TAVILY_API_KEY|PARALLEL_API_KEY) ;;
       *)
         echo "Provider secret file contains an unapproved variable name: $name" >&2
         return 1
@@ -112,7 +115,7 @@ validate_openclaw_with_provider_env() {
 for required in /usr/bin/node /usr/bin/python3 /usr/bin/pdftotext /usr/bin/pdfinfo /usr/bin/pdftoppm /usr/bin/tesseract /usr/bin/systemctl /usr/bin/systemd-analyze /usr/bin/getent /usr/bin/env /usr/bin/bash /usr/bin/grep /usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/sbin/runuser; do
   [[ -x "$required" ]] || { echo "Missing required executable: $required" >&2; exit 1; }
 done
-for required in "$SERVICE_SRC" "$GATEWAY_SERVICE_SRC" "$BROWSER_SERVICE_SRC" "$BROWSER_HELPER_SRC" "$RUNNER_SERVICE_SRC" "$DEPLOY_SERVICE_SRC" "$CONTROLLED_DEPLOY_SRC" "$RUNNER_SCRIPT_SRC" "$GATEWAY_CONFIG_SRC" "$RUNNER_CONFIG_SRC" "$ZEN_CONFIG_SRC" "$ZEN_TOOL_SRC" "$POLKIT_SRC" "$PERSONAL_ADMIN_ORCHESTRATOR_SRC"; do
+for required in "$SERVICE_SRC" "$GATEWAY_SERVICE_SRC" "$GATEWAY_CONFIG_DROPIN_SRC" "$BROWSER_SERVICE_SRC" "$BROWSER_HELPER_SRC" "$RUNNER_SERVICE_SRC" "$DEPLOY_SERVICE_SRC" "$CONTROLLED_DEPLOY_SRC" "$RUNNER_SCRIPT_SRC" "$GATEWAY_CONFIG_SRC" "$RUNNER_CONFIG_SRC" "$ZEN_CONFIG_SRC" "$ZEN_TOOL_SRC" "$POLKIT_SRC" "$DATADOG_INSTALLER_SRC"; do
   [[ -f "$required" ]] || { echo "Missing required file: $required" >&2; exit 1; }
 done
 [[ -d /etc/polkit-1/rules.d ]] || { echo "Polkit rules directory is unavailable" >&2; exit 1; }
@@ -133,6 +136,8 @@ install -d -o integritas-control -g integritas-control -m 0700 "$STATE_DIR"
 install -d -o integritas-control -g "$SHARED_GROUP" -m 2770 "$RUNNER_ROOT" "$RUNNER_ROOT/jobs"
 install -o root -g root -m 0644 "$SERVICE_SRC" /etc/systemd/system/integritas-control-worker.service
 install -o root -g root -m 0644 "$GATEWAY_SERVICE_SRC" /etc/systemd/system/openclaw-gateway.service
+install -d -o root -g root -m 0755 "$(dirname "$GATEWAY_CONFIG_DROPIN_DEST")"
+install -o root -g root -m 0644 "$GATEWAY_CONFIG_DROPIN_SRC" "$GATEWAY_CONFIG_DROPIN_DEST"
 install -o root -g root -m 0644 "$BROWSER_SERVICE_SRC" "$BROWSER_SERVICE_DEST"
 install -d -o root -g root -m 0755 /usr/local/libexec
 install -o root -g root -m 0755 "$BROWSER_HELPER_SRC" "$BROWSER_HELPER_DEST"
@@ -150,8 +155,15 @@ install -o root -g openclaw -m 0640 "$GATEWAY_CONFIG_SRC" "$GATEWAY_CONFIG_DEST"
 install -o root -g openclaw -m 0640 "$RUNNER_CONFIG_SRC" "$RUNNER_CONFIG_DEST"
 install -o root -g openclaw -m 0640 "$ZEN_CONFIG_SRC" "$ZEN_CONFIG_DEST"
 install -o root -g root -m 0755 "$ZEN_TOOL_SRC" "$ZEN_TOOL_DEST"
-install -d -o openclaw -g openclaw -m 0750 "$PERSONAL_ADMIN_WORKSPACE" "$PERSONAL_ADMIN_WORKSPACE/skills" "$PERSONAL_ADMIN_ORCHESTRATOR_DIR"
-install -o openclaw -g openclaw -m 0640 "$PERSONAL_ADMIN_ORCHESTRATOR_SRC" "$PERSONAL_ADMIN_ORCHESTRATOR_DIR/SKILL.md"
+install -o root -g root -m 0750 "$DATADOG_INSTALLER_SRC" "$DATADOG_INSTALLER_DEST"
+install -d -o openclaw -g openclaw -m 0750 "$PERSONAL_ADMIN_WORKSPACE" "$PERSONAL_ADMIN_WORKSPACE/skills"
+for skill in integritas-operator-orchestrator integritas-research-router integritas-document-verifier integritas-evidence-critic; do
+  skill_src="$PERSONAL_ADMIN_SKILLS_SRC_DIR/$skill/SKILL.md"
+  [[ -f "$skill_src" ]] || { echo "Missing local operator skill: $skill_src" >&2; exit 1; }
+  skill_dest="$PERSONAL_ADMIN_WORKSPACE/skills/$skill"
+  install -d -o openclaw -g openclaw -m 0750 "$skill_dest"
+  install -o openclaw -g openclaw -m 0640 "$skill_src" "$skill_dest/SKILL.md"
+done
 repair_openclaw_config_permissions
 install -o root -g root -m 0644 "$POLKIT_SRC" /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
 

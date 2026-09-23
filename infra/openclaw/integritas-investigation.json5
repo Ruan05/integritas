@@ -591,7 +591,20 @@
   // shared OpenClaw state. Standalone case turns enable that trusted install.
   plugins: {
     enabled: true,
-    entries: { parallel: { enabled: true } },
+    entries: {
+      parallel: { enabled: true },
+      exa: { enabled: true },
+      firecrawl: {
+        enabled: true,
+        config: {
+          webFetch: {
+            onlyMainContent: true,
+            maxAgeMs: 900000,
+            timeoutSeconds: 60,
+          },
+        },
+      },
+    },
   },
   tools: {
     // Pin web_search to OpenClaw's key-free Parallel Search provider. This avoids
@@ -605,7 +618,7 @@
         maxResults: 8,
         timeoutSeconds: 45,
       },
-      fetch: { enabled: true },
+      fetch: { enabled: true, provider: "firecrawl" },
     },
     profile: "minimal",
     alsoAllow: ["ls", "read", "web_search", "web_fetch", "browser", "view_image", "pdf"],

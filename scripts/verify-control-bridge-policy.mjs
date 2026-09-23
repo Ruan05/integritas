@@ -5,6 +5,7 @@ const read = (path) => readFileSync(path, 'utf8');
 const gateway = read('infra/openclaw/openclaw.json5');
 const service = read('infra/openclaw/integritas-control-worker.service');
 const browserService = read('infra/openclaw/openclaw-browser.service');
+const gatewayConfigDropin = read('infra/openclaw/openclaw-gateway-integritas.conf');
 const browserHelper = read('infra/openclaw/integritas-browser-start.sh');
 const commands = read('infra/openclaw/control-worker/src/commands.mjs');
 const worker = read('infra/openclaw/control-worker/src/index.mjs');
@@ -32,6 +33,8 @@ assert.match(gateway, /allowHostControl:\s*false/, 'case sandbox browsers must n
 assert.match(gateway, /autoStart:\s*true/, 'case sandbox browser must auto-start on demand');
 assert.match(gateway, /snapshotDefaults:\s*\{\s*mode:\s*["']efficient["']\s*\}/, 'browser snapshots must default to efficient mode');
 assert.match(gateway, /tabCleanup:\s*\{\s*enabled:\s*true\s*\}/, 'managed browser tabs must auto-clean up');
+assert.match(gatewayConfigDropin, /^Environment=OPENCLAW_CONFIG_PATH=\/etc\/openclaw\/integritas-gateway\.json$/m, 'Gateway drop-in must override stale config paths with the provider-aware Integritas overlay');
+assert.match(installer, /GATEWAY_CONFIG_DROPIN_DEST=\/etc\/systemd\/system\/openclaw-gateway\.service\.d\/99-integritas-config\.conf/, 'installer must own the authoritative Gateway config-path drop-in');
 assert.match(browserService, /^User=openclaw$/m, 'managed browser must run as the openclaw account');
 assert.match(browserService, /^PartOf=openclaw-gateway\.service$/m, 'managed browser must follow Gateway restarts');
 assert.match(browserService, /ExecStart=\/usr\/local\/libexec\/integritas-browser-start/, 'managed browser service must use the bounded readiness helper');
@@ -103,6 +106,8 @@ assert.ok(!controlledDeploy.match(/\b(eval|curl|wget)\b/), 'controlled deploymen
 assert.match(releaseDeploy, /plugins inspect parallel --json/, 'release smoke must deterministically inspect the Parallel plugin');
 assert.match(releaseDeploy, /trustedOfficialInstall/, 'release smoke must require trusted official Parallel provenance');
 assert.match(releaseDeploy, /parallel-free/, 'release smoke must require the key-free Parallel provider');
+assert.match(nativeInstaller, /for plugin in parallel-plugin firecrawl-plugin exa-plugin; do/, 'native installer must install only the approved official research plugin set');
+assert.match(nativeInstaller, /plugins install "npm:@openclaw\/\$\{plugin\}@\$\{TARGET_VERSION\}"/, 'native installer must pin approved research plugins to the exact OpenClaw version');
 assert.match(releaseDeploy, /integrate\.api\.nvidia\.com\/v1\/models/, 'release smoke must deterministically verify the configured NVIDIA provider catalog');
 assert.match(releaseDeploy, /--max-time 30/, 'release provider smoke must remain bounded');
 assert.ok(!releaseDeploy.includes('/v1/chat/completions'), 'release admission must not depend on a generative provider inference');
@@ -157,7 +162,13 @@ for (const model of ['deepseek/deepseek-v4.1-flash', 'z-ai/glm-5.3', 'z-ai/glm-5
   assert.ok(investigationConfig.includes(model), `production investigation profile must expose ${model}`);
 }
 assert.match(installer, /for name in OPENROUTER_API_KEY NVIDIA_API_KEY; do/, 'only provisioned NVIDIA/OpenRouter secrets may be mandatory');
-assert.ok(installer.includes('OPENROUTER_API_KEY|NVIDIA_API_KEY|GROQ_API_KEY|OPENCODE_ZEN_API_KEY'), 'Groq and OpenCode Zen may remain approved optional staged variables');
+assert.ok(installer.includes('OPENROUTER_API_KEY|NVIDIA_API_KEY|GROQ_API_KEY|OPENCODE_ZEN_API_KEY|EXA_API_KEY|FIRECRAWL_API_KEY|BRAVE_API_KEY|TAVILY_API_KEY|PARALLEL_API_KEY'), 'approved optional research/provider secrets must remain root-managed');
+for (const skill of ['integritas-operator-orchestrator', 'integritas-research-router', 'integritas-document-verifier', 'integritas-evidence-critic']) {
+  assert.ok(installer.includes(skill), `installer must deploy local operator skill ${skill}`);
+}
+assert.match(investigationConfig, /exa:\s*\{\s*enabled:\s*true\s*\}/, 'investigation profile must enable official Exa plugin for credential-ready use');
+assert.match(investigationConfig, /firecrawl:\s*\{[\s\S]*enabled:\s*true/, 'investigation profile must enable official Firecrawl plugin');
+assert.match(investigationConfig, /fetch:\s*\{\s*enabled:\s*true,\s*provider:\s*"firecrawl"\s*\}/, 'investigation web_fetch must use Firecrawl fallback');
 assert.match(investigationConfig, /"integritas-openrouter"/, 'investigation config must define a fixed OpenRouter provider');
 assert.match(investigationConfig, /"integritas-nvidia"/, 'investigation config must define an explicit NVIDIA provider');
 assert.ok(!investigationConfig.includes('integritas-opencode-zen'), 'active investigation config must not require optional Zen');
@@ -188,7 +199,8 @@ assert.match(largeInvestigationRunner, /buildDocumentShards\(manifest, 1\)/, 'la
 assert.match(investigationConfig, /provider:\s*\"parallel-free\"/, 'investigation web search must use the explicit key-free Parallel route');
 assert.doesNotMatch(investigationConfig, /\/opt\/openclaw-source\/extensions\/parallel/, 'investigation config must not load an unverified Parallel source checkout');
 assert.match(investigationConfig, /entries:\s*\{\s*parallel:\s*\{\s*enabled:\s*true/, 'investigation config must explicitly enable the Parallel plugin');
-assert.match(nativeInstaller, /npm:@openclaw\/parallel-plugin@\$\{TARGET_VERSION\}/, 'native installer must pin the official Parallel npm package to the OpenClaw version');
+assert.match(nativeInstaller, /for plugin in parallel-plugin firecrawl-plugin exa-plugin; do/, 'native installer must pin the approved research plugin set');
+assert.match(nativeInstaller, /npm:@openclaw\/\$\{plugin\}@\$\{TARGET_VERSION\}/, 'native installer must pin each approved research plugin to the OpenClaw version');
 assert.match(nativeInstaller, /plugins registry --refresh/, 'native installer must refresh trusted plugin provenance after managed installation');
 assert.match(nativeInstaller, /@steipete\/summarize@\$\{SUMMARIZE_VERSION\}/, 'native installer must provision the verified Summarize CLI');
 assert.match(largeInvestigationRunner, /mapLimit\(shards, 2/, 'document shard concurrency must remain bounded at two to reduce provider-rate-limit cascades');

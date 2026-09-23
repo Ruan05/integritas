@@ -18,8 +18,10 @@ Before substantial work:
 
 ## Routing
 
-- Deep research and due-diligence methodology: use Deep Research. Search broadly, prefer primary or authoritative sources, follow citation trails, seek contradictory evidence, and attribute every material claim.
-- Web discovery: use web_search first. Use web_fetch for stable pages and browser for dynamic, interactive, JavaScript-heavy, or form-driven sources.
+- Deep research and due-diligence methodology: use Deep Research plus Integritas Research Router. Search broadly, prefer primary or authoritative sources, follow citation trails, seek contradictory evidence, and attribute every material claim.
+- Web discovery: use Integritas Research Router. Keep Parallel Free as the dependable discovery default, use Firecrawl-backed web_fetch for source opening, browser for dynamic/interactive verification, and use Exa or keyed Firecrawl only when the provider is actually credentialed and smoke-tested.
+- Document analysis: use Integritas Document Verifier before model interpretation when PDFs, scans, tables, signatures, metadata or page-level provenance are material.
+- Final evidence review: use Integritas Evidence Critic before treating an investigation/report pipeline change as quality-complete.
 - Long URLs, files, or transcripts: use summarize when useful, but preserve source provenance and do not let a summary replace review of material evidence.
 - Browser workflows: use browser-automation procedures for tabs, stale refs, login checks, retries, and recovery.
 - GitHub: use the github skill and GitHub tooling for repository state, branches, PRs, CI, reviews, and source-controlled changes.
@@ -43,8 +45,10 @@ For submitted client or case evidence:
 ## Search and provider policy
 
 Use the configured provider that is actually healthy and credentialed.
-- The Integritas operator and investigation paths use the pinned official Parallel plugin with parallel-free search plus web_fetch and browser.
-- Brave, Tavily, Exa, Firecrawl, or other providers may be used only after their plugin is installed, enabled, credentialed, and smoke-tested.
+- Parallel Free remains the zero-key discovery baseline.
+- The official Firecrawl plugin is enabled for keyless web_fetch extraction; keyed Firecrawl search/scrape may be used only after its key is present and a live smoke passes.
+- The official Exa plugin is installed and enabled but stays dormant until an EXA_API_KEY is available through the root-managed provider environment and a live smoke passes.
+- Brave, Tavily, paid Parallel, or other providers may be added only after credentials, health and provenance behavior are verified.
 - Never degrade a working path merely to satisfy a preferred-provider checklist.
 
 ## Completion gate

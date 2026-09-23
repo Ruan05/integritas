@@ -10,9 +10,11 @@ const required = [
   'infra/oracle/run-command.sh',
   'infra/oracle/deploy-integritas-release.sh',
   'infra/oracle/deploy-integritas-controlled.sh',
+  'infra/oracle/install-datadog-agent.sh',
   'infra/oracle/test-release-rollback.sh',
   'infra/openclaw/install-native.sh',
   'infra/openclaw/openclaw-gateway.service',
+  'infra/openclaw/openclaw-gateway-integritas.conf',
   'infra/openclaw/integritas-release-deploy@.service',
   'infra/openclaw/openclaw.json5',
   'infra/openclaw/integritas-gateway.json5',
@@ -26,6 +28,7 @@ for (const file of required) {
 }
 for (const file of [
   'infra/oracle/deploy-integritas-release.sh',
+  'infra/oracle/install-datadog-agent.sh',
   'infra/oracle/test-release-rollback.sh',
 ]) {
   if (fs.existsSync(path.join(root, file)) && (fs.statSync(path.join(root, file)).mode & 0o111) === 0) {
@@ -36,12 +39,14 @@ for (const file of [
 if (!errors.length) {
   const config = read('infra/openclaw/openclaw.json5');
   const unit = read('infra/openclaw/openclaw-gateway.service');
+  const gatewayConfigDropin = read('infra/openclaw/openclaw-gateway-integritas.conf');
   const gatewayOverlay = read('infra/openclaw/integritas-gateway.json5');
   const installer = read('infra/openclaw/install-native.sh');
   const cloudInit = read('infra/oracle/cloud-init-oracle-linux.yaml.tpl');
   const runCommand = read('infra/oracle/run-command.sh');
   const releaseDeploy = read('infra/oracle/deploy-integritas-release.sh');
   const controlledDeploy = read('infra/oracle/deploy-integritas-controlled.sh');
+  const datadogInstaller = read('infra/oracle/install-datadog-agent.sh');
   const releaseUnit = read('infra/openclaw/integritas-release-deploy@.service');
   const rollbackTest = read('infra/oracle/test-release-rollback.sh');
   const rollback = read('infra/openclaw/ROLLBACK.md');
@@ -63,6 +68,7 @@ if (!errors.length) {
     [unit, 'ProtectSystem=strict', 'systemd filesystem protection'],
     [unit, 'EnvironmentFile=-/etc/integritas/provider-secrets.env', 'provider secret environment'],
     [unit, 'OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-gateway.json', 'provider-aware Gateway config path'],
+    [gatewayConfigDropin, 'OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-gateway.json', 'authoritative Gateway config-path drop-in'],
     [gatewayOverlay, '$include: "./openclaw.json"', 'Gateway base-config include'],
     [gatewayOverlay, 'primary: "nvidia/nvidia/nemotron-3-ultra-550b-a55b"', 'Gateway canonical NVIDIA primary'],
     [gatewayOverlay, '"integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"', 'Gateway fixed free Nemotron fallback'],
@@ -104,6 +110,12 @@ if (!errors.length) {
     [releaseDeploy, '--max-time 30', 'deployment provider capability smoke must remain tightly bounded'],
     [releaseDeploy, 'provider.curlrc', 'deployment smoke must keep provider credentials out of process argv'],
     [releaseDeploy, "'z-ai/glm-5.3' not in ids", 'deployment smoke must require the configured GLM 5.3 route'],
+    [datadogInstaller, '/etc/integritas/datadog.env', 'Datadog credentials must come from the root-only Integritas secret file'],
+    [datadogInstaller, 'DD_PROCESS_AGENT_PROCESS_COLLECTION_ENABLED=true', 'Datadog live-process collection must be enabled'],
+    [datadogInstaller, 'integritas-control-worker.service', 'Datadog journald collection must cover the control worker'],
+    [datadogInstaller, 'openclaw-gateway.service', 'Datadog journald collection must cover the Gateway'],
+    [datadogInstaller, 'openclaw-browser.service', 'Datadog journald collection must cover managed browser logs'],
+    [datadogInstaller, 'datadog-agent configcheck', 'Datadog configuration must be validated before completion'],
     [rollback, 'previous-version', 'rollback version record'],
     [provision, 'VM.Standard.A1.Flex', 'Always Free A1 shape'],
   ];

@@ -161,6 +161,9 @@ test('investigation profile resolves required provider env locally and keeps the
   assert.match(config, /memory:\s*\{[\s\S]*search:\s*\{[\s\S]*enabled:\s*false/, 'case-worker memory must be disabled to preserve case isolation');
   assert.match(config, /workspaceAccess: "ro"/);
   assert.match(config, /profile: "minimal"/);
+  assert.match(config, /exa:\s*\{\s*enabled:\s*true\s*\}/);
+  assert.match(config, /firecrawl:\s*\{[\s\S]*enabled:\s*true/);
+  assert.match(config, /fetch:\s*\{\s*enabled:\s*true,\s*provider:\s*"firecrawl"\s*\}/);
   assert.match(config, /modelPolicy:\s*\{[\s\S]*allow:/, 'investigation overlay must carry its own model policy');
   for (const model of [
     'integritas-openrouter/deepseek/deepseek-v4.1-flash',
@@ -262,9 +265,9 @@ test('investigation profile resolves required provider env locally and keeps the
 
 test('runner passes only approved provider credentials into OpenClaw', async () => {
   const source = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
-  assert.ok(source.includes("const providerNames = ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY', 'OPENCODE_ZEN_API_KEY'];"));
+  assert.ok(source.includes("const providerNames = ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY', 'OPENCODE_ZEN_API_KEY', 'EXA_API_KEY', 'FIRECRAWL_API_KEY'];"));
   assert.ok(source.includes('env: agentEnv()'));
-  for (const name of ['GROQ_API_KEY', 'GEMINI_API_KEY', 'CEREBRAS_API_KEY', 'EXA_API_KEY', 'HF_TOKEN']) {
+  for (const name of ['GROQ_API_KEY', 'GEMINI_API_KEY', 'CEREBRAS_API_KEY', 'HF_TOKEN']) {
     assert.doesNotMatch(source, new RegExp(`'${name}'`));
   }
   assert.doesNotMatch(source, /process\.env\s*[,}]/);
@@ -279,6 +282,9 @@ test('investigation skill imposes research and reread budgets', async () => {
   assert.match(skill, /maximum.*50 distinct external sources.*100 web\/browser tool calls/s);
   assert.match(skill, /Read each submitted evidence file comprehensively once/);
   assert.match(skill, /Do not repeatedly fetch the same URL/);
+  assert.match(skill, /Use a tool ladder rather than repeating the same search/);
+  assert.match(skill, /Firecrawl fetch provider/);
+  assert.match(skill, /use Exa for semantic\/entity discovery/);
   assert.match(skill, /Turkey petroleum \/ fuel transactions/);
   assert.match(skill, /MERSİS or trade-registry record/);
   assert.match(skill, /EPDK lane/);

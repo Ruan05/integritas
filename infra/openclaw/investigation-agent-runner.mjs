@@ -191,7 +191,7 @@ if (!trustedSynthetic && !Object.values(route).every((phaseRoute) =>
 }
 
 function agentEnv() {
-  const providerNames = ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY', 'OPENCODE_ZEN_API_KEY'];
+  const providerNames = ['OPENROUTER_API_KEY', 'NVIDIA_API_KEY', 'OPENCODE_ZEN_API_KEY', 'EXA_API_KEY', 'FIRECRAWL_API_KEY'];
   return {
     HOME: '/var/lib/openclaw',
     OPENCLAW_HOME: '/var/lib/openclaw',

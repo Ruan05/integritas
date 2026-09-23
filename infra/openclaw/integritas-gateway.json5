@@ -83,6 +83,17 @@
   plugins: {
     entries: {
       parallel: { enabled: true },
+      exa: { enabled: true },
+      firecrawl: {
+        enabled: true,
+        config: {
+          webFetch: {
+            onlyMainContent: true,
+            maxAgeMs: 900000,
+            timeoutSeconds: 60,
+          },
+        },
+      },
       "active-memory": {
         enabled: true,
         config: {
@@ -113,7 +124,7 @@
         maxResults: 8,
         timeoutSeconds: 45,
       },
-      fetch: { enabled: true },
+      fetch: { enabled: true, provider: "firecrawl" },
     },
   },
 }

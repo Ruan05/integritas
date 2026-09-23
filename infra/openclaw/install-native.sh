@@ -54,7 +54,7 @@ bash "${INSTALLER}" --prefix "${PREFIX}" --version "${TARGET_VERSION}" --node-ve
 chmod 0755 "${PREFIX}/bin/openclaw"
 "${PREFIX}/bin/openclaw" --version | grep -F "${TARGET_VERSION}" >/dev/null
 
-# Install the exact official Parallel plugin into OpenClaw's managed npm state.
+# Install the exact official research plugins into OpenClaw's managed npm state.
 # A dedicated minimal config avoids mutating the production root-$include config
 # before the Gateway starts, while preserving verified npm provenance/integrity.
 PLUGIN_INSTALL_DIR="${STATE_DIR}/plugin-install"
@@ -65,12 +65,14 @@ if [[ ! -f "${PLUGIN_INSTALL_CONFIG}" ]]; then
 fi
 chown openclaw:openclaw "${PLUGIN_INSTALL_CONFIG}"
 chmod 0600 "${PLUGIN_INSTALL_CONFIG}"
-runuser -u openclaw -- env \
-  HOME="${STATE_DIR}" OPENCLAW_HOME="${STATE_DIR}" \
-  OPENCLAW_STATE_DIR="${STATE_DIR}" OPENCLAW_CONFIG_PATH="${PLUGIN_INSTALL_CONFIG}" \
-  PATH="${PREFIX}/bin:${PREFIX}/tools/node-v${NODE_VERSION}/bin:/usr/local/bin:/usr/bin:/bin" \
-  "${PREFIX}/bin/openclaw" plugins install "npm:@openclaw/parallel-plugin@${TARGET_VERSION}" \
-  --pin --force --accept-capabilities
+for plugin in parallel-plugin firecrawl-plugin exa-plugin; do
+  runuser -u openclaw -- env \
+    HOME="${STATE_DIR}" OPENCLAW_HOME="${STATE_DIR}" \
+    OPENCLAW_STATE_DIR="${STATE_DIR}" OPENCLAW_CONFIG_PATH="${PLUGIN_INSTALL_CONFIG}" \
+    PATH="${PREFIX}/bin:${PREFIX}/tools/node-v${NODE_VERSION}/bin:/usr/local/bin:/usr/bin:/bin" \
+    "${PREFIX}/bin/openclaw" plugins install "npm:@openclaw/${plugin}@${TARGET_VERSION}" \
+    --pin --force --accept-capabilities
+done
 runuser -u openclaw -- env \
   HOME="${STATE_DIR}" OPENCLAW_HOME="${STATE_DIR}" \
   OPENCLAW_STATE_DIR="${STATE_DIR}" OPENCLAW_CONFIG_PATH="${PLUGIN_INSTALL_CONFIG}" \

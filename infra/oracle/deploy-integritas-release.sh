@@ -24,8 +24,10 @@ MANAGED_FILES=(
   /etc/openclaw/integritas-investigation-zen.json
   /etc/openclaw/zen-enabled
   /usr/local/sbin/integritas-zen
+  /usr/local/sbin/integritas-datadog-install
   /etc/systemd/system/integritas-control-worker.service
   /etc/systemd/system/openclaw-gateway.service
+  /etc/systemd/system/openclaw-gateway.service.d/99-integritas-config.conf
   /etc/systemd/system/openclaw-browser.service
   /usr/local/libexec/integritas-browser-start
   /etc/systemd/system/integritas-openclaw-investigation@.service
@@ -73,6 +75,30 @@ if plugin.get('trustedOfficialInstall') is not True:
 if 'parallel-free' not in providers:
     raise SystemExit('Parallel Free web-search provider is unavailable')
 PYPLUGIN
+
+  for plugin in firecrawl exa; do
+    plugin_out="${smoke_dir}/${plugin}-plugin.json"
+    /usr/sbin/runuser --preserve-environment -u openclaw -- /usr/bin/env \
+      HOME=/var/lib/openclaw OPENCLAW_HOME=/var/lib/openclaw OPENCLAW_STATE_DIR=/var/lib/openclaw \
+      OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-investigation.json \
+      /opt/openclaw/bin/openclaw plugins inspect "${plugin}" --json >"${plugin_out}"
+    /usr/bin/python3 - "${plugin_out}" "${plugin}" <<'PYRESEARCH'
+import json, sys
+from pathlib import Path
+row = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+expected = sys.argv[2]
+plugin = row.get('plugin') if isinstance(row, dict) else None
+if not isinstance(plugin, dict) or plugin.get('status') != 'loaded':
+    raise SystemExit(f'{expected} plugin is not loaded')
+if plugin.get('trustedOfficialInstall') is not True:
+    raise SystemExit(f'{expected} plugin is not a trusted official install')
+providers = set(plugin.get('webSearchProviderIds', []) or [])
+if expected == 'firecrawl' and not {'firecrawl', 'firecrawl-free'}.issubset(providers):
+    raise SystemExit('Firecrawl web-search providers are unavailable')
+if expected == 'exa' and 'exa' not in providers:
+    raise SystemExit('Exa web-search provider is unavailable')
+PYRESEARCH
+  done
 
   # Release admission verifies authenticated provider capability and the exact
   # configured model deterministically. Do not perform an inference here: model
@@ -148,13 +174,19 @@ for required in \
   infra/openclaw/transaction-checks.mjs \
   infra/openclaw/plan-checks.mjs \
   infra/openclaw/skills/integritas-investigation-v1/SKILL.md \
+  infra/openclaw/personal-admin-skills/integritas-operator-orchestrator/SKILL.md \
+  infra/openclaw/personal-admin-skills/integritas-research-router/SKILL.md \
+  infra/openclaw/personal-admin-skills/integritas-document-verifier/SKILL.md \
+  infra/openclaw/personal-admin-skills/integritas-evidence-critic/SKILL.md \
   infra/openclaw/contracts/investigation-bundle-v1.schema.json \
   infra/openclaw/integritas-gateway.json5 \
   infra/openclaw/integritas-investigation.json5 \
   infra/openclaw/integritas-investigation-zen.json5 \
   infra/openclaw/integritas-zen.sh \
+  infra/oracle/install-datadog-agent.sh \
   infra/openclaw/integritas-control-worker.service \
   infra/openclaw/openclaw-gateway.service \
+  infra/openclaw/openclaw-gateway-integritas.conf \
   infra/openclaw/openclaw-browser.service \
   infra/openclaw/integritas-browser-start.sh \
   infra/openclaw/integritas-openclaw-investigation@.service \
