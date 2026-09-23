@@ -991,6 +991,8 @@ async function writeAtomic(jobDir, name, content) {
   }
   throw lastError;
 }
+let retainedCurrentTask = null;
+
 function phaseTaskLabel(phase) {
   const labels = {
     large_document_shards: 'Page extraction, OCR and document review',
@@ -1008,7 +1010,8 @@ function safeLiveText(value, max = 420) {
 }
 async function progress(jobDir, stage, pct, phase, detail = '', live = {}) {
   const discovery = getModelDiscoverySummary();
-  const currentTask = live.current_task ?? {
+  if (live.current_task) retainedCurrentTask = live.current_task;
+  const currentTask = retainedCurrentTask ?? {
     id: String(phase || stage).slice(0, 120),
     label: phaseTaskLabel(phase),
     status: 'active',
@@ -2222,7 +2225,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
       });
     } catch (error) {
       const providerFailure = String(error?.message ?? error).slice(0, 500);
-      if (process.env.GROQ_API_KEY) {
+      if (process.env.GROQ_API_KEY && providerCooldownRemainingMs('groq') === 0) {
         try {
           const groqValue = await runGroqBrowserLane(lane);
           const groqEnvelope = {
@@ -2267,7 +2270,12 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
           value: blocked,
           reused: false,
           blocked: true,
-          failures: [{ model: 'validated-provider-routes', error: providerFailure }],
+          failures: [
+            { model: 'validated-provider-routes', error: providerFailure },
+            ...(process.env.GROQ_API_KEY && providerCooldownRemainingMs('groq') > 0
+              ? [{ model: 'integritas-groq-browser-search', error: 'provider cooldown active for ' + Math.ceil(providerCooldownRemainingMs('groq') / 1000) + 's' }]
+              : []),
+          ],
         };
       }
     }
