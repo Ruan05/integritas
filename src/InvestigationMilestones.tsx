@@ -54,8 +54,12 @@ export function InvestigationMilestones({
   const completed = rows.filter((row) => row.status === 'complete').length;
   const blocked = rows.filter((row) => row.status === 'blocked' || row.status === 'manual').length;
   const total = rows.length;
-  const pct = snapshot.isLive ? snapshot.progress : (total > 0 ? Math.round((completed / total) * 100) : snapshot.progress);
-  const progressLabel = snapshot.isLive ? `${pct}% live progress` : (total > 0 ? `${completed}/${total} complete` : `${pct}%`);
+  const pct = snapshot.progress;
+  const progressLabel = snapshot.isLive
+    ? `${pct}% live progress`
+    : jobStage === 'incomplete'
+      ? `${pct}% workflow complete`
+      : (total > 0 ? `${completed}/${total} complete` : `${pct}%`);
 
   return (
     <article className="panel wide milestone-board" id="milestones" aria-live="polite">
@@ -85,6 +89,10 @@ export function InvestigationMilestones({
             ? '1 check still needs manual verification or is blocked.'
             : `${blocked} checks still need manual verification or are blocked.`}
         </p>
+      )}
+
+      {!snapshot.isLive && jobStage === 'incomplete' && (
+        <p className="milestone-alert">Technical workflow completed. Outstanding verification gates require analyst review; they are not a service failure.</p>
       )}
 
       {rows.length === 0 ? (
