@@ -271,6 +271,25 @@ test('deterministic case-analysis fallback creates only explicit parties with ro
   assert.equal(result.relationships.filter((row)=>row.relationship_type==='represented_by').length,3);
 });
 
+test('deterministic case-analysis fallback recovers labelled parties from trusted shard fields', () => {
+  const result=buildDeterministicCaseAnalysis([{
+    document_id:DOC1,
+    parties:[],
+    identifiers:['p.1: GLOBALA1 LLC. Invoice Number : WTB14002018'],
+    material_terms:['p.1: Remit To: BANK NAME: REGIONS BANK','p.1: Account Name: LABCO MARIN LTD'],
+    risk_flags:['No cryptographic PDF signature detected by deterministic forensics'],
+    evidence_excerpt:'Trusted page extraction from a submitted invoice.',
+  }]);
+  const buyer=result.entities.find((row)=>row.display_name==='GLOBALA1 LLC');
+  assert.equal(buyer.identifiers.role,'buyer_client');
+  assert.equal(buyer.identifiers.subject_scope,'context_only');
+  const bank=result.entities.find((row)=>row.display_name==='REGIONS BANK');
+  assert.equal(bank.identifiers.role,'bank');
+  const beneficiary=result.entities.find((row)=>row.display_name==='LABCO MARIN LTD');
+  assert.equal(beneficiary.identifiers.role,'counterparty');
+  assert.equal(beneficiary.identifiers.subject_scope,'in_scope');
+});
+
 test('trusted synthetic case analysis deterministically separates conflicting same-name identities', () => {
   const summaries=[
     {
