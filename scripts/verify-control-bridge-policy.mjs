@@ -104,7 +104,7 @@ assert.match(investigationRunner, /runBoundedOpenClaw\(buildArgs\(messageFile, p
 assert.match(investigationRunner, /--config/, 'runner must pin the dedicated exec config');
 assert.ok(!investigationRunner.includes("'--state-dir'"), 'runner must use OpenClaw isolated temporary exec state while the Gateway owns persistent state');
 assert.match(investigationRunner, /OPENCLAW_STATE_DIR:\s*'\/var\/lib\/openclaw'/, 'runner may discover existing provider credentials only through the bounded OpenClaw environment');
-assert.ok(investigationRunner.includes("const NVIDIA_PRIMARY = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b'"), 'verified explicit NVIDIA Ultra must remain available for bounded fallback');
+assert.ok(investigationRunner.includes("const NVIDIA_PRIMARY = 'integritas-nvidia/z-ai/glm-5.3'"), 'live-verified direct GLM 5.3 must be the bounded primary');
 assert.ok(investigationRunner.includes("const FREE_FAST = 'integritas-openrouter/nvidia/nemotron-3-super-120b-a12b:free'"), 'verified free Super must remain in the bounded fallback set');
 assert.ok(investigationRunner.includes("SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, ACTIVE_FREE_FALLBACKS)"), 'synthetic validation must use the verified explicit NVIDIA route plus conditionally activated bounded free fallbacks');
 assert.ok(!investigationRunner.includes('NVIDIA_LIGHTNING'), 'unhealthy Lightning route must not be auto-selected');
@@ -157,9 +157,9 @@ assert.doesNotMatch(investigationConfig, /apiKey:\s*\{\s*source:\s*["']env["'][\
 assert.match(investigationConfig, /id:\s*["']openrouter\/free["']/, 'investigation config may register the dynamic free router only for emergency fallback');
 assert.match(investigationConfig, /deny:\s*\[[^\]]*["']write["'][^\]]*["']edit["'][^\]]*["']exec["'][^\]]*["']apply_patch["']/s, 'investigation agent must not mutate files or invoke execution tools');
 assert.match(investigationRunner, /'--code-mode', 'direct'/, 'investigation agent must use direct tool mode');
-assert.ok(largeInvestigationRunner.includes("const NVIDIA_GLM_FLASH = 'integritas-nvidia/z-ai/glm-5.3-flash'"), 'large-case runner must expose the live-verified direct GLM Flash route');
-assert.match(largeInvestigationRunner, /plan:\s*\[nvidia && NVIDIA_GLM_FLASH/, 'large-case planning must prefer the live-verified GLM Flash route');
-assert.match(largeInvestigationRunner, /lane:\s*\[nvidia && NVIDIA_GLM_FLASH/, 'large-case research lanes must prefer the live-verified GLM Flash route');
+assert.ok(largeInvestigationRunner.includes("const NVIDIA_GLM = 'integritas-nvidia/z-ai/glm-5.3'"), 'large-case runner must expose the live-verified direct GLM 5.3 route');
+assert.match(largeInvestigationRunner, /plan:\s*\[nvidia && NVIDIA_GLM/, 'large-case planning must prefer the live-verified GLM 5.3 route');
+assert.match(largeInvestigationRunner, /lane:\s*\[nvidia && NVIDIA_GLM/, 'large-case research lanes must prefer the live-verified GLM 5.3 route');
 assert.ok(largeInvestigationRunner.includes("const NVIDIA_ULTRA = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b'"), 'large-case runner must retain the explicit NVIDIA Ultra fallback');
 assert.ok(!largeInvestigationRunner.includes('NVIDIA_LIGHTNING'), 'large-case runner must not auto-route to unhealthy Lightning');
 assert.ok(largeInvestigationRunner.includes("const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash'"), 'large-case runner must expose DeepSeek V4.1 Flash');
