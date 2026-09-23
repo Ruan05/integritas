@@ -7,8 +7,6 @@ alter table public.integritas_case_jobs
   add column if not exists current_attempt integer not null default 0 check (current_attempt >= 0);
 alter table public.integritas_case_job_checkpoints
   add column if not exists attempt integer not null default 0 check (attempt >= 0);
-alter table public.integritas_case_job_outputs
-  add column if not exists attempt integer not null default 0 check (attempt >= 0);
 
 alter table public.integritas_case_job_checkpoints
   drop constraint if exists integritas_case_job_checkpoints_case_job_id_stage_key;
@@ -16,13 +14,6 @@ create unique index if not exists integritas_case_job_checkpoints_attempt_stage_
   on public.integritas_case_job_checkpoints(case_job_id, attempt, stage);
 create index if not exists integritas_case_job_checkpoints_current_attempt_idx
   on public.integritas_case_job_checkpoints(case_job_id, attempt, updated_at desc);
-
-alter table public.integritas_case_job_outputs
-  drop constraint if exists integritas_case_job_outputs_case_job_id_output_type_sha256_key;
-create unique index if not exists integritas_case_job_outputs_attempt_type_sha256_key
-  on public.integritas_case_job_outputs(case_job_id, attempt, output_type, sha256);
-create index if not exists integritas_case_job_outputs_current_attempt_idx
-  on public.integritas_case_job_outputs(case_job_id, attempt, created_at desc);
 
 create or replace function integritas_private.integritas_checkpoint_case_investigation(
   p_command_id uuid, p_worker_id text, p_case_job_id uuid, p_case_revision integer,
