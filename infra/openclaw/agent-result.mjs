@@ -49,6 +49,19 @@ function repairSingleMissingFindingKey(text) {
   return text.replace(pattern, '$1"finding_key":"$2",$3');
 }
 
+function canonicalizeReportFrontMatter(markdown) {
+  if (typeof markdown !== 'string') return markdown;
+  return markdown
+    .replace(
+      /^\s*(?:#{1,6}\s*)?MASTER\s+SUMMARY\s*[—-]\s*READ\s+THIS\s+FIRST\s*$/im,
+      '# MASTER SUMMARY — READ THIS FIRST',
+    )
+    .replace(
+      /^\s*(?:#{1,6}\s*)?DIRECT\s+NEXT\s+STEPS\s*[—-]\s*WHAT\s+TO\s+DO\s+NOW\s*$/im,
+      '# DIRECT NEXT STEPS — WHAT TO DO NOW',
+    );
+}
+
 function canonicalizeAgentBundle(bundle, manifest) {
   if (!bundle || Array.isArray(bundle) || typeof bundle !== 'object') return bundle;
 
@@ -60,6 +73,14 @@ function canonicalizeAgentBundle(bundle, manifest) {
   if (Object.prototype.hasOwnProperty.call(canonical, 'metadata')) {
     const { metadata: _ignoredMetadata, ...withoutMetadata } = canonical;
     canonical = withoutMetadata;
+  }
+
+  if (canonical.report && typeof canonical.report === 'object' && !Array.isArray(canonical.report)
+    && typeof canonical.report.markdown === 'string') {
+    const markdown = canonicalizeReportFrontMatter(canonical.report.markdown);
+    if (markdown !== canonical.report.markdown) {
+      canonical = { ...canonical, report: { ...canonical.report, markdown } };
+    }
   }
 
   if (Array.isArray(canonical.sources) && Array.isArray(manifest?.documents)) {
