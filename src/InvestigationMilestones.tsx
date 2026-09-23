@@ -1,4 +1,10 @@
-import { deriveInvestigationMilestoneSnapshot, type CheckpointRow, type CheckResultRow, type InvestigationMilestone } from './lib/integritas-browser';
+import {
+  deriveInvestigationMilestoneSnapshot,
+  type CheckpointRow,
+  type CheckResultRow,
+  type InvestigationLiveTask,
+  type InvestigationMilestone,
+} from './lib/integritas-browser';
 
 const statusLabels: Record<InvestigationMilestone['status'], string> = {
   waiting: 'Waiting',
@@ -8,6 +14,15 @@ const statusLabels: Record<InvestigationMilestone['status'], string> = {
   blocked: 'Blocked',
   failed: 'Failed',
   manual: 'Manual check',
+};
+
+const taskStatusLabels: Record<InvestigationLiveTask['status'], string> = {
+  waiting: 'Waiting',
+  active: 'Live',
+  complete: 'Complete',
+  blocked: 'Needs follow-up',
+  failed: 'Failed',
+  manual: 'Manual',
 };
 
 function MilestoneGroup({
@@ -37,6 +52,33 @@ function MilestoneGroup({
   );
 }
 
+function LiveTaskList({ rows }: { rows: InvestigationLiveTask[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <section className="live-work" aria-label="Live investigation work">
+      <div className="live-work-head">
+        <h3>Live work</h3>
+        <span>{rows.length} task{rows.length === 1 ? '' : 's'} observed</span>
+      </div>
+      <ol className="live-task-list">
+        {rows.map((task) => (
+          <li className={`live-task ${task.status}`} key={task.id}>
+            <span className="live-task-dot" aria-hidden="true" />
+            <div>
+              <strong>{task.label}</strong>
+              {task.detail && <small>{task.detail}</small>}
+              {(task.provider || task.model) && (
+                <small>{[task.provider, task.model].filter(Boolean).join(' · ')}</small>
+              )}
+            </div>
+            <span>{taskStatusLabels[task.status]}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 export function InvestigationMilestones({
   checkpoints,
   checks,
@@ -59,33 +101,79 @@ export function InvestigationMilestones({
   const blocked = rows.filter((row) => row.status === 'blocked' || row.status === 'failed' || row.status === 'manual').length;
   const total = rows.length;
   const pct = snapshot.progress;
+  const draftReady = snapshot.renderStatus === 'ready';
   const progressLabel = snapshot.isLive
     ? `${pct}% live progress`
     : jobStage === 'incomplete'
-      ? `${pct}% execution complete · investigation incomplete`
+      ? draftReady
+        ? `${pct}% execution complete · draft report ready`
+        : `${pct}% execution complete · investigation needs review`
       : (total > 0 ? `${completed}/${total} complete` : `${pct}%`);
+
+  const latestEvent = snapshot.liveEvents.at(-1)
+    ?? (snapshot.message
+      ? {
+          id: 'checkpoint-message',
+          category: snapshot.isLive ? 'LIVE' : 'STATUS',
+          message: snapshot.message,
+          state: 'info' as const,
+          at: '',
+        }
+      : null);
+
+  const readyProviders = snapshot.modelDiscovery?.providers.filter((row) => row.status === 'ready').length ?? 0;
+  const visibleModels = snapshot.modelDiscovery?.providers.reduce((sum, row) => sum + row.model_count, 0) ?? 0;
+  const newModels = snapshot.modelDiscovery?.providers.reduce((sum, row) => sum + row.new_count, 0) ?? 0;
 
   return (
     <article className="panel wide milestone-board" id="milestones" aria-live="polite">
       <div className="panel-head milestone-head">
         <div>
-          <h2>Live investigation milestones</h2>
-          <p className="muted">Live progress follows the Oracle worker checkpoint; completed checks appear only after the current run reaches a terminal state.</p>
+          <p className="eyebrow">Investigation progress</p>
+          <h2>{snapshot.isLive ? 'Live investigation' : draftReady ? 'Report ready for review' : 'Investigation status'}</h2>
         </div>
         <span>{progressLabel}</span>
       </div>
+
+      {latestEvent && (
+        <section className={`investigation-wire ${latestEvent.state}`} aria-label="Latest investigation discovery">
+          <strong>{latestEvent.category}</strong>
+          <div className="wire-viewport">
+            <div className="wire-track">{latestEvent.message}</div>
+          </div>
+        </section>
+      )}
 
       <div className="milestone-progress" aria-label={`Investigation milestone completion ${pct}%`}>
         <span style={{ width: `${pct}%` }} />
       </div>
 
-      {(snapshot.phase || snapshot.message) && (
-        <section className="milestone-activity" aria-label="Current investigation activity">
-          <strong>Current submodule</strong>
-          <span>{snapshot.phase ? snapshot.phase.replaceAll('_', ' ') : snapshot.stage.replaceAll('_', ' ')}</span>
-          {snapshot.message && <small>{snapshot.message}</small>}
+      {snapshot.modelDiscovery && (
+        <div className="model-routing-strip" aria-label="AI routing status">
+          <strong>AI routing</strong>
+          <span>{readyProviders} provider{readyProviders === 1 ? '' : 's'} ready</span>
+          <span>{visibleModels} model{visibleModels === 1 ? '' : 's'} discovered</span>
+          {newModels > 0 && <span>{newModels} new since last scan</span>}
+        </div>
+      )}
+
+      {snapshot.currentTask && (
+        <section className={`current-task-card ${snapshot.currentTask.status}`} aria-label="Current investigation task">
+          <p className="eyebrow">Current task</p>
+          <div className="current-task-row">
+            <div>
+              <h3>{snapshot.currentTask.label}</h3>
+              {snapshot.currentTask.detail && <p>{snapshot.currentTask.detail}</p>}
+            </div>
+            <span>{taskStatusLabels[snapshot.currentTask.status]}</span>
+          </div>
+          {(snapshot.currentTask.provider || snapshot.currentTask.model) && (
+            <small>{[snapshot.currentTask.provider, snapshot.currentTask.model].filter(Boolean).join(' · ')}</small>
+          )}
         </section>
       )}
+
+      <LiveTaskList rows={snapshot.liveTasks} />
 
       {blocked > 0 && (
         <p className="milestone-alert">
@@ -96,15 +184,19 @@ export function InvestigationMilestones({
       )}
 
       {!snapshot.isLive && jobStage === 'incomplete' && (
-        <p className="milestone-alert">Technical workflow completed. Outstanding verification gates require analyst review; they are not a service failure.</p>
+        <p className="milestone-alert">
+          {draftReady
+            ? 'The technical workflow and private PDF commit succeeded. Unresolved verification gates remain open for analyst review.'
+            : 'The investigation stopped with unresolved verification gates. Preserved work can be continued from its latest trustworthy checkpoint.'}
+        </p>
       )}
 
       {rows.length === 0 ? (
-        <p className="muted">Milestones will appear as soon as the Oracle worker begins the investigation.</p>
+        <p className="muted">Live tasks will appear as soon as the Oracle worker begins the investigation.</p>
       ) : (
         <div className="milestone-columns">
           <MilestoneGroup title="Investigation process" rows={core} />
-          <MilestoneGroup title="Live workflow submodules" rows={modules} />
+          <MilestoneGroup title="Workflow modules" rows={modules} />
           {!snapshot.isLive && <MilestoneGroup title="Case-specific research checks" rows={research} />}
         </div>
       )}
