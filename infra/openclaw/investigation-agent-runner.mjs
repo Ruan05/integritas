@@ -73,6 +73,7 @@ const ZEN_ENABLED = !!process.env.OPENCODE_ZEN_API_KEY && existsSync(ZEN_ENABLE_
 const ACTIVE_CONFIG_PATH = ZEN_ENABLED ? ZEN_CONFIG_PATH : BASE_CONFIG_PATH;
 
 const NVIDIA_PRIMARY = 'integritas-nvidia/z-ai/glm-5.3';
+const NVIDIA_SUPER = 'integritas-nvidia/nvidia/nemotron-3-super-120b-a12b';
 const FREE_FAST = 'integritas-openrouter/nvidia/nemotron-3-super-120b-a12b:free';
 const DEEPSEEK_FLASH = 'integritas-openrouter/deepseek/deepseek-v4.1-flash';
 const GLM_53 = 'integritas-openrouter/z-ai/glm-5.3';
@@ -123,17 +124,18 @@ function routes(primary, fallbacks) {
 const ACTIVE_FREE_FALLBACKS = ZEN_ENABLED
   ? [...ZEN_FREE_FALLBACKS, ...FREE_FALLBACKS]
   : FREE_FALLBACKS;
+const RESILIENT_FREE_FALLBACKS = [NVIDIA_SUPER, ...ACTIVE_FREE_FALLBACKS];
 const PAID_PROVIDER_ENABLED = process.env.INTEGRITAS_ALLOW_PAID_PROVIDER === 'true';
-const SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, ACTIVE_FREE_FALLBACKS);
+const SYNTHETIC_MODEL_ROUTES = routes(NVIDIA_PRIMARY, RESILIENT_FREE_FALLBACKS);
 // Keep real investigations on the live-verified NVIDIA route by default. Paid
 // OpenRouter routes are opt-in so a billing/auth circuit cannot hold the case
 // at a pre-report phase. Free fallbacks remain bounded per investigation.
 const QUALITY_FALLBACKS = PAID_PROVIDER_ENABLED
-  ? [DEEPSEEK_FLASH, GLM_53_FLASH, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS]
-  : [NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS];
+  ? [DEEPSEEK_FLASH, GLM_53_FLASH, NVIDIA_PRIMARY, ...RESILIENT_FREE_FALLBACKS]
+  : [NVIDIA_PRIMARY, ...RESILIENT_FREE_FALLBACKS];
 const RESEARCH_FALLBACKS = PAID_PROVIDER_ENABLED
-  ? [GLM_53_FLASH, GLM_53, NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS]
-  : [NVIDIA_PRIMARY, ...ACTIVE_FREE_FALLBACKS];
+  ? [GLM_53_FLASH, GLM_53, NVIDIA_PRIMARY, ...RESILIENT_FREE_FALLBACKS]
+  : [NVIDIA_PRIMARY, ...RESILIENT_FREE_FALLBACKS];
 const REAL_PRIMARY = PAID_PROVIDER_ENABLED ? DEEPSEEK_FLASH : NVIDIA_PRIMARY;
 const REAL_PLANNER_PRIMARY = PAID_PROVIDER_ENABLED ? GLM_53 : NVIDIA_PRIMARY;
 const REAL_MODEL_ROUTES = Object.freeze({
@@ -325,7 +327,7 @@ function buildArgs(messageFile, model, timeoutSeconds) {
   ];
 }
 
-async function runAgent(messageFile, phaseRoute, progressState = null) {
+async function runAgent(messageFile, phaseRoute, progressState = null, validateRaw = null) {
   const models = standardProviderModels(phaseRoute);
   if (!models.length) throw new Error(`${progressState?.phase ?? 'agent'} has no configured provider route`);
   const failures = [];
@@ -350,6 +352,7 @@ async function runAgent(messageFile, phaseRoute, progressState = null) {
           cwd: jobDir, env: agentEnv(), timeoutSeconds, maxBuffer: MAX_AGENT_ENVELOPE_BYTES,
         });
         parseEnvelope(raw, progressState?.phase ?? 'agent');
+        if (validateRaw) validateRaw(raw);
         return raw;
       } catch (error) {
         failures.push({
@@ -363,7 +366,7 @@ async function runAgent(messageFile, phaseRoute, progressState = null) {
             progressState.progress,
             progressState.phase,
             [],
-            `${activeAttempt} failed; moving to the next configured provider family where available.`,
+            `${activeAttempt} failed; moving to the next configured provider/model route where available.`,
           );
         }
       }
@@ -815,7 +818,7 @@ try {
   ({ envelope: plannerEnvelope, plan } = parsePlan(plannerStdout));
   plannerReused = true;
 } catch {
-  plannerStdout = await runAgent('planner-task.md', route.planner, { stage: 'mapping_entities', progress: 20, phase: 'adaptive_planning' });
+  plannerStdout = await runAgent('planner-task.md', route.planner, { stage: 'mapping_entities', progress: 20, phase: 'adaptive_planning' }, (raw) => parsePlan(raw));
   await writeSharedAtomic('planner-agent-exec.json', plannerStdout);
   ({ envelope: plannerEnvelope, plan } = parsePlan(plannerStdout));
 }
@@ -842,7 +845,7 @@ try {
   researchParsed = parseAgentBundle(researchStdout, manifest);
   researchReused = true;
 } catch {
-  researchStdout = await runAgent('research-task.md', route.research, { stage: 'researching', progress: 30, phase: 'primary_research' });
+  researchStdout = await runAgent('research-task.md', route.research, { stage: 'researching', progress: 30, phase: 'primary_research' }, (raw) => parseAgentBundle(raw, manifest));
   await writeSharedAtomic('research-agent-exec.json', researchStdout);
   researchEnvelope = parseEnvelope(researchStdout, 'research');
   if (isTrustedSyntheticValidationManifest(manifest)) {
@@ -878,7 +881,7 @@ if (route.critic && route.synthesis) {
     ({ envelope: criticEnvelope, critique } = parseCritique(criticStdout));
     criticReused = true;
   } catch {
-    criticStdout = await runAgent('critic-task.md', route.critic, { stage: 'independent_review', progress: 70, phase: 'independent_critic' });
+    criticStdout = await runAgent('critic-task.md', route.critic, { stage: 'independent_review', progress: 70, phase: 'independent_critic' }, (raw) => parseCritique(raw));
     await writeSharedAtomic('critic-agent-exec.json', criticStdout);
     ({ envelope: criticEnvelope, critique } = parseCritique(criticStdout));
   }
@@ -898,7 +901,7 @@ if (route.critic && route.synthesis) {
     finalParsed = parseAgentBundle(finalStdout, manifest);
     synthesisReused = true;
   } catch {
-    finalStdout = await runAgent('synthesis-task.md', route.synthesis, { stage: 'independent_review', progress: 78, phase: 'final_synthesis' });
+    finalStdout = await runAgent('synthesis-task.md', route.synthesis, { stage: 'independent_review', progress: 78, phase: 'final_synthesis' }, (raw) => parseAgentBundle(raw, manifest));
     await writeSharedAtomic('synthesis-agent-exec.json', finalStdout);
     synthesisEnvelope = parseEnvelope(finalStdout, 'synthesis');
     const synthesisResearchTools = Array.isArray(synthesisEnvelope?.toolSummary?.tools)
