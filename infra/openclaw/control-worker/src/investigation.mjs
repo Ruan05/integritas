@@ -253,9 +253,12 @@ function assertReportAdmission(bundle, manifest) {
   // be presented as a due-diligence report without a normalized subject graph.
   // Preserve the durable workspace for recovery, but block publication so a
   // template-heavy PDF never disguises a failed entity-normalisation phase.
+  // Finding labels are model/runtime data and must not decide whether the
+  // publication guard applies. Any document-backed investigation that emitted
+  // findings requires at least one normalized entity before it can become a
+  // report; the intentionally empty no-claim control has no findings.
   const hasSubstantiveEvidence = documents.length > 0 && findings.some((row) =>
-    ['identity', 'authority', 'banking', 'transaction', 'document_forensics', 'corporate'].some((term) =>
-      String(row?.finding_type ?? '').toLowerCase().includes(term)));
+    Array.isArray(row?.source_keys) && row.source_keys.length > 0);
   if (hasSubstantiveEvidence && entities.length === 0) {
     throw new Error('report_admission_failed: substantive evidence has no normalized entities');
   }
