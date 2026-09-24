@@ -1292,8 +1292,17 @@ async function validated({
     failures.push({ model: 'retained', error: String(error?.message ?? error).slice(0, 500) });
   }
   const configuredModels = candidates(role, synthetic);
-  const models = selectProviderDiverseModels(configuredModels, maxModelAttempts);
-  if (!models.length) throw new Error(`${id}: no configured provider candidate available`);
+  const selectedModels = selectProviderDiverseModels(configuredModels, maxModelAttempts);
+  if (!selectedModels.length) throw new Error(`${id}: no configured provider candidate available`);
+  // Retrieval synthesis is a constrained evidence-reconciliation task. Prefer
+  // bounded free routes here so slow multi-turn primary routes do not consume
+  // the lane budget before the opened-source contract can be validated.
+  const models = id.startsWith('lane-retrieved-')
+    ? [
+      ...selectedModels.filter((model) => FREE_OPENROUTER_MODELS.has(model) || ZEN_FREE_MODELS.has(model)),
+      ...selectedModels.filter((model) => !(FREE_OPENROUTER_MODELS.has(model) || ZEN_FREE_MODELS.has(model))),
+    ]
+    : selectedModels;
   let heartbeatTimer = null;
   if (progressState) {
     const heartbeat = () => progress(
