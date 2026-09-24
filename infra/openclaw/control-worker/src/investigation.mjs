@@ -787,25 +787,28 @@ export async function executeInvestigation(command, {
     await chmod(attemptStatePath, SHARED_FILE_MODE);
     const effectiveInitialUnitState = attemptChanged ? 'inactive' : initialUnitState;
     const rejoiningActiveUnit = !['inactive', 'failed'].includes(effectiveInitialUnitState);
-    let currentProgress = manifest.job_progress;
-    let currentStage = manifest.job_stage;
+    // The persisted job row may describe a prior checkpoint or resume seed.
+    // During a leased attempt, the runtime heartbeat is the authoritative live
+    // state; historical progress must never suppress a lower but current phase.
+    let currentProgress = 0;
+    let currentStage = 'queued';
     let currentMilestones = initialMilestones(currentStage);
     const checkpoint = async (stage, progress, safeMetadata = {}) => {
-      const currentIndex = STAGE_ORDER.indexOf(currentStage);
-      const nextIndex = STAGE_ORDER.indexOf(stage);
-      if (progress < currentProgress) return null;
-      if (progress === currentProgress && currentIndex >= 0 && nextIndex >= 0 && nextIndex < currentIndex) return null;
       const suppliedMilestones = sanitizeMilestones(safeMetadata.milestones);
       const milestoneInput = suppliedMilestones.length ? suppliedMilestones : currentMilestones;
       const effectiveMilestones = TERMINAL_STAGES.has(stage)
         ? milestoneInput
         : runtimeMilestones(stage, typeof safeMetadata.phase === 'string' ? safeMetadata.phase : '', milestoneInput);
-      const effectiveMetadata = { ...safeMetadata, milestones: effectiveMilestones };
+      const effectiveMetadata = {
+        ...safeMetadata,
+        progress_source: 'live_runtime',
+        milestones: effectiveMilestones,
+      };
       const result = await retryTransientFetch(
         () => client.checkpoint(command.id, jobId, revision, stage, progress, effectiveMetadata),
         Math.min(statePollMs, 1000),
       );
-      currentProgress = Math.max(currentProgress, progress);
+      currentProgress = progress;
       currentStage = stage;
       currentMilestones = effectiveMilestones;
       return result;
