@@ -996,7 +996,7 @@ function unwrapExternalText(value, max = 6000) {
 function stripFetchedMarkup(value) {
   return String(value ?? '')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\\/style>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
