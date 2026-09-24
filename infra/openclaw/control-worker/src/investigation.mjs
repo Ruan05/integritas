@@ -758,7 +758,35 @@ export async function executeInvestigation(command, {
     }
     if (TERMINAL_STAGES.has(manifest.job_stage)) throw new Error(`investigation job is already terminal: ${manifest.job_stage}`);
     const initialUnitState = await readUnitState(systemctlRunner, unit);
-    const rejoiningActiveUnit = !['inactive', 'failed'].includes(initialUnitState);
+    // Runtime progress is attempt-scoped. A retry reuses validated phase artifacts,
+    // but it must never inherit the previous attempt's live agent-progress.json.
+    const attempt = Number.isInteger(command.attempt) ? command.attempt : 0;
+    const attemptStatePath = path.join(jobDir, 'attempt-state.json');
+    let previousAttempt = null;
+    try {
+      const attemptState = JSON.parse(await readFile(attemptStatePath, 'utf8'));
+      previousAttempt = Number.isInteger(attemptState?.attempt) ? attemptState.attempt : null;
+    } catch {}
+    const attemptChanged = previousAttempt !== null && previousAttempt !== attempt;
+    if (attemptChanged) {
+      // A prior attempt may still have an active systemd unit after cancellation.
+      // Stop it before removing its progress heartbeat, otherwise stale writes can
+      // race the new attempt and contaminate the authoritative live state.
+      if (!['inactive', 'failed'].includes(initialUnitState)) {
+        await systemctlRunner('/usr/bin/systemctl', ['stop', unit]).catch(() => {});
+        for (let wait = 0; wait < 12; wait += 1) {
+          const state = await readUnitState(systemctlRunner, unit);
+          if (['inactive', 'failed'].includes(state)) break;
+          await delay(250);
+        }
+      }
+      await rm(path.join(jobDir, 'agent-progress.json'), { force: true });
+    }
+    await writeFile(attemptStatePath, JSON.stringify({ attempt, updated_at: new Date().toISOString() }) + '\\n', { mode: SHARED_FILE_MODE });
+    await chown(attemptStatePath, -1, process.getgid());
+    await chmod(attemptStatePath, SHARED_FILE_MODE);
+    const effectiveInitialUnitState = attemptChanged ? 'inactive' : initialUnitState;
+    const rejoiningActiveUnit = !['inactive', 'failed'].includes(effectiveInitialUnitState);
     let currentProgress = manifest.job_progress;
     let currentStage = manifest.job_stage;
     let currentMilestones = initialMilestones(currentStage);
