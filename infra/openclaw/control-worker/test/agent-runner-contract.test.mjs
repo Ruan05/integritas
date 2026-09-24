@@ -90,10 +90,6 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.ok(source.includes('lane.${lane.lane_id}'), 'planner lane check keys must remain stable');
   assert.match(source, /planning_research/);
   assert.match(source, /agent-progress\.json/);
-  assert.match(source, /attempt-state\.json/);
-  assert.match(source, /command\.attempt/);
-  assert.match(source, /attemptChanged/);
-  assert.match(source, /stop', unit/);
   assert.match(source, /standardProviderModels\(phaseRoute\)/, 'standard phases must resolve explicit bounded provider candidates');
   assert.match(source, /selectProviderDiverseModels\(configured, 3\)/, 'standard phases must preserve cross-provider diversity');
   assert.match(source, /process\.env\.OPENROUTER_API_KEY/, 'OpenRouter candidates must be gated on live configuration');
@@ -103,6 +99,15 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.doesNotMatch(source, /opencode-go\/deepseek-v4-pro/);
 });
 
+
+test('control worker isolates live progress at retry attempt boundaries', async () => {
+  const source = await readFile(new URL('../src/investigation.mjs', import.meta.url), 'utf8');
+  assert.match(source, /attempt-state\\.json/);
+  assert.match(source, /command\\.attempt/);
+  assert.match(source, /attemptChanged/);
+  assert.match(source, /stop', unit/);
+  assert.match(source, /rm\(path\.join\(jobDir, 'agent-progress\\.json'\)/);
+});
 
 test('large investigations shard before legacy planning and assemble the canonical bundle deterministically', async () => {
   const parent = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
