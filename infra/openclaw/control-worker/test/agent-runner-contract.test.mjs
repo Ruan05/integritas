@@ -112,6 +112,8 @@ test('control worker isolates live progress at retry attempt boundaries', async 
 test('large investigations shard before legacy planning and assemble the canonical bundle deterministically', async () => {
   const parent = await readFile(new URL('../../investigation-agent-runner.mjs', import.meta.url), 'utf8');
   const large = await readFile(new URL('../../large-investigation-agent-runner-v2.mjs', import.meta.url), 'utf8');
+  assert.match(large, /fetchHttpsSource/);
+  assert.match(large, /bounded HTTPS fallback/);
   const guard = parent.indexOf('if (shouldUseLargeInvestigation(manifest))');
   const legacyPlanner = parent.indexOf("await writeSharedAtomic('planner-task.md', plannerTask())");
   assert.ok(guard >= 0 && legacyPlanner > guard, 'large-case dispatch must happen before the legacy all-document planner');
