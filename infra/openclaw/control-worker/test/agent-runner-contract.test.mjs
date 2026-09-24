@@ -132,6 +132,7 @@ test('large investigations shard before legacy planning and assemble the canonic
   assert.match(large, /failed every validated model route/, 'schema-invalid model output must trigger application-level model failover');
   assert.match(large, /validated route rejected by phase contract/, 'schema-invalid model output must be recorded and fail over to another route rather than abort the phase');
   assert.match(large, /retrieveLaneWebEvidence/, 'real research lanes must have a deterministic search/open retrieval path');
+  assert.match(large, /OPENCLAW_CONFIG_PATH:\s*ACTIVE_CONFIG_PATH/, 'web inference must inherit the active investigation config so Parallel search and Firecrawl fetch stay enabled');
   assert.match(large, /integritas_parallel_firecrawl_retrieval_v1/, 'research fallback must record Parallel discovery plus Firecrawl source-open provenance');
   assert.match(large, /retrieval synthesis returned an URL outside the bounded opened-source set/, 'retrieval synthesis must not invent or escape the opened-source set');
   assert.match(large, /readFile\(path\.join\(jobDir, execName\)/, 'validated phase artifacts must be reused on retry');
