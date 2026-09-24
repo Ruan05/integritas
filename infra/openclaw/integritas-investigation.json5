@@ -371,25 +371,6 @@
           },
         ],
       },
-      "integritas-groq": {
-        baseUrl: "https://api.groq.com/openai/v1",
-        apiKey: "${GROQ_API_KEY}",
-        api: "openai-completions",
-        authHeader: true,
-        timeoutSeconds: 90,
-        models: [
-          {
-            id: "openai/gpt-oss-20b",
-            name: "Integritas Groq GPT OSS 20B",
-            reasoning: true,
-            input: ["text"],
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-            contextWindow: 131072,
-            contextTokens: 114688,
-            maxTokens: 32768,
-          },
-        ],
-      },
     },
   },
   agents: {
@@ -406,7 +387,6 @@
           "integritas-nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
           "integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b",
           "integritas-nvidia/nvidia/nemotron-3.5-lightning-30b-a3b",
-          "integritas-groq/openai/gpt-oss-20b",
           "opencode-go/minimax-m3",
           "opencode-go/minimax-m2.7",
           "opencode-go/minimax-m2.5",
