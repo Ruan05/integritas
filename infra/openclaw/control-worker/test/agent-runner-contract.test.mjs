@@ -102,11 +102,11 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
 
 test('control worker isolates live progress at retry attempt boundaries', async () => {
   const source = await readFile(new URL('../src/investigation.mjs', import.meta.url), 'utf8');
-  assert.match(source, /attempt-state\\.json/);
-  assert.match(source, /command\\.attempt/);
+  assert.match(source, /attempt-state\.json/);
+  assert.match(source, /command\.attempt/);
   assert.match(source, /attemptChanged/);
   assert.match(source, /stop', unit/);
-  assert.match(source, /rm\(path\.join\(jobDir, 'agent-progress\\.json'\)/);
+  assert.match(source, /rm\(path\.join\(jobDir, 'agent-progress\.json'\)/);
 });
 
 test('large investigations shard before legacy planning and assemble the canonical bundle deterministically', async () => {
