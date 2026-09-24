@@ -1018,7 +1018,7 @@ async function fetchHttpsSource(url, timeoutSeconds = 45) {
     const body = (await response.text()).slice(0, 2_000_000);
     const text = stripFetchedMarkup(body).slice(0, 3200);
     if (!text) throw new Error('direct HTTPS source returned no readable text');
-    const title = body.match(/<title[^>]*>([\s\S]*?)<\\/title>/i)?.[1] || response.url;
+    const title = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || response.url;
     return { text, title: stripFetchedMarkup(title).slice(0, 500), finalUrl: response.url, status: response.status };
   } finally {
     clearTimeout(timer);
