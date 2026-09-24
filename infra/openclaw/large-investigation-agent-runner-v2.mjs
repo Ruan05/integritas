@@ -993,6 +993,38 @@ function unwrapExternalText(value, max = 6000) {
     .slice(0, max);
 }
 
+function stripFetchedMarkup(value) {
+  return String(value ?? '')
+    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')
+    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/\\s+/g, ' ')
+    .trim();
+}
+
+async function fetchHttpsSource(url, timeoutSeconds = 45) {
+  if (!String(url).startsWith('https://')) throw new Error('direct source fallback requires HTTPS');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+  try {
+    const response = await fetch(url, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: { accept: 'text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.1', 'user-agent': 'Integritas/0.4 bounded evidence retrieval' },
+    });
+    if (!response.ok) throw new Error(`direct HTTPS source returned HTTP ${response.status}`);
+    const body = (await response.text()).slice(0, 2_000_000);
+    const text = stripFetchedMarkup(body).slice(0, 3200);
+    if (!text) throw new Error('direct HTTPS source returned no readable text');
+    const title = body.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1] || response.url;
+    return { text, title: stripFetchedMarkup(title).slice(0, 500), finalUrl: response.url, status: response.status };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function runOpenClawWebInfer(jobDir, args, timeoutSeconds = 45) {
   const raw = await runBoundedOpenClaw(
     ['infer', 'web', ...args, '--json'],
@@ -1061,7 +1093,15 @@ export async function retrieveLaneWebEvidence(jobDir, lane) {
   for (const row of uniqueRows) {
     if (opened.length >= 4) break;
     try {
-      const results = await runOpenClawWebInfer(jobDir, ['fetch', '--url', row.url], 45);
+      let results;
+      try {
+        results = await runOpenClawWebInfer(jobDir, ['fetch', '--url', row.url], 45);
+      } catch {
+        // Firecrawl may be unavailable or rate-limited. Preserve source-opening
+        // semantics with a bounded HTTPS fallback; never promote a search
+        // result unless the underlying URL was actually retrieved.
+        results = [await fetchHttpsSource(row.url, 45)];
+      }
       const fetched = results.find((value) => typeof value?.text === 'string' && value.text.trim());
       if (!fetched || Number(fetched.status ?? 200) >= 400) continue;
       opened.push({
