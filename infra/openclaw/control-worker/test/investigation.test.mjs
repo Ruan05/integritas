@@ -168,8 +168,10 @@ test('stages verified evidence and publishes bounded OpenClaw artifacts', async 
     assert.equal(template.execution.tool_results[0].tool, 'integritas_forensics_v1');
     assert.equal(template.execution.tool_results[0].status, 'completed');
     assert.deepEqual(Object.keys(template).sort(), ['case_id','case_job_id','case_revision','checks','contradictions','depth','entities','execution','findings','generated_at','limitations','relationships','report','schema_version','sources','unresolved_checks'].sort());
-    assert.ok(checkpoints.every((entry) => entry[4] >= 80));
-    assert.ok(!checkpoints.some((entry) => entry[3] === 'extracting'));
+    // A current leased runtime may legitimately move below a stale resume seed;
+    // only the terminal checkpoint is required to reach final QA progress.
+    assert.ok(checkpoints.some((entry) => entry[3] === 'extracting' && entry[4] === 5));
+    assert.ok(checkpoints.every((entry) => entry[5]?.progress_source === 'live_runtime'));
     const terminalCheckpoint = checkpoints.find((entry) => entry[3] === 'incomplete' && entry[4] === 100);
     assert.ok(terminalCheckpoint);
     assert.deepEqual(terminalCheckpoint[5].qa_summary, { checks: 1 });
