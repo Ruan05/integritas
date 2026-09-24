@@ -603,6 +603,7 @@ const LARGE_MODEL_CRITIC_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_MODEL_CRI
 const LARGE_MODEL_REPORT_ENABLED = process.env.INTEGRITAS_ENABLE_LARGE_MODEL_REPORT !== 'false';
 const NVIDIA_GLM = 'integritas-nvidia/z-ai/glm-5.3';
 const NVIDIA_GLM_FLASH = 'integritas-nvidia/z-ai/glm-5.3-flash';
+const GROQ_SYNTHESIS_MODEL = 'integritas-groq/openai/gpt-oss-20b';
 const NVIDIA_ULTRA = 'integritas-nvidia/nvidia/nemotron-3-ultra-550b-a55b';
 const GROQ_BROWSER_MODEL = 'openai/gpt-oss-20b';
 const GROQ_BROWSER_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
@@ -756,6 +757,7 @@ export function selectProviderDiverseModels(models, limit = null) {
 function candidates(role, synthetic) {
   const nvidia = !!process.env.NVIDIA_API_KEY;
   const openrouter = !!process.env.OPENROUTER_API_KEY;
+  const groq = !!process.env.GROQ_API_KEY;
   const zen = ZEN_ENABLED;
   if (!synthetic) {
     const healthyFree = [
@@ -776,8 +778,8 @@ function candidates(role, synthetic) {
       shard: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
       plan: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
       analysis: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
-      lane: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
-      critic: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
+      lane: [groq && GROQ_SYNTHESIS_MODEL, nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
+      critic: [groq && GROQ_SYNTHESIS_MODEL, nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
       report: [nvidia && NVIDIA_GLM, nvidia && NVIDIA_GLM_FLASH, ...paid, ...healthyFree],
     }[role] ?? [];
     return uniq(rows).filter(modelAllowedByDiscovery);
@@ -1172,7 +1174,7 @@ function openedEvidenceFallbackLane(lane, retrieval, reason) {
 }
 
 function agentEnv() {
-  const providerNames = ['NVIDIA_API_KEY', 'OPENROUTER_API_KEY', 'OPENCODE_ZEN_API_KEY'];
+  const providerNames = ['NVIDIA_API_KEY', 'OPENROUTER_API_KEY', 'OPENCODE_ZEN_API_KEY', 'GROQ_API_KEY'];
   return {
     HOME: '/var/lib/openclaw',
     OPENCLAW_HOME: '/var/lib/openclaw',
