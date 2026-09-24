@@ -242,6 +242,28 @@ async function writeProgress(stage, progress, phase, milestones = [], detail = '
   );
 }
 
+let terminationRequested = false;
+async function persistTerminalSignalProgress(stage, detail) {
+  if (terminationRequested) return;
+  terminationRequested = true;
+  try {
+    await writeSharedAtomic('agent-progress.json', `${JSON.stringify({
+      stage,
+      progress: 100,
+      phase: 'terminal_signal',
+      detail: String(detail).slice(0, 500),
+      current_task: { id: stage, label: stage.replaceAll('_', ' '), status: 'complete', detail: String(detail).slice(0, 500) },
+      live_events: [{ id: 'terminal-' + stage, category: 'LIVE', message: String(detail).slice(0, 420), state: 'warning', at: new Date().toISOString() }],
+      model_discovery: modelDiscovery,
+      updated_at: new Date().toISOString(),
+    }, null, 2)}\\n`);
+  } finally {
+    process.exit(143);
+  }
+}
+process.on('SIGTERM', () => { persistTerminalSignalProgress('cancelled', 'Investigation runner terminated after a cancellation request.').catch(() => process.exit(143)); });
+process.on('SIGINT', () => { persistTerminalSignalProgress('cancelled', 'Investigation runner interrupted.').catch(() => process.exit(130)); });
+
 const CORE_MILESTONES = Object.freeze([
   ['core.evidence', 'Evidence securely staged'],
   ['core.forensics', 'Trusted document forensics'],
