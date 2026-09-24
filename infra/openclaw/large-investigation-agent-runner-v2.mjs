@@ -1135,6 +1135,7 @@ function agentEnv() {
     HOME: '/var/lib/openclaw',
     OPENCLAW_HOME: '/var/lib/openclaw',
     OPENCLAW_STATE_DIR: '/var/lib/openclaw',
+    OPENCLAW_CONFIG_PATH: ACTIVE_CONFIG_PATH,
     PATH: '/opt/openclaw/bin:/usr/bin:/bin',
     LANG: 'C',
     ...Object.fromEntries(providerNames
