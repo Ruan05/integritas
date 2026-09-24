@@ -90,6 +90,10 @@ test('OpenClaw runner uses evidence-first planning, bounded research and an inde
   assert.ok(source.includes('lane.${lane.lane_id}'), 'planner lane check keys must remain stable');
   assert.match(source, /planning_research/);
   assert.match(source, /agent-progress\.json/);
+  assert.match(source, /attempt-state\.json/);
+  assert.match(source, /command\.attempt/);
+  assert.match(source, /attemptChanged/);
+  assert.match(source, /stop', unit/);
   assert.match(source, /standardProviderModels\(phaseRoute\)/, 'standard phases must resolve explicit bounded provider candidates');
   assert.match(source, /selectProviderDiverseModels\(configured, 3\)/, 'standard phases must preserve cross-provider diversity');
   assert.match(source, /process\.env\.OPENROUTER_API_KEY/, 'OpenRouter candidates must be gated on live configuration');
