@@ -57,6 +57,31 @@ test('investigation methods use bounded worker actions without embedding credent
 });
 
 
+test('retries transient provenance authorization failures without duplicating other actions', async () => {
+  let calls = 0;
+  const client = new ControlClient({
+    baseUrl: 'https://example.invalid/control',
+    workerToken: 'token',
+    workerId: 'oracle-primary',
+    fetchImpl: async (_url, init) => {
+      calls += 1;
+      if (calls < 3) return { ok: false, status: 401, text: async () => '{"error":"unauthorized"}' };
+      return { ok: true, status: 201, text: async () => '{"tool_invocation_id":"id"}' };
+    },
+  });
+
+  await client.registerResearchSource(
+    '11111111-1111-4111-8111-111111111111',
+    '22222222-2222-4222-8222-222222222222',
+    4,
+    { source_key: 'source-web', url: 'https://example.com/source', title: 'Example source', verification_state: 'opened', retrieved_at: '2026-09-18T20:00:00Z' },
+    { calls: 2, failures: 0, tools: ['web_fetch'] },
+  );
+
+  assert.equal(calls, 3);
+});
+
+
 test('preserves bounded control error detail for diagnosis', async () => {
   const client = new ControlClient({
     baseUrl: 'https://example.invalid/control',
