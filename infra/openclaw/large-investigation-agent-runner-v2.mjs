@@ -1152,10 +1152,24 @@ Use opened when a page was retrieved but exact subject relevance is not establis
 }
 
 function openedEvidenceFallbackLane(lane, retrieval, reason) {
+  const findings = retrieval.sources.map((source, index) => ({
+    entity_key: null,
+    finding_type: 'external_source_opened',
+    claim: `External source opened for ${lane.lane_id}: ${source.title}`,
+    evidence_status: 'uncertain',
+    materiality: 'informational',
+    reliability: source.source_type === 'official' || source.source_type === 'primary' ? 'medium' : 'low',
+    evidence_excerpt: String(source.excerpt ?? '').slice(0, 1400),
+    source_refs: [source.source_ref],
+    document_source_keys: [],
+  }));
   return {
     lane_id: lane.lane_id,
     sources: retrieval.sources.map((row) => ({ ...row })),
-    findings: [],
+    // A failed synthesis must not erase the evidence that was actually opened.
+    // These are deliberately uncertain, source-linked observations—not verified
+    // claims—and remain visible for analyst review and later promotion.
+    findings,
     check: {
       status: 'blocked',
       outcome: 'Authoritative/source pages were opened, but automated evidence synthesis did not return a validated lane result.',
@@ -1883,6 +1897,7 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
   const externalSources = sources.filter((row) => row.evidence_origin === 'external_research');
   const validatedExternalSources = externalSources.filter((row) => ['validated', 'claim_supporting'].includes(row.verification_state));
   const discoveryExternalSources = externalSources.filter((row) => row.verification_state === 'discovered');
+  const openedExternalSources = externalSources.filter((row) => row.verification_state === 'opened');
   const statusCounts = findings.reduce((map, row) => {
     const key = row.evidence_status || 'unknown';
     map.set(key, (map.get(key) || 0) + 1);
@@ -1901,9 +1916,9 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
       row.finding_key,
       row.evidence_status,
       row.materiality,
-      row.claim,
-      row.evidence_excerpt,
-      evidenceSourceLabels(row.source_keys, sourceTitle),
+      String(row.claim ?? '').slice(0, 360),
+      String(row.evidence_excerpt ?? '').slice(0, 420),
+      evidenceSourceLabels(row.source_keys, sourceTitle).slice(0, 220),
     ]),
   );
   const documentTable = markdownTable(
@@ -1917,9 +1932,9 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
       return [
         row.source_key,
         row.title,
-        `${field('Document type')} / ${field('Issuer claim')}`,
-        `${field('Parties')} / ${field('Identifiers')}`,
-        `${field('Material terms')} / ${field('Forensic/risk signals')}`,
+        `${field('Document type')} / ${field('Issuer claim')}`.slice(0, 320),
+        `${field('Parties')} / ${field('Identifiers')}`.slice(0, 520),
+        `${field('Material terms')} / ${field('Forensic/risk signals')}`.slice(0, 700),
       ];
     }),
   );
@@ -1948,7 +1963,7 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
       row.verification_state || (row.evidence_origin === 'submitted_document' ? 'submitted' : 'unknown'),
       row.title,
       row.document_id || row.url || 'Not applicable',
-      `${row.excerpt} ${row.reliability_note}`,
+      `${String(row.excerpt ?? '').slice(0, 360)} ${String(row.reliability_note ?? '').slice(0, 180)}`,
     ]),
   );
   const nextSteps = unresolved.length
@@ -1959,8 +1974,10 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
   const materialitySummary = [...materialityCounts.entries()].map(([key, value]) => `${key}: ${value}`).join('; ') || 'No findings';
   const baseStatus = `Terminal outcome: ${status}. The bundle contains ${submittedSources.length} submitted document source(s), ${validatedExternalSources.length} validated external source(s), ${discoveryExternalSources.length} discovery-only external source(s), ${entities.length} entity record(s), ${findings.length} finding(s), ${contradictions.length} contradiction row(s), and ${unresolved.length} unresolved gate(s). This is a draft work product, not transaction clearance.`;
   const noExternal = validatedExternalSources.length
-    ? `Validated external research sources are present: ${validatedExternalSources.length}. Discovery-only sources: ${discoveryExternalSources.length}.`
-    : `No validated external research source was committed in this run. Discovery-only sources: ${discoveryExternalSources.length}. A search discovery is not verification and a missing search result is not a clean bill of health.`;
+    ? `Validated external research sources are present: ${validatedExternalSources.length}. Opened sources: ${openedExternalSources.length}. Discovery-only sources: ${discoveryExternalSources.length}.`
+    : openedExternalSources.length
+      ? `Opened external research sources are present: ${openedExternalSources.length}, but no source was promoted to validated or claim-supporting status because the bounded synthesis route failed. The opened source titles, URLs and excerpts remain visible below as uncertain evidence candidates; they are not clearance.`
+      : `No validated external research source was committed in this run. Discovery-only sources: ${discoveryExternalSources.length}. A search discovery is not verification and a missing search result is not a clean bill of health.`;
   const criticSummary = criticIssues.length
     ? criticIssues.map((row) => `${row.severity}: ${row.description} Correction: ${row.recommended_correction}`).join(' ')
     : 'No independent critic issue was recorded.';
@@ -1987,6 +2004,7 @@ The current evidence supports only the claims explicitly listed in the finding l
     sections.set(headings[2], `### Control totals\n\n${markdownTable(['Metric', 'Value'], [
       ['Submitted documents', submittedSources.length],
       ['Validated external research sources', validatedExternalSources.length],
+      ['Opened external research sources', openedExternalSources.length],
       ['Discovery-only external sources', discoveryExternalSources.length],
       ['Entities', entities.length],
       ['Findings', findings.length],
@@ -2002,7 +2020,7 @@ The current evidence supports only the claims explicitly listed in the finding l
     sections.set(headings[4], `Forensic signals are evidence about document construction, not automatic proof of fraud. The current package records the forensic/risk signals in the document register above. In particular, absent cryptographic signatures, scanned-image-only documents, missing signature fields and cross-document image reuse require issuer-side and registry-side verification; they do not establish authenticity by themselves.`);
     sections.set(headings[5], entityTable);
     sections.set(headings[6], `The current bundle contains ${relationships.length} structured relationship(s). ${relationships.length ? markdownTable(['From', 'Relationship', 'To', 'Status', 'Claim'], relationships.map((row) => [row.from_entity_key, row.relationship_type, row.to_entity_key, row.evidence_status, row.claim])) : 'No relationship was promoted into the structured graph. This is an extraction gap or an absence of validated relationship evidence, not proof that no relationship exists.'}`);
-    sections.set(headings[7], `No validated external source was committed for this run, so digital footprint and physical-presence conclusions must remain open. Submitted documents can establish what was asserted and when; they cannot independently establish the real-world location, ownership or operating capacity of the named parties.`);
+    sections.set(headings[7], `${noExternal} Digital footprint and physical-presence conclusions remain open until subject identity and source relevance are validated. Submitted documents can establish what was asserted and when; opened external pages are evidence candidates, not proof of real-world location, ownership or operating capacity.`);
     sections.set(headings[8], entities.map((entity) => `### ${markdownCell(entity.display_name)}\n\n- Key: ${entity.entity_key}\n- Type: ${entity.entity_type}\n- Match status: ${entity.match_status}\n- Confidence: ${entity.confidence}\n- Linked findings: ${findingRowsForEntity(findings, entity.entity_key).map((row) => row.claim).join(' | ') || 'None recorded.'}`).join('\n\n') || 'No subject dossier was produced.');
     sections.set(headings[9], `The relationship graph contains ${relationships.length} edge(s). ${relationships.length ? 'Every edge must retain its source links and evidence status before being used for a decision.' : 'No relationship edge was safely promoted from the submitted evidence.'}`);
     sections.set(headings[10], `The deterministic bundle does not contain a normalized chronology field. Dates and transaction sequence must be reconciled from the source excerpts and document metadata before closure. The source register preserves the original document identities for that review.`);
@@ -2019,7 +2037,7 @@ The current evidence supports only the claims explicitly listed in the finding l
     sections.set(headings[8], 'No independent positive indicator was validated. Shared names, product labels or repeated formatting are not risk-reducing proof.');
     sections.set(headings[9], `${markdownTable(['Materiality', 'Count'], [...materialityCounts.entries()])}\n\n${markdownTable(['Evidence status', 'Count'], [...statusCounts.entries()])}`);
     sections.set(headings[10], gateTable);
-    sections.set(headings[11], `Submitted evidence sources: ${submittedSources.length}. Validated external research sources: ${validatedExternalSources.length}. Discovery-only external sources: ${discoveryExternalSources.length}. ${noExternal} Research completeness must be measured by claim-to-source coverage, not by elapsed time or a completed job state.`);
+    sections.set(headings[11], `Submitted evidence sources: ${submittedSources.length}. Validated external research sources: ${validatedExternalSources.length}. Opened external research sources: ${openedExternalSources.length}. Discovery-only external sources: ${discoveryExternalSources.length}. ${noExternal} Research completeness must be measured by claim-to-source coverage, not by elapsed time or a completed job state.`);
     sections.set(headings[12], gateTable + `\n\nNext closure actions:\n\n${nextSteps}`);
   } else {
     sections.set(headings[1], entityTable);
