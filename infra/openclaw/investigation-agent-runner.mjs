@@ -156,7 +156,7 @@ const REAL_MODEL_ROUTES = Object.freeze({
   },
   maximum: {
     planner: { model: REAL_PLANNER_PRIMARY, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 180 },
-    research: { model: REAL_PRIMARY, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 900 },
+    research: { model: REAL_PRIMARY, fallbacks: RESEARCH_FALLBACKS, timeoutSeconds: 300 },
     critic: { model: REAL_PLANNER_PRIMARY, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 240 },
     synthesis: { model: REAL_PLANNER_PRIMARY, fallbacks: QUALITY_FALLBACKS, timeoutSeconds: 360 },
   },
@@ -200,6 +200,7 @@ function agentEnv() {
     OPENCLAW_STATE_DIR: '/var/lib/openclaw',
     PATH: '/opt/openclaw/bin:/usr/bin:/bin',
     LANG: 'C',
+    OPENCLAW_CONFIG_PATH: ACTIVE_CONFIG_PATH,
     ...Object.fromEntries(
       providerNames
         .filter((name) => process.env[name])
