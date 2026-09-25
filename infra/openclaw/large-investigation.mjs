@@ -515,6 +515,40 @@ export function assembleLargeBundle({
     unresolved.push(...lane.unresolved_checks);
     limitations.push(...lane.limitations);
   }
+
+  // Multiple specialist lanes can independently converge on the same factual
+  // claim.  The bundle contract requires publishable claims to be unique, but
+  // dropping the later row would also drop its provenance.  Merge equivalent
+  // claims deterministically, retaining every source reference and the most
+  // cautious evidence status/materiality.
+  const evidenceRank = { uncertain: 0, alleged: 1, verified: 2, conflicting: 3 };
+  const materialityRank = { informational: 0, low: 1, medium: 2, high: 3, critical: 4 };
+  const mergedFindings = [];
+  const findingByClaim = new Map();
+  for (const finding of findings) {
+    const claimKey = String(finding.claim ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const existing = findingByClaim.get(claimKey);
+    if (!existing) {
+      const copy = {
+        ...finding,
+        source_keys: [...new Set(finding.source_keys ?? [])],
+      };
+      findingByClaim.set(claimKey, copy);
+      mergedFindings.push(copy);
+      continue;
+    }
+    existing.source_keys = [...new Set([...(existing.source_keys ?? []), ...(finding.source_keys ?? [])])];
+    if (evidenceRank[finding.evidence_status] > evidenceRank[existing.evidence_status]) {
+      existing.evidence_status = finding.evidence_status;
+    }
+    if (materialityRank[finding.materiality] > materialityRank[existing.materiality]) {
+      existing.materiality = finding.materiality;
+    }
+    if (String(finding.evidence_excerpt ?? '').length > String(existing.evidence_excerpt ?? '').length) {
+      existing.evidence_excerpt = finding.evidence_excerpt;
+    }
+    if (existing.entity_key == null && finding.entity_key != null) existing.entity_key = finding.entity_key;
+  }
   for (const [index, issue] of (critic?.issues ?? []).entries()) {
     if (!['critical','high'].includes(issue.severity)) continue;
     unresolved.push({
@@ -548,7 +582,7 @@ export function assembleLargeBundle({
     entities: caseAnalysis.entities,
     relationships: caseAnalysis.relationships,
     sources,
-    findings,
+    findings: mergedFindings,
     checks,
     contradictions: caseAnalysis.contradictions,
     unresolved_checks: unresolved,

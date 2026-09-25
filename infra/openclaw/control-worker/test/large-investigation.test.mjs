@@ -468,7 +468,18 @@ test('critic/report parsing and deterministic final assembly stay bounded', () =
     manifest:m,
     documentSummaries:summaries,
     caseAnalysis:{entities:[],relationships:[],findings:[],contradictions:[],unresolved_checks:[],limitations:[]},
-    laneResults:[],
+    laneResults:[
+      {
+        sources:[{source_key:'ext.lane.one.01',source_type:'official',title:'Registry one',url:'https://example.com/one',document_id:null,page_reference:null,excerpt:'One',reliability_note:'Official',evidence_origin:'external_research',verification_state:'validated',retrieved_at:'2026-09-20T10:00:00Z'}],
+        findings:[{finding_key:'lane.one.finding',entity_key:null,finding_type:'registry_status',claim:'The registry result requires manual confirmation.',evidence_status:'uncertain',materiality:'medium',reliability:'high',evidence_excerpt:'One',source_keys:['ext.lane.one.01']}],
+        check:{check_key:'lane.one',entity_key:null,check_type:'research_lane',description:'Verify registry',priority:'high',status:'blocked',outcome:'Manual confirmation required.',required_source:'Official registry'},unresolved_checks:[],limitations:[],
+      },
+      {
+        sources:[{source_key:'ext.lane.two.01',source_type:'official',title:'Registry two',url:'https://example.com/two',document_id:null,page_reference:null,excerpt:'Two',reliability_note:'Official',evidence_origin:'external_research',verification_state:'validated',retrieved_at:'2026-09-20T10:00:00Z'}],
+        findings:[{finding_key:'lane.two.finding',entity_key:null,finding_type:'registry_status',claim:'The registry result requires manual confirmation.',evidence_status:'uncertain',materiality:'high',reliability:'high',evidence_excerpt:'Two',source_keys:['ext.lane.two.01']}],
+        check:{check_key:'lane.two',entity_key:null,check_type:'research_lane',description:'Verify registry',priority:'high',status:'blocked',outcome:'Manual confirmation required.',required_source:'Official registry'},unresolved_checks:[],limitations:[],
+      },
+    ],
     critic,
     reportMarkdown:report,
     reportSummary:'Synthetic summary.',
@@ -476,7 +487,10 @@ test('critic/report parsing and deterministic final assembly stay bounded', () =
     completedAt:'2026-09-20T10:00:00Z',
     executionTools:[],
   });
-  assert.equal(bundle.sources.length,2);
+  assert.equal(bundle.sources.length,4);
+  assert.equal(bundle.findings.length,1);
+  assert.deepEqual(bundle.findings[0].source_keys,['ext.lane.one.01','ext.lane.two.01']);
+  assert.equal(bundle.findings[0].materiality,'high');
   assert.equal(bundle.unresolved_checks.length,1);
   assert.equal(bundle.execution.terminal_outcome,'incomplete');
   assert.match(bundle.report.markdown,/MASTER SUMMARY/);
