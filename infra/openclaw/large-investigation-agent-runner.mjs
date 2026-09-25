@@ -469,7 +469,7 @@ Rules:
   });
   const reportSections = new Map(sectionPairs);
   const reportMarkdown = joinReportSections(reportSections);
-  const reportSummary = reportSections.get('01').replace(/^# MASTER SUMMARY — READ THIS FIRST\s*/i, '').slice(0, 12000).trim();
+  const reportSummary = extractExecutiveSummary(reportSections.get('01'));
 
   const completedAt = new Date().toISOString();
   const finalBundle = assembleLargeBundle({

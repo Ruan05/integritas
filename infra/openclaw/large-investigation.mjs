@@ -584,6 +584,12 @@ export const LARGE_REPORT_SECTIONS = Object.freeze([
   { id: '04', heading: '# EVIDENCE, UNRESOLVED CHECKS & METHODOLOGY', focus: 'Evidence/source register in readable form, unresolved checks, limitations, confidence/evidence-status discipline, methodology, auditability, and analyst review requirements.' },
 ]);
 
+export function extractExecutiveSummary(markdown) {
+  const text = String(markdown ?? '').replace(/^# MASTER SUMMARY — READ THIS FIRST\s*/i, '').trim();
+  const nextSection = text.search(/\n#{1,2}\s+/);
+  return (nextSection >= 0 ? text.slice(0, nextSection) : text).trim().slice(0, 6000);
+}
+
 export function joinReportSections(sections) {
   const ordered = LARGE_REPORT_SECTIONS.map((spec) => sections.get(spec.id));
   if (ordered.some((value) => typeof value !== 'string' || !value.trim())) fail('missing report section');

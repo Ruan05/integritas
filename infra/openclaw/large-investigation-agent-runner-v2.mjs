@@ -17,6 +17,7 @@ import {
   buildCompatiblePlan,
   buildDocumentShards,
   buildSubmittedSources,
+  extractExecutiveSummary,
   joinReportSections,
   materializeLaneResult,
   parseCaseAnalysisFinal,
@@ -2726,7 +2727,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
     'The following source keys are the deterministic provenance anchors for this run:',
     canonicalSourceAnchors.map((key) => `- ${key}`).join('\\n'),
   ].join('\\n\\n') + '\\n';
-  const reportSummary = sections.get('01').replace(/^# MASTER SUMMARY — READ THIS FIRST\s*/i, '').slice(0, 12000).trim();
+  const reportSummary = extractExecutiveSummary(sections.get('01'));
 
   executionTools.push(
     toolResult('integritas_case_analysis_v2', 'completed', `${caseAnalysis.entities.length} entities, ${caseAnalysis.findings.length} evidence findings and ${caseAnalysis.contradictions.length} contradictions assembled from submitted evidence.`),
