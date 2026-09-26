@@ -1984,6 +1984,22 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
   const openedHighlights = openedExternalSources.slice(0, 16).map((row) =>
     `- **${markdownCell(row.title, 260)}:** ${markdownCell(row.excerpt, 520)} — ${markdownCell(row.url, 500)} [${row.source_key}]`
   ).join('\\n') || '- No opened external source was retained.';
+  const submittedSourceKeys = new Set(submittedSources.map((row) => row.source_key));
+  // Surface material submitted-evidence facts in the topical reader sections.
+  // These are documentary assertions, not independent verification of identity,
+  // authority, ownership, capacity, bank-account control or transaction performance.
+  const submittedTopicFindings = (keywords, limit = 6) => findings.filter((row) => {
+    const linkedKeys = Array.isArray(row.source_keys) ? row.source_keys : [];
+    if (!linkedKeys.some((key) => submittedSourceKeys.has(key))) return false;
+    const text = `${row.claim ?? ''} ${row.evidence_excerpt ?? ''}`.toLowerCase();
+    return keywords.some((keyword) => text.includes(keyword));
+  }).slice(0, limit);
+  const submittedTopicHighlights = (keywords, emptyMessage, limit = 6) => {
+    const rows = submittedTopicFindings(keywords, limit);
+    return rows.length
+      ? rows.map((row) => `- **SUBMITTED EVIDENCE / ${String(row.materiality || 'informational').toUpperCase()}:** ${markdownCell(row.claim, 460)} — ${markdownCell(row.evidence_excerpt, 520)} [${evidenceSourceLabels(row.source_keys, sourceTitle)}]`).join('\\n')
+      : `- ${emptyMessage}`;
+  };
   // Keep the executive front matter concise enough to be read before the
   // mandated next-steps heading. Full document, finding and source detail is
   // retained in the later evidence-led sections.
@@ -2067,12 +2083,823 @@ ${executiveOpenedHighlights}`
     sections.set(headings[12], `Namesake controls: ${entities.filter((row) => row.match_status === 'conflicting' || row.match_status === 'proposed').length} entity record(s) remain proposed or conflicting. Do not merge by display name alone. ${(evidence.limitations ?? []).join(' ')}`);
   } else if (spec.id === '03') {
     sections.set(headings[1], `Immediate disposition: hold for human review. ${noExternal} This section records transaction, research and contradiction evidence without granting clearance.`);
-    sections.set(headings[2], `No banking-specific finding or payment instrument was validated in the current bundle. This is not a banking clearance; obtain bank, payment, beneficiary and authority evidence before relying on the transaction.`);
-    sections.set(headings[3], `The submitted package contains the product/transaction terms recorded in the document register. The current structured findings are reproduced below; product capability, title, custody, storage and delivery remain unresolved without authoritative operator and logistics evidence.\n\n### Case-specific transaction findings\n\n${findingTable}\n\n### Opened research candidates relevant to the transaction\n\n${openedHighlights}`);
-    sections.set(headings[4], 'No independently validated price, margin, volume-capacity or economic benchmark was committed in this run. Do not infer commercial feasibility from document formatting or stated terms alone.');
-    sections.set(headings[5], 'No payment instrument or trade-finance source was validated. Confirm the contracting chain, beneficiary, bank, instrument, conditions precedent and authority through independent evidence.');
+    sections.set(headings[2], `No banking-specific claim is independently validated in the current bundle. The following payment and bank details are **submitted-evidence assertions only**; they do not verify bank identity, beneficiary ownership, account control, authority or payment authenticity.\n\n### Submitted-evidence banking and payment details\n\n${submittedTopicHighlights(['bank', 'routing', 'swift', 'bic', 'account', 'beneficiary', 'remit', 'iban'], 'No bank, beneficiary, account, routing, IBAN or BIC detail was extracted into a source-linked finding.')}\n\nObtain bank-side confirmation through an independently controlled channel before any payment or reliance.`);
+    sections.set(headings[3], `The following product, custody and logistics terms were observed in the submitted package. They do not establish title, capacity, storage rights, vessel availability, terminal acceptance or delivery performance without authoritative operator, issuer and logistics evidence.\n\n### Submitted-evidence product and logistics details\n\n${submittedTopicHighlights(['en590', 'diesel', 'jet a1', 'd6', 'cargo', 'storage', 'tank', 'rotterdam', 'delivery', 'charter', 'vessel', 'terminal'], 'No source-linked product, cargo, storage, terminal, charter or delivery detail was extracted.')}\n\n### Opened research candidates relevant to the transaction\n\n${openedHighlights}`);
+    sections.set(headings[4], `No independently validated price, margin, volume-capacity or economic benchmark was committed in this run. The following figures are stated in submitted evidence and require arithmetic, market and capacity reconciliation; document formatting or stated terms alone do not establish commercial feasibility.\n\n### Submitted-evidence economics and quantity details\n\n${submittedTopicHighlights(['usd', '
+    sections.set(headings[8], 'No independent positive indicator was validated. Shared names, product labels or repeated formatting are not risk-reducing proof.');
+    sections.set(headings[9], `${markdownTable(['Materiality', 'Count'], [...materialityCounts.entries()])}\n\n${markdownTable(['Evidence status', 'Count'], [...statusCounts.entries()])}`);
+    sections.set(headings[10], gateTable);
+    sections.set(headings[11], `Submitted evidence sources: ${submittedSources.length}. Validated external research sources: ${validatedExternalSources.length}. Opened external research sources: ${openedExternalSources.length}. Discovery-only external sources: ${discoveryExternalSources.length}. ${noExternal} Research completeness must be measured by claim-to-source coverage, not by elapsed time or a completed job state.`);
+    sections.set(headings[12], gateTable + `\n\nNext closure actions:\n\n${nextSteps}`);
+  } else {
+    sections.set(headings[1], entityTable);
+    sections.set(headings[2], sourceTable);
+    sections.set(headings[3], `${contradictions.length ? markdownTable(['Contradiction', 'Description', 'Linked findings'], contradictions.map((row) => [row.contradiction_key, row.description, row.finding_keys.join(', ')])) : 'No structured contradiction rows were committed. This is not proof of consistency; it means the current deterministic/model pass did not promote a contradiction row.'}\n\n### Unresolved gates\n\n${gateTable}`);
+    sections.set(headings[4], nextSteps);
+    sections.set(headings[5], `**Final conclusion:** retain the case as incomplete until the unresolved gates are closed with authoritative evidence and a healthy independent review. ${(evidence.limitations ?? []).join(' ')} This conclusion is limited to the evidence and gates recorded in this bundle.`);
+  }
+  const rows = headings.map((heading) => sections.get(heading) || 'No validated detail was produced for this subsection.');
+  const blocks = rows.map((content, index) => `${headings[index]}\n\n${content}`);
+  const result = blocks.join('\n\n');
+  if (result.length <= SECTION_MAX) return result;
+  // Preserve the complete heading contract under very large evidence ledgers.
+  // Truncate subsection bodies proportionally instead of slicing the assembled
+  // Markdown and accidentally deleting required trailing sections.
+  const headingChars = headings.reduce((sum, heading) => sum + heading.length + 2, 0)
+    + Math.max(0, headings.length - 1) * 2;
+  const bodyBudget = Math.max(120 * headings.length, SECTION_MAX - headingChars);
+  const perBody = Math.max(120, Math.floor(bodyBudget / headings.length));
+  return rows.map((content, index) => `${headings[index]}\n\n${String(content).slice(0, perBody)}`).join('\n\n').slice(0, SECTION_MAX);
+}
+function reportTask(spec) {
+  const headings = SECTION_HEADINGS[spec.id].join('\n');
+  return `# Integritas Prototype-1 report section ${spec.id}
+
+Do not perform research and do not write files. Read ./large-final-evidence.json, ./large-critic.json, ./investigation-plan.json, ./forensics.json and the Integritas skill.
+
+Write only this report section, using existing evidence and source keys. Required headings exactly:
+${headings}
+
+Focus: ${spec.focus}
+
+Return raw Markdown only, no code fence. Use all required headings exactly. Keep between ${SECTION_MIN[spec.id]} and ${SECTION_MAX} characters. Prefer evidence tables, source keys and case-specific analysis over generic prose. Preserve verified/conflicting/uncertain distinctions, include adverse and risk-reducing evidence, and do not invent facts/sources.
+${spec.id === '01' ? 'In the prose immediately below MASTER SUMMARY, include the exact phrase "Executive Decision Summary" before DIRECT NEXT STEPS. Do not place another heading between MASTER SUMMARY and DIRECT NEXT STEPS.' : ''}
+`;
+}
+function reportValidator(spec, { requireMinimum = true } = {}) {
+  return (final) => {
+    const text = parseReportSectionFinal(final, SECTION_HEADINGS[spec.id][0], SECTION_MAX);
+    if (requireMinimum && text.length < SECTION_MIN[spec.id]) throw new Error('report section too short');
+    for (const heading of SECTION_HEADINGS[spec.id]) if (!text.includes(heading)) throw new Error(`missing required heading ${heading}`);
+    if (spec.id === '01' && !text.includes('Executive Decision Summary')) throw new Error('MASTER SUMMARY must include Executive Decision Summary');
+    if (spec.id === '01') {
+      const a = text.indexOf(SECTION_HEADINGS['01'][0]);
+      const b = text.indexOf(SECTION_HEADINGS['01'][1]);
+      const between = text.slice(a + SECTION_HEADINGS['01'][0].length, b);
+      if (b <= a || /^#{1,6}\s+/m.test(between) || between.length > 7000) throw new Error('front matter ordering is invalid');
+    }
+    return text;
+  };
+}
+function mergeToolSummary(envelopes) {
+  const tools = new Set(); let calls = 0; let failures = 0;
+  for (const envelope of envelopes) {
+    for (const tool of envelope?.toolSummary?.tools ?? []) if (typeof tool === 'string') tools.add(tool);
+    if (Number.isInteger(envelope?.toolSummary?.calls)) calls += envelope.toolSummary.calls;
+    if (Number.isInteger(envelope?.toolSummary?.failures)) failures += envelope.toolSummary.failures;
+  }
+  return { tools: [...tools].slice(0, 64), calls: Math.min(calls, 500), failures: Math.min(failures, Math.min(calls, 500)) };
+}
+
+export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trustedForensics, trustedPageExtraction = null }) {
+  const synthetic = isTrustedSyntheticValidationManifest(manifest);
+  await mkdir(jobDir, { recursive: true, mode: 0o750 });
+  const startedAt = new Date().toISOString();
+  const phases = [];
+  const discovery = getModelDiscoverySummary();
+  const readyProviders = discovery?.providers?.filter((row) => row.status === 'ready').length ?? 0;
+  const discoveredModels = discovery?.providers?.reduce((sum, row) => sum + (row.model_count || 0), 0) ?? 0;
+  const executionTools = [
+    toolResult('integritas_model_discovery_v1', 'completed', readyProviders + ' configured provider(s) ready; ' + discoveredModels + ' live model identifiers catalogued before routing.'),
+    toolResult('integritas_forensics_v1', 'completed', `Trusted forensic pre-pass covered ${trustedForensics.reports.length} submitted document(s).`),
+    ...(trustedPageExtraction ? [toolResult('integritas_page_extract_v1', 'completed', `Trusted page-level native-text/OCR extraction covered ${trustedPageExtraction.reports.length} submitted document(s).`)] : []),
+    toolResult('integritas_large_orchestrator_v2', 'completed', 'Bounded sharded orchestration with validation-aware provider failover and deterministic final assembly.'),
+  ];
+
+  // A completed canonical evidence bundle is durable work. On a retry of the
+  // same case revision, final report rendering must reuse it directly instead
+  // of re-running provider planning, analysis, or research just to recover a
+  // failed report/PDF commit.
+  try {
+    const [cachedEvidenceRaw, cachedCriticRaw] = await Promise.all([
+      readFile(path.join(jobDir, 'large-final-evidence.json'), 'utf8'),
+      readFile(path.join(jobDir, 'large-critic.json'), 'utf8'),
+    ]);
+    const cachedEvidence = JSON.parse(cachedEvidenceRaw);
+    const cachedCritic = JSON.parse(cachedCriticRaw);
+    if (cachedEvidence?.case_job_id === manifest.case_job_id
+      && cachedEvidence?.case_revision === manifest.case_revision
+      && Array.isArray(cachedEvidence?.sources)
+      && Array.isArray(cachedEvidence?.findings)
+      && Array.isArray(cachedEvidence?.checks)) {
+      await progress(jobDir, 'drafting_report', 76, 'large_sectioned_report', 'Reassembling the report from the durable canonical evidence bundle.', {
+        current_task: { id: 'report.resume', label: 'Reassemble report from validated work', status: 'active', detail: 'Reusing completed evidence, research lanes and critic output.' },
+        live_events: [{ category: 'RECOVERY', message: 'Validated canonical evidence is being reused; provider analysis will not be repeated.', state: 'success' }],
+      });
+      const resumedPairs = await mapLimit(LARGE_REPORT_SECTIONS, 1, async (spec, index) => {
+        const value = reportValidator(spec, { requireMinimum: false })(
+          deterministicProviderReportSection(spec, cachedEvidence, cachedCritic),
+        );
+        await progress(jobDir, 'drafting_report', 76 + Math.round(((index + 1) / 4) * 10), 'large_sectioned_report', `reused section ${index + 1}/4`);
+        return [spec.id, value];
+      });
+      const resumedSections = new Map(resumedPairs);
+      const canonicalSourceAnchors = cachedEvidence.sources
+        .map((row) => row?.source_key)
+        .filter((value) => typeof value === 'string' && value.trim())
+        .slice(0, 5);
+      const reportMarkdown = [
+        joinReportSections(resumedSections).trimEnd(),
+        '## CANONICAL SOURCE ANCHORS',
+        'The following source keys are the deterministic provenance anchors for this run:',
+        canonicalSourceAnchors.map((key) => `- ${key}`).join('\n'),
+      ].join('\n\n') + '\n';
+      cachedEvidence.report = {
+        summary: extractExecutiveSummary(resumedSections.get('01')),
+        markdown: reportMarkdown,
+        status: 'draft',
+      };
+      cachedEvidence.execution = {
+        ...(cachedEvidence.execution ?? {}),
+        completed_at: new Date().toISOString(),
+        stages: uniq([...(cachedEvidence.execution?.stages ?? []), 'deterministic_report_reassembly']),
+        tool_results: [
+          ...(cachedEvidence.execution?.tool_results ?? []),
+          toolResult('integritas_durable_report_recovery_v1', 'completed', 'Reassembled the final dossier from the same-revision canonical evidence bundle without repeating provider analysis or research.'),
+        ].slice(0, 200),
+      };
+      validateInvestigationBundle(cachedEvidence, manifest, reportMarkdown);
+      await writeAtomic(jobDir, 'agent-exec.json', JSON.stringify({
+        ok: true, status: 'ok', final: '', provider: 'integritas',
+        model: 'deterministic-durable-report-recovery-v1', sessionId: jobId,
+        // These are retained, previously observed retrieval tools: the
+        // canonical bundle itself contains the opened external sources they
+        // produced. Recovery does not fabricate new research.
+        toolSummary: {
+          tools: cachedEvidence.sources.some((row) => row?.evidence_origin === 'external_research') ? ['web_search', 'web_fetch'] : [],
+          calls: cachedEvidence.sources.filter((row) => row?.evidence_origin === 'external_research').length,
+          failures: 0,
+        },
+        phases: [{ phase: 'durable-report-recovery', provider: 'integritas', model: 'deterministic-durable-report-recovery-v1', status: 'ok', reused: true, failed_candidates: [] }],
+      }) + '\n');
+      await writeAtomic(jobDir, 'bundle.json', JSON.stringify(cachedEvidence, null, 2) + '\n');
+      await writeAtomic(jobDir, 'report.md', reportMarkdown);
+      await progress(jobDir, 'drafting_report', 82, 'ready_for_deterministic_qa', 'Durable evidence bundle reassembled into the final dossier; deterministic QA is next.', {
+        current_task: { id: 'report.qa', label: 'Run semantic and deterministic QA', status: 'active', detail: 'Reused dossier is ready for release checks.' },
+        live_events: [{ category: 'RECOVERY', message: 'Final report reassembled from validated work; QA is next.', state: 'success' }],
+      });
+      return;
+    }
+  } catch (error) {
+    // Preserve a bounded diagnostic for recovery without exposing evidence or
+    // credentials, then continue with the normal evidence-led path.
+    await writeAtomic(jobDir, 'durable-report-recovery-error.txt', safeLiveText(error?.message ?? error, 1000) + '\n').catch(() => {});
+  }
+
+  await progress(jobDir, 'extracting', 18, 'large_document_shards', 'Reviewing submitted evidence page-by-page.', {
+    current_task: { id: 'documents.review', label: 'Page extraction, OCR and document review', status: 'active', detail: 'Submitted evidence is being extracted and checked page-by-page.' },
+    live_events: [{ category: 'FILE DISCOVERY', message: 'Submitted evidence is being extracted and checked page-by-page.', state: 'discovery' }],
+  });
+  const shards = buildDocumentShards(manifest, 1);
+  const shardRows = await mapLimit(shards, 2, async (shard, index) => {
+    const trustedContext = shardTrustedContext(shard, trustedForensics, trustedPageExtraction);
+    const requirePdfVisualReview = shardNeedsPdfVisualReview(shard, trustedPageExtraction);
+    let result;
+    try {
+      result = await validated({
+        jobDir, id: `shard-${shard.shard_id}`, role: 'shard',
+        task: shardTask(shard, trustedContext, requirePdfVisualReview), execName: `large-v2-shard-${shard.shard_id}-exec.json`,
+        synthetic, allowExternal: false,
+        validator: (final, envelope) => {
+          const parsed = parseDocumentShardFinal(final, shard.documents.map((row) => row.id));
+          const pdfDocs = shard.documents.filter((row) => row.mime_type === 'application/pdf' || /\.pdf$/i.test(row.name || row.local_path || ''));
+          if (requirePdfVisualReview && pdfDocs.length && !(envelope?.toolSummary?.tools ?? []).includes('pdf')) {
+            throw new Error('PDF visual review is required because deterministic page extraction was incomplete or non-native');
+          }
+          for (const pdfDoc of pdfDocs) {
+            const row = parsed.documents.find((item) => item.document_id === pdfDoc.id);
+            if (!row || !Array.isArray(row.page_references) || row.page_references.length < 1) {
+              throw new Error(`PDF evidence extraction requires page-level provenance for ${pdfDoc.id}`);
+            }
+          }
+          return parsed;
+        },
+        progressState: { stage: 'extracting', progress: 18, phase: 'large_document_shards' },
+        maxModelAttempts: 3,
+      });
+    } catch (error) {
+      const value = deterministicShardSummaryFromTrustedContext(shard, trustedContext, error);
+      const envelope = {
+        ok: true,
+        status: 'ok',
+        final: JSON.stringify(value),
+        provider: 'integritas',
+        model: 'deterministic-trusted-page-shard-v1',
+        sessionId: jobId,
+        toolSummary: { tools: ['integritas_page_extract_v1'], calls: 1, failures: 0 },
+      };
+      result = {
+        envelope,
+        value,
+        reused: false,
+        fallback: true,
+        failures: [{ model: 'validated-provider-routes', error: String(error?.message ?? error).slice(0, 500) }],
+      };
+      executionTools.push(toolResult(
+        'integritas_trusted_page_shard_fallback_v1',
+        'completed',
+        `Shard ${shard.shard_id} model routes were unavailable; preserved document content from trusted deterministic page extraction instead of failing the case.`,
+      ));
+      await writeAtomic(jobDir, `large-v2-shard-${shard.shard_id}-exec.json`, JSON.stringify(envelope) + '\n');
+    }
+    phases.push({ phase: `shard-${shard.shard_id}`, ...result });
+    await progress(jobDir, 'extracting', 18 + Math.round(((index + 1) / shards.length) * 18), 'large_document_shards', `shard ${index + 1}/${shards.length}`);
+    return result.value.documents;
+  });
+  const documentSummaries = shardRows.flat();
+  if (documentSummaries.length !== manifest.documents.length) throw new Error('shards did not cover every manifest document');
+  await writeAtomic(jobDir, 'large-document-summaries.json', `${JSON.stringify(documentSummaries, null, 2)}\n`);
+  executionTools.push(toolResult('integritas_document_shards_v2', 'completed', `${shards.length} shards covered ${documentSummaries.length} documents.`));
+
+  await progress(jobDir, 'analyzing_documents', 37, 'workload_classification');
+  const workload = await classifyInvestigationWorkload({ manifest, documentSummaries, jobDir });
+  await writeAtomic(jobDir, 'workload-classification.json', `${JSON.stringify(workload, null, 2)}\n`);
+  executionTools.push(toolResult(
+    'integritas_workload_classifier_v1',
+    'completed',
+    `Evidence-proportional route: ${workload.route} (${workload.reason_code}); ${workload.metrics.extracted_signals} extracted investigable signal(s).`,
+  ));
+
+  if (workload.route === 'no_investigable_evidence') {
+    const completedAt = new Date().toISOString();
+    const reportMarkdown = buildNoEvidenceReport({ manifest, workload });
+    const submittedSources = buildSubmittedSources(manifest, documentSummaries, completedAt);
+    const finalBundle = {
+      schema_version: 1,
+      case_id: manifest.case_id,
+      case_job_id: manifest.case_job_id,
+      case_revision: manifest.case_revision,
+      depth: manifest.depth,
+      generated_at: completedAt,
+      entities: [],
+      relationships: [],
+      sources: submittedSources,
+      findings: [],
+      checks: [{
+        check_key: 'workload.no_investigable_evidence',
+        entity_key: null,
+        check_type: 'workload_classification',
+        description: 'Determine whether the submitted evidence requires external investigation.',
+        priority: 'low',
+        required_source: 'Submitted evidence and trusted extraction',
+        status: 'complete',
+        outcome: 'No investigable evidence detected; planner, research, critic, and expanded report synthesis were skipped.',
+      }],
+      contradictions: [],
+      unresolved_checks: [],
+      limitations: ['No real-world subject or transaction was present in the submitted evidence.'],
+      report: {
+        summary: 'No investigable evidence identified in the submitted control material; external investigation was not warranted.',
+        markdown: reportMarkdown,
+        status: 'draft',
+      },
+      execution: {
+        started_at: startedAt,
+        completed_at: completedAt,
+        stages: ['document_shards', 'workload_classification', 'deterministic_assembly'],
+        tool_results: executionTools.slice(0, 200),
+        warnings: [],
+        terminal_outcome: 'completed',
+      },
+    };
+    validateInvestigationBundle(finalBundle, manifest, reportMarkdown);
+    const provenance = {
+      ok: true,
+      status: 'ok',
+      final: '',
+      provider: 'integritas',
+      model: 'deterministic-no-evidence-assembly-v1',
+      sessionId: jobId,
+      toolSummary: mergeToolSummary(phases.map((row) => row.envelope)),
+      phases: [
+        ...phases.map((row) => ({
+          phase: row.phase,
+          provider: row.envelope?.provider ?? null,
+          model: row.envelope?.model ?? null,
+          status: row.envelope?.status ?? null,
+          reused: row.reused,
+          failed_candidates: row.failures,
+        })),
+        {
+          phase: 'workload-classification',
+          provider: 'integritas',
+          model: 'deterministic-workload-classifier-v1',
+          status: 'ok',
+          reused: true,
+          failed_candidates: [],
+        },
+      ],
+    };
+    await writeAtomic(jobDir, 'agent-exec.json', `${JSON.stringify(provenance)}\n`);
+    await writeAtomic(jobDir, 'bundle.json', `${JSON.stringify(finalBundle, null, 2)}\n`);
+    await writeAtomic(jobDir, 'report.md', reportMarkdown);
+    await progress(jobDir, 'drafting_report', 82, 'ready_for_deterministic_qa', 'no-investigable-evidence short-circuit complete');
+    return;
+  }
+
+  await progress(jobDir, 'mapping_entities', 38, 'large_bounded_plan', 'Building an evidence-led investigation route.', {
+    current_task: { id: 'investigation.plan', label: 'Build evidence-led investigation route', status: 'active', detail: 'Selecting checks from the submitted evidence.' },
+    live_events: [{ category: 'FOLLOW-UP', message: 'Building the case-specific verification plan from extracted evidence.', state: 'info' }],
+  });
+  let planResult;
+  if (LARGE_PLANNER_ENABLED) {
+    try {
+      planResult = await validated({
+        jobDir, id: 'large-plan', role: 'plan', task: planTask(synthetic),
+        execName: 'large-v2-plan-exec.json', synthetic, allowExternal: false,
+        validator: (final) => filterSyntheticExternalResearchLanes(
+          parseLargePlanFinal(final, { allowZeroLanes: synthetic }), synthetic,
+        ),
+        progressState: { stage: 'mapping_entities', progress: 38, phase: 'large_bounded_plan' },
+        maxModelAttempts: 3,
+      });
+      planResult = { ...planResult, planner_mode: 'optional_model_planner_v1' };
+    } catch (error) {
+      planResult = {
+        envelope: {
+          ok: true, status: 'ok', final: '', provider: 'integritas',
+          model: 'deterministic-evidence-scheduler-v2', sessionId: jobId,
+          toolSummary: { tools: [], calls: 0, failures: 0 },
+        },
+        value: buildDeterministicLargePlan(documentSummaries, manifest),
+        reused: false,
+        fallback: true,
+        failures: [{ model: 'validated-provider-routes', error: String(error?.message ?? error).slice(0, 500) }],
+        planner_mode: 'deterministic_evidence_scheduler_v2',
+      };
+      executionTools.push(toolResult(
+        'integritas_planner_fallback_v2',
+        'completed',
+        'Optional model planner routes were unavailable; the evidence-driven deterministic multi-lane scheduler preserved the investigation route.'
+      ));
+      await writeAtomic(jobDir, 'large-v2-plan-exec.json', JSON.stringify(planResult.envelope) + '\n');
+    }
+  } else {
+    planResult = {
+      envelope: {
+        ok: true, status: 'ok', final: '', provider: 'integritas',
+        model: 'deterministic-evidence-scheduler-v2', sessionId: jobId,
+        toolSummary: { tools: [], calls: 0, failures: 0 },
+      },
+      value: buildDeterministicLargePlan(documentSummaries, manifest),
+      reused: true,
+      failures: [],
+      planner_mode: 'deterministic_evidence_scheduler_v2',
+    };
+    await writeAtomic(jobDir, 'large-v2-plan-exec.json', JSON.stringify(planResult.envelope) + '\n');
+  }
+  phases.push({ phase: 'large-plan', ...planResult });
+  let plan = buildCompatiblePlan(documentSummaries, planResult.value);
+  plan = applyEvidenceDrivenSpecialistRouting(plan, manifest);
+  plan = filterSyntheticExternalResearchLanes(plan, synthetic);
+  await writeAtomic(jobDir, 'investigation-plan.json', `${JSON.stringify(plan, null, 2)}\n`);
+  const deterministicChecks = buildDeterministicChecks(plan);
+  await writeAtomic(jobDir, 'deterministic-checks.json', `${JSON.stringify(deterministicChecks, null, 2)}\n`);
+
+  const submittedSources = buildSubmittedSources(manifest, documentSummaries, new Date().toISOString());
+  const docSourceKeys = new Set(submittedSources.map((row) => row.source_key));
+  await progress(jobDir, 'analyzing_documents', 45, 'large_case_analysis', 'Normalizing entities, roles, identifiers and transaction claims.', {
+    current_task: { id: 'analysis.entities', label: 'Normalize entities, roles and transaction claims', status: 'active', detail: 'Separating identities and linking claims to submitted evidence.' },
+    live_events: [{ category: 'FILE DISCOVERY', message: 'Entity and transaction claims are being normalized from the submitted files.', state: 'discovery' }],
+  });
+  let analysisResult;
+  let caseAnalysis;
+  if (synthetic) {
+    caseAnalysis = deterministicSyntheticCaseAnalysis(documentSummaries);
+    analysisResult = {
+      envelope: {
+        ok: true,
+        status: 'ok',
+        final: '',
+        provider: 'integritas',
+        model: 'deterministic-synthetic-case-analysis-v1',
+        sessionId: jobId,
+        toolSummary: { tools: [], calls: 0, failures: 0 },
+      },
+      value: caseAnalysis,
+      reused: true,
+      failures: [],
+    };
+    executionTools.push(toolResult(
+      'integritas_synthetic_case_analysis_v1',
+      'completed',
+      `Trusted synthetic fixture deterministically produced ${caseAnalysis.entities.length} entities and ${caseAnalysis.findings.length} findings without external research.`,
+    ));
+  } else if (LARGE_MODEL_ANALYSIS_ENABLED) {
+    try {
+      analysisResult = await validated({
+        jobDir, id: 'large-case-analysis', role: 'analysis', task: analysisTask(false),
+        execName: 'large-v2-case-analysis-exec.json', synthetic: false, allowExternal: false,
+        validator: (final) => parseCaseAnalysisFinal(final, docSourceKeys),
+        progressState: { stage: 'analyzing_documents', progress: 45, phase: 'large_case_analysis' },
+        maxModelAttempts: 3,
+        procedureVersion: 'case-analysis-v2.1-labelled-field-recovery',
+      });
+      caseAnalysis = analysisResult.value;
+    } catch (error) {
+      caseAnalysis = buildDeterministicCaseAnalysis(documentSummaries);
+      analysisResult = {
+        envelope: { toolSummary: { tools: [], calls: 0, failures: 1 } },
+        value: caseAnalysis,
+        reused: false,
+        blocked: true,
+        fallback: true,
+        failures: [{ model: 'validated-provider-routes', error: String(error?.message ?? error).slice(0, 500) }],
+      };
+    }
+  } else {
+    caseAnalysis = buildDeterministicCaseAnalysis(documentSummaries);
+    analysisResult = {
+      envelope: {
+        ok: true, status: 'ok', final: '', provider: 'integritas',
+        model: 'deterministic-evidence-analysis-v1', sessionId: jobId,
+        toolSummary: { tools: [], calls: 0, failures: 0 },
+      },
+      value: caseAnalysis,
+      reused: true,
+      fallback: true,
+      failures: [],
+    };
+    await writeAtomic(jobDir, 'large-v2-case-analysis-exec.json', JSON.stringify(analysisResult.envelope) + '\n');
+  }
+  phases.push({ phase: 'large-case-analysis', ...analysisResult });
+  await writeAtomic(jobDir, 'large-case-analysis.json', `${JSON.stringify(caseAnalysis, null, 2)}\n`);
+
+  // Do not burn the external-research/report budget when submitted evidence
+  // contains substantive claims but the normalisation contract produced no
+  // entity anchors.  This is a technical failure, not an "incomplete" result.
+  if (documentSummaries.length > 0 && caseAnalysis.findings.length > 0 && caseAnalysis.entities.length === 0) {
+    throw new Error('entity_normalization_failed: substantive submitted evidence produced no normalized entities');
+  }
+
+  const priorityRank = { critical: 0, high: 1, medium: 2, low: 3 };
+  const orderedResearchLanes = [...plan.research_lanes].sort((a, b) =>
+    (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9));
+  await progress(jobDir, 'researching', 52, 'large_research_lanes', orderedResearchLanes.length + ' evidence-led lanes; critical checks first.', {
+    current_task: { id: 'research.route', label: 'Run specialist verification lanes', status: 'active', detail: orderedResearchLanes.length + ' lane(s) scheduled with bounded concurrency.' },
+    live_events: [{ category: 'VERIFYING', message: orderedResearchLanes.length + ' specialist verification lane(s) scheduled with critical checks first.', state: 'info' }],
+  });
+  const entityKeys = new Set(caseAnalysis.entities.map((row) => row.entity_key));
+  const laneResults = await mapLimit(orderedResearchLanes, 2, async (lane, index) => {
+    if (lane.manual_only) return manualLane(lane);
+    if (synthetic) {
+      const result = {
+        envelope: { toolSummary: { tools: [] } },
+        value: {
+          lane_id: lane.lane_id,
+          sources: [],
+          findings: [],
+          check: {
+            status: 'blocked',
+            outcome: 'Synthetic validation intentionally omits external research.',
+            required_source: lane.preferred_sources?.[0] || 'authoritative verification',
+          },
+          unresolved_checks: [{
+            description: "Authoritative external verification is not run for synthetic fixtures (" + lane.lane_id + ").",
+            reason: 'Synthetic hostile E2E evidence is not real-world evidence.',
+            attempted_methods: ['Deterministic submitted-evidence reconciliation'],
+            blocker: 'External research is intentionally disabled for this fixture.',
+            next_manual_action: 'Run an approved real-data investigation for authoritative verification.',
+          }],
+          limitations: ['Synthetic lane; no external research performed.'],
+        },
+        reused: true,
+        failures: [],
+      };
+      phases.push({ phase: `lane-${lane.lane_id}`, ...result });
+      await progress(jobDir, 'researching', 52 + Math.round(((index + 1) / Math.max(1, orderedResearchLanes.length)) * 14), 'large_research_lanes', `lane ${index + 1}/${orderedResearchLanes.length}: ${lane.lane_id}`);
+      return materializeLaneResult(result.value, lane, index);
+    }
+    await progress(jobDir, 'researching', 52 + Math.round((index / Math.max(1, orderedResearchLanes.length)) * 14), 'large_research_lanes', `lane ${index + 1}/${orderedResearchLanes.length}: ${lane.lane_id}`, {
+      current_task: { id: 'lane.' + lane.lane_id, label: safeLiveText(lane.question, 180), status: 'active', detail: 'Searching and opening authoritative sources where available.' },
+      live_events: [{ category: 'VERIFYING', message: safeLiveText(lane.question, 320), state: 'info' }],
+    });
+    let result;
+    let retrieval = { queries: [], sources: [] };
+    let synthesisFailure = null;
+    try {
+      retrieval = await retrieveLaneWebEvidence(jobDir, lane);
+      if (retrieval.sources.length > 0) {
+        const allowedUrls = new Set(retrieval.sources.map((row) => row.url));
+        result = await validated({
+          jobDir,
+          id: `lane-retrieved-${lane.lane_id}`,
+          role: 'lane',
+          task: laneEvidenceTask(lane, retrieval),
+          execName: `large-v2-lane-${safePart(lane.lane_id)}-retrieved-exec.json`,
+          synthetic: false,
+          allowExternal: false,
+          validator: (final) => {
+            const parsed = parseLaneFinal(final, lane.lane_id, entityKeys, docSourceKeys);
+            if (parsed.sources.some((source) => !allowedUrls.has(source.url))) {
+              throw new Error('retrieval synthesis returned an URL outside the bounded opened-source set');
+            }
+            return parsed;
+          },
+          progressState: { stage: 'researching', progress: 52, phase: 'large_research_lanes' },
+          maxModelAttempts: 3,
+          procedureVersion: 'retrieval-v1',
+        });
+        executionTools.push(toolResult(
+          'integritas_parallel_firecrawl_retrieval_v1',
+          'completed',
+          `Lane ${lane.lane_id} searched with Parallel and opened ${retrieval.sources.length} HTTPS source(s) with Firecrawl before synthesis.`,
+        ));
+      }
+    } catch (error) {
+      synthesisFailure = error;
+    }
+
+    if (!result) try {
+      result = await validated({
+        jobDir, id: `lane-${lane.lane_id}`, role: 'lane', task: laneTask(lane, synthetic),
+        execName: `large-v2-lane-${safePart(lane.lane_id)}-exec.json`, synthetic,
+        allowExternal: !synthetic,
+        validator: (final, envelope) => {
+          const parsed = parseLaneFinal(
+            synthetic ? normalizeSyntheticLaneFinal(final, entityKeys, docSourceKeys) : final,
+            lane.lane_id,
+            entityKeys,
+            docSourceKeys,
+          );
+          if (!synthetic) {
+            const tools = externalTools(envelope);
+            if (!tools.includes('web_search')) {
+              throw new Error('external research lane requires an observed web_search call in the same phase');
+            }
+            if (parsed.sources.length > 0 && !tools.some((tool) => tool === 'web_fetch' || tool === 'browser')) {
+              throw new Error('external lane sources require an observed source-open call (web_fetch or browser) in the same phase');
+            }
+          }
+          return parsed;
+        },
+        progressState: { stage: 'researching', progress: 52, phase: 'large_research_lanes' },
+        maxModelAttempts: 3,
+      });
+    } catch (error) {
+      if (synthesisFailure && retrieval.sources.length > 0) {
+        const fallback = openedEvidenceFallbackLane(
+          lane,
+          retrieval,
+          String(synthesisFailure?.message ?? synthesisFailure) + ' | ' + String(error?.message ?? error),
+        );
+        result = {
+          envelope: { toolSummary: { tools: ['web_search', 'web_fetch'], calls: retrieval.sources.length + retrieval.queries.length, failures: 1 } },
+          value: fallback,
+          reused: false,
+          blocked: true,
+          fallback: true,
+          failures: [
+            { model: 'bounded-retrieval-synthesis', error: String(synthesisFailure?.message ?? synthesisFailure).slice(0, 500) },
+            { model: 'tool-calling-provider-routes', error: String(error?.message ?? error).slice(0, 500) },
+          ],
+        };
+      } else {
+      const providerFailure = String(error?.message ?? error).slice(0, 500);
+      if (process.env.GROQ_API_KEY && providerCooldownRemainingMs('groq') === 0) {
+        try {
+          const groqValue = await runGroqBrowserLane(lane);
+          const groqEnvelope = {
+            ok: true,
+            status: 'ok',
+            final: JSON.stringify(groqValue),
+            provider: 'integritas-groq',
+            model: GROQ_BROWSER_MODEL,
+            sessionId: jobId,
+            toolSummary: { tools: ['browser_search'], calls: 1, failures: 0 },
+          };
+          await writeAtomic(jobDir, `large-v2-lane-${safePart(lane.lane_id)}-exec.json`, `${JSON.stringify(groqEnvelope)}\n`);
+          executionTools.push(toolResult(
+            'integritas_groq_browser_search',
+            'completed',
+            `Lane ${lane.lane_id} recovered through bounded Groq server-side browser_search after the primary research route failed.`,
+          ));
+          result = {
+            envelope: groqEnvelope,
+            value: groqValue,
+            reused: false,
+            fallback: true,
+            failures: [{ model: 'validated-provider-routes', error: providerFailure }],
+          };
+        } catch (groqError) {
+          const blocked = providerBlockedLane(lane);
+          result = {
+            envelope: { toolSummary: { tools: [], calls: 0, failures: 1 } },
+            value: blocked,
+            reused: false,
+            blocked: true,
+            failures: [
+              { model: 'validated-provider-routes', error: providerFailure },
+              { model: 'integritas-groq-browser-search', error: String(groqError?.message ?? groqError).slice(0, 500) },
+            ],
+          };
+        }
+      } else {
+        const blocked = providerBlockedLane(lane);
+        result = {
+          envelope: { toolSummary: { tools: [], calls: 0, failures: 1 } },
+          value: blocked,
+          reused: false,
+          blocked: true,
+          failures: [
+            { model: 'validated-provider-routes', error: providerFailure },
+            ...(process.env.GROQ_API_KEY && providerCooldownRemainingMs('groq') > 0
+              ? [{ model: 'integritas-groq-browser-search', error: 'provider cooldown active for ' + Math.ceil(providerCooldownRemainingMs('groq') / 1000) + 's' }]
+              : []),
+          ],
+        };
+      }
+      }
+    }
+    if (synthetic && externalTools(result.envelope).length) throw new Error('synthetic lane performed external research');
+    phases.push({ phase: `lane-${lane.lane_id}`, ...result });
+    const liveFinding = Array.isArray(result.value?.findings) ? result.value.findings[0] : null;
+    const hasValidatedSource = Array.isArray(result.value?.sources)
+      && result.value.sources.some((source) => ['validated', 'claim_supporting'].includes(source?.verification_state));
+    const laneComplete = result.value?.check?.status === 'complete';
+    const laneEvent = liveFinding?.claim
+      ? {
+          category: liveFinding.evidence_status === 'verified' && hasValidatedSource ? 'VERIFIED' : 'SOURCE FOUND',
+          message: (liveFinding.evidence_status === 'verified' && hasValidatedSource ? '' : 'Unverified discovery: ') + safeLiveText(liveFinding.claim, 320),
+          state: liveFinding.evidence_status === 'verified' && hasValidatedSource ? 'verified' : 'discovery',
+        }
+      : laneComplete
+        ? { category: 'VERIFYING', message: safeLiveText(lane.question, 280) + ' completed.', state: 'success' }
+        : { category: 'FOLLOW-UP', message: safeLiveText(lane.question, 280) + ' remains unresolved and was retained for follow-up.', state: 'warning' };
+    await progress(jobDir, 'researching', 52 + Math.round(((index + 1) / Math.max(1, orderedResearchLanes.length)) * 14), 'large_research_lanes', `lane ${index + 1}/${orderedResearchLanes.length}: ${lane.lane_id}`, {
+      current_task: { id: 'lane.' + lane.lane_id, label: safeLiveText(lane.question, 180), status: laneComplete ? 'complete' : 'blocked', detail: safeLiveText(result.value?.check?.outcome || '', 420) },
+      live_events: [laneEvent],
+    });
+    return materializeLaneResult(result.value, lane, index);
+  });
+  executionTools.push(toolResult('integritas_lane_research_v2', 'completed', `${plan.research_lanes.length} research lanes completed or retained as manual gates.`));
+
+  const preCritic = assembleLargeBundle({
+    manifest, documentSummaries, caseAnalysis, laneResults, critic: null,
+    reportMarkdown: '# DRAFT REPORT PENDING\n', reportSummary: 'Draft report pending.',
+    startedAt, completedAt: new Date().toISOString(), executionTools,
+  });
+  applyDeterministicChecksToBundle(preCritic, deterministicChecks);
+  reconcilePlanChecks(preCritic, plan);
+  await writeAtomic(jobDir, 'large-bundle-precritic.json', `${JSON.stringify(preCritic, null, 2)}\n`);
+
+  await progress(jobDir, 'independent_review', 68, 'large_independent_critic', 'Independent review is challenging evidence, omissions and overclaims.', {
+    current_task: { id: 'review.critic', label: 'Independent critic and revision review', status: 'active', detail: 'Testing evidence support, contradictions and unresolved gates.' },
+    live_events: [{ category: 'VERIFYING', message: 'Independent critic review started to challenge unsupported or incomplete conclusions.', state: 'info' }],
+  });
+  let criticResult;
+  let critic;
+  if (synthetic) {
+    critic = deterministicSyntheticCritic({ manifest, documentSummaries, caseAnalysis });
+    criticResult = {
+      envelope: {
+        ok: true,
+        status: 'ok',
+        final: '',
+        provider: 'integritas',
+        model: 'deterministic-synthetic-critic-v1',
+        sessionId: jobId,
+        toolSummary: { tools: [], calls: 0, failures: 0 },
+      },
+      value: critic,
+      reused: true,
+      failures: [],
+    };
+    executionTools.push(toolResult(
+      'integritas_synthetic_critic_v1',
+      'completed',
+      `Deterministic synthetic critic verdict ${critic.verdict}; ${critic.issues.length} issue(s), ${critic.missing_document_ids.length} missing document(s).`,
+    ));
+  } else if (LARGE_MODEL_CRITIC_ENABLED) {
+    try {
+      criticResult = await validated({
+        jobDir, id: 'large-critic', role: 'critic', task: criticTask(false),
+        execName: 'large-v2-critic-exec.json', synthetic: false, allowExternal: false,
+        validator: (final) => parseCriticIssuesFinal(final),
+        progressState: { stage: 'independent_review', progress: 68, phase: 'large_independent_critic' },
+        maxModelAttempts: 3,
+      });
+      critic = criticResult.value;
+    } catch (error) {
+      critic = providerBlockedCritic();
+      criticResult = {
+        envelope: { toolSummary: { tools: [], calls: 0, failures: 1 } },
+        value: critic,
+        reused: false,
+        blocked: true,
+        failures: [{ model: 'validated-provider-routes', error: String(error?.message ?? error).slice(0, 500) }],
+      };
+      executionTools.push(toolResult('integritas_provider_fallback_v1', 'completed', 'Independent critic routes were unavailable; the report remains explicitly revision-required.'));
+    }
+  } else {
+    critic = providerBlockedCritic();
+    criticResult = {
+      envelope: {
+        ok: true, status: 'ok', final: '', provider: 'integritas',
+        model: 'deterministic-review-gate-v1', sessionId: jobId,
+        toolSummary: { tools: [], calls: 0, failures: 0 },
+      },
+      value: critic,
+      reused: true,
+      blocked: true,
+      fallback: true,
+      failures: [],
+    };
+  }
+  phases.push({ phase: 'large-critic', ...criticResult });
+  await writeAtomic(jobDir, 'large-critic.json', `${JSON.stringify(critic, null, 2)}\n`);
+
+  const reviewed = assembleLargeBundle({
+    manifest, documentSummaries, caseAnalysis, laneResults, critic,
+    reportMarkdown: '# DRAFT REPORT PENDING\n', reportSummary: 'Draft report pending.',
+    startedAt, completedAt: new Date().toISOString(), executionTools,
+  });
+  applyDeterministicChecksToBundle(reviewed, deterministicChecks);
+  reconcilePlanChecks(reviewed, plan);
+  await writeAtomic(jobDir, 'large-final-evidence.json', `${JSON.stringify(reviewed, null, 2)}\n`);
+
+  await progress(jobDir, 'drafting_report', 76, 'large_sectioned_report', 'Assembling the evidence-led due-diligence dossier.', {
+    current_task: { id: 'report.assembly', label: 'Assemble due-diligence report', status: 'active', detail: 'Building the dossier from the canonical evidence bundle.' },
+    live_events: [{ category: 'REPORT', message: 'Structured due-diligence dossier assembly has started.', state: 'info' }],
+  });
+  // Final report composition is application-side and evidence-led. A provider may
+  // assist upstream with bounded extraction and analysis, but an exhausted report
+  // route must never prevent a complete dossier from being assembled from the
+  // canonical validated bundle.
+  const sectionPairs = await mapLimit(LARGE_REPORT_SECTIONS, 1, async (spec, index) => {
+    const value = reportValidator(spec, { requireMinimum: false })(
+      deterministicProviderReportSection(spec, reviewed, critic),
+    );
+    const result = {
+      envelope: {
+        ok: true, status: 'ok', final: '', provider: 'integritas',
+        model: 'deterministic-evidence-led-report-section-v2', sessionId: jobId,
+        toolSummary: { tools: [], calls: 0, failures: 0 },
+      },
+      value,
+      reused: false,
+      fallback: true,
+      failures: [],
+    };
+    phases.push({ phase: `report-${spec.id}`, ...result });
+    await progress(jobDir, 'drafting_report', 76 + Math.round(((index + 1) / 4) * 10), 'large_sectioned_report', `section ${index + 1}/4`);
+    return [spec.id, result.value];
+  });
+  const sections = new Map(sectionPairs);
+  const canonicalSourceAnchors = reviewed.sources
+    .map((row) => row?.source_key)
+    .filter((value) => typeof value === 'string' && value.trim())
+    .slice(0, 5);
+  const reportMarkdown = [
+    joinReportSections(sections).trimEnd(),
+    '## CANONICAL SOURCE ANCHORS',
+    'The following source keys are the deterministic provenance anchors for this run:',
+    canonicalSourceAnchors.map((key) => `- ${key}`).join('\\n'),
+  ].join('\n\n') + '\n';
+  const reportSummary = extractExecutiveSummary(sections.get('01'));
+
+  executionTools.push(
+    toolResult('integritas_case_analysis_v2', 'completed', `${caseAnalysis.entities.length} entities, ${caseAnalysis.findings.length} evidence findings and ${caseAnalysis.contradictions.length} contradictions assembled from submitted evidence.`),
+    toolResult('integritas_independent_critic_v2', 'completed', `Critic verdict ${critic.verdict}; ${critic.issues.length} issue(s).`),
+    toolResult('integritas_sectioned_report_v2', 'completed', 'Four bounded report sections assembled deterministically in Prototype-1 order.'),
+    toolResult('integritas_transaction_checks_v1', 'completed', `${deterministicChecks.iban_checks.length} IBAN, ${deterministicChecks.imo_checks.length} IMO and ${deterministicChecks.bic_format_checks.length} BIC-format candidate checks.`),
+  );
+
+  const finalBundle = assembleLargeBundle({
+    manifest, documentSummaries, caseAnalysis, laneResults, critic,
+    reportMarkdown, reportSummary, startedAt, completedAt: new Date().toISOString(), executionTools,
+  });
+  applyDeterministicChecksToBundle(finalBundle, deterministicChecks);
+  const reconciled = reconcilePlanChecks(finalBundle, plan);
+  if (reconciled.inserted) {
+    finalBundle.execution.tool_results = finalBundle.execution.tool_results.slice(0, 200);
+    finalBundle.execution.terminal_outcome = 'incomplete';
+  }
+  validateInvestigationBundle(finalBundle, manifest, reportMarkdown);
+
+  const envelopes = phases.map((row) => row.envelope);
+  const provenance = {
+    ok: true, status: 'ok', final: '',
+    provider: 'integritas', model: 'deterministic-large-assembly-v2', sessionId: jobId,
+    toolSummary: mergeToolSummary(envelopes),
+    phases: phases.map((row) => ({
+      phase: row.phase, provider: row.envelope?.provider ?? null, model: row.envelope?.model ?? null,
+      status: row.envelope?.status ?? null, reused: row.reused,
+      failed_candidates: row.failures,
+    })),
+  };
+  await writeAtomic(jobDir, 'agent-exec.json', `${JSON.stringify(provenance)}\n`);
+  await writeAtomic(jobDir, 'bundle.json', `${JSON.stringify(finalBundle, null, 2)}\n`);
+  await writeAtomic(jobDir, 'report.md', reportMarkdown);
+  await progress(jobDir, 'drafting_report', 82, 'ready_for_deterministic_qa', 'Large-case dossier assembly complete; deterministic QA is next.', {
+    current_task: { id: 'report.qa', label: 'Run semantic and deterministic QA', status: 'active', detail: 'Draft dossier assembled and ready for release checks.' },
+    live_events: [{ category: 'REPORT', message: 'Draft due-diligence dossier assembled; deterministic and semantic QA are next.', state: 'success' }],
+  });
+}
+, 'freight', 'mt', 'bbl', 'gallon', 'quantity', 'volume', 'value', 'price', 'pricing', 'fee'], 'No source-linked price, quantity, volume, freight, value or fee detail was extracted.', 8)}`);
+    sections.set(headings[5], `No payment instrument or trade-finance source was independently validated. The following contract, invoice, payment-sequence and release terms are recorded as submitted-evidence assertions only. Confirm the contracting chain, beneficiary, bank, instrument, conditions precedent, title sequence and authority through independent evidence.\n\n### Submitted-evidence procedure and trade-finance details\n\n${submittedTopicHighlights(['invoice', 'contract', 'ttvia', 'release', 'payment', 'title', 'charter', 'bank', 'beneficiary'], 'No source-linked invoice, contract, payment, title, release or trade-finance detail was extracted.', 8)}`);
     sections.set(headings[6], `No external sanctions, PEP, adverse-media, enforcement or litigation source was committed. The correct status is unverified, not clear. ${noExternal}`);
-    sections.set(headings[7], `Potential document-integrity indicators are recorded in the source register and findings. They are risk indicators requiring corroboration, not final fraud conclusions. ${(evidence.limitations ?? []).join(' ')}`);
+    sections.set(headings[7], `Potential document-integrity indicators below are source-linked risk indicators requiring corroboration, not final fraud conclusions.\n\n### Submitted-evidence integrity and contradiction indicators\n\n${submittedTopicHighlights(['signature', 'governing', 'indemnification', 'conflict', 'boilerplate', 'phone', 'certificate', 'format', 'document'], 'No source-linked document-integrity or contradiction indicator was extracted.', 8)}\n\n${(evidence.limitations ?? []).join(' ')}`);
     sections.set(headings[8], 'No independent positive indicator was validated. Shared names, product labels or repeated formatting are not risk-reducing proof.');
     sections.set(headings[9], `${markdownTable(['Materiality', 'Count'], [...materialityCounts.entries()])}\n\n${markdownTable(['Evidence status', 'Count'], [...statusCounts.entries()])}`);
     sections.set(headings[10], gateTable);
