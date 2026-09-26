@@ -520,3 +520,23 @@ test('deterministic report fallback remains comprehensive when provider report r
   ]) assert.ok(section.includes(heading));
   assert.doesNotThrow(() => parseReportSectionFinal(section, '# DOCUMENT, FORENSIC & ENTITY REVIEW', 24000));
 });
+
+
+test('deterministic executive fallback preserves required front-matter ordering', () => {
+  const evidence = {
+    execution: { terminal_outcome: 'incomplete' },
+    entities: [],
+    relationships: [],
+    sources: [],
+    findings: [],
+    checks: [],
+    contradictions: [],
+    unresolved_checks: [],
+    limitations: [],
+  };
+  const section = deterministicProviderReportSection({ id: '01', focus: 'summary' }, evidence, { verdict: 'revise', issues: [] });
+  const master = section.indexOf('# MASTER SUMMARY — READ THIS FIRST');
+  const next = section.indexOf('## DIRECT NEXT STEPS — WHAT TO DO NOW');
+  assert.ok(master >= 0 && next > master);
+  assert.doesNotMatch(section.slice(master, next), /^#{1,6}\s+/m);
+});
