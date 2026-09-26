@@ -1973,17 +1973,17 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
   const statusSummary = [...statusCounts.entries()].map(([key, value]) => `${key}: ${value}`).join('; ') || 'No findings';
   const materialitySummary = [...materialityCounts.entries()].map(([key, value]) => `${key}: ${value}`).join('; ') || 'No findings';
   const submittedHighlights = submittedSources.map((row) => {
-    const excerpt = String(row.excerpt ?? '').replace(/\\n+/g, ' ').replace(/\\s+/g, ' ').trim();
+    const excerpt = String(row.excerpt ?? '').replace(/\n+/g, ' ').replace(/\\s+/g, ' ').trim();
     return `- **${row.title}:** ${markdownCell(excerpt, 900)} [${row.source_key}]`;
-  }).join('\\n') || '- No submitted-document highlights were extracted.';
+  }).join('\n') || '- No submitted-document highlights were extracted.';
   const findingHighlights = findings
     .filter((row) => row.evidence_status === 'conflicting' || row.materiality === 'high' || row.materiality === 'critical')
     .slice(0, 18)
     .map((row) => `- **${String(row.evidence_status).toUpperCase()} / ${row.materiality}:** ${markdownCell(row.claim, 500)} — ${markdownCell(row.evidence_excerpt, 500)} [${evidenceSourceLabels(row.source_keys, sourceTitle)}]`)
-    .join('\\n') || '- No high-materiality or conflicting finding was recorded.';
+    .join('\n') || '- No high-materiality or conflicting finding was recorded.';
   const openedHighlights = openedExternalSources.slice(0, 16).map((row) =>
     `- **${markdownCell(row.title, 260)}:** ${markdownCell(row.excerpt, 520)} — ${markdownCell(row.url, 500)} [${row.source_key}]`
-  ).join('\\n') || '- No opened external source was retained.';
+  ).join('\n') || '- No opened external source was retained.';
   const submittedSourceKeys = new Set(submittedSources.map((row) => row.source_key));
   // Surface material submitted-evidence facts in the topical reader sections.
   // These are documentary assertions, not independent verification of identity,
@@ -1997,7 +1997,7 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
   const submittedTopicHighlights = (keywords, emptyMessage, limit = 6) => {
     const rows = submittedTopicFindings(keywords, limit);
     return rows.length
-      ? rows.map((row) => `- **SUBMITTED EVIDENCE / ${String(row.materiality || 'informational').toUpperCase()}:** ${markdownCell(row.claim, 460)} — ${markdownCell(row.evidence_excerpt, 520)} [${evidenceSourceLabels(row.source_keys, sourceTitle)}]`).join('\\n')
+      ? rows.map((row) => `- **SUBMITTED EVIDENCE / ${String(row.materiality || 'informational').toUpperCase()}:** ${markdownCell(row.claim, 460)} — ${markdownCell(row.evidence_excerpt, 520)} [${evidenceSourceLabels(row.source_keys, sourceTitle)}]`).join('\n')
       : `- ${emptyMessage}`;
   };
   // Keep the executive front matter concise enough to be read before the
@@ -2006,15 +2006,15 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
   const executiveSubmittedHighlights = submittedSources.slice(0, 3).map((row) => {
     const excerpt = String(row.excerpt ?? '').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
     return `- **${markdownCell(row.title, 180)}:** ${markdownCell(excerpt, 320)} [${row.source_key}]`;
-  }).join('\\n') || '- No submitted-document highlights were extracted.';
+  }).join('\n') || '- No submitted-document highlights were extracted.';
   const executiveFindingHighlights = findings
     .filter((row) => row.evidence_status === 'conflicting' || row.materiality === 'high' || row.materiality === 'critical')
     .slice(0, 5)
     .map((row) => `- **${String(row.evidence_status).toUpperCase()} / ${row.materiality}:** ${markdownCell(row.claim, 240)} — ${markdownCell(row.evidence_excerpt, 240)} [${evidenceSourceLabels(row.source_keys, sourceTitle).slice(0, 180)}]`)
-    .join('\\n') || '- No high-materiality or conflicting finding was recorded.';
+    .join('\n') || '- No high-materiality or conflicting finding was recorded.';
   const executiveOpenedHighlights = openedExternalSources.slice(0, 3).map((row) =>
     `- **${markdownCell(row.title, 180)}:** ${markdownCell(row.excerpt, 260)} — ${markdownCell(row.url, 240)} [${row.source_key}]`
-  ).join('\\n') || '- No opened external source was retained.';
+  ).join('\n') || '- No opened external source was retained.';
   const baseStatus = `Terminal outcome: ${status}. The bundle contains ${submittedSources.length} submitted document source(s), ${validatedExternalSources.length} validated external source(s), ${discoveryExternalSources.length} discovery-only external source(s), ${entities.length} entity record(s), ${findings.length} finding(s), ${contradictions.length} contradiction row(s), and ${unresolved.length} unresolved gate(s). This is a draft work product, not transaction clearance.`;
   const noExternal = validatedExternalSources.length
     ? `Validated external research sources are present: ${validatedExternalSources.length}. Opened sources: ${openedExternalSources.length}. Discovery-only sources: ${discoveryExternalSources.length}.`
