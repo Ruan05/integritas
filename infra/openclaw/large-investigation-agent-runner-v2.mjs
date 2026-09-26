@@ -2714,46 +2714,25 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
     current_task: { id: 'report.assembly', label: 'Assemble due-diligence report', status: 'active', detail: 'Building the dossier from the canonical evidence bundle.' },
     live_events: [{ category: 'REPORT', message: 'Structured due-diligence dossier assembly has started.', state: 'info' }],
   });
+  // Final report composition is application-side and evidence-led. A provider may
+  // assist upstream with bounded extraction and analysis, but an exhausted report
+  // route must never prevent a complete dossier from being assembled from the
+  // canonical validated bundle.
   const sectionPairs = await mapLimit(LARGE_REPORT_SECTIONS, 2, async (spec, index) => {
-    const result = synthetic
-      ? (() => {
-        const value = reportValidator(spec, { requireMinimum: false })(
-          deterministicProviderReportSection(spec, reviewed, critic),
-        );
-        return { envelope: { toolSummary: { tools: [] } }, value, reused: true, failures: [] };
-      })()
-      : LARGE_MODEL_REPORT_ENABLED
-        ? await (async () => {
-          try {
-            return await validated({
-              jobDir, id: `report-${spec.id}`, role: 'report', task: reportTask(spec),
-              execName: `large-v2-report-${spec.id}-exec.json`, synthetic, allowExternal: false,
-              validator: reportValidator(spec),
-              progressState: { stage: 'drafting_report', progress: 76, phase: 'large_sectioned_report' },
-              maxModelAttempts: 3,
-            });
-          } catch (error) {
-            const value = reportValidator(spec, { requireMinimum: false })(deterministicProviderReportSection(spec, reviewed, critic));
-            return {
-              envelope: { toolSummary: { tools: [], calls: 0, failures: 1 } },
-              value,
-              reused: false,
-              blocked: true,
-              failures: [{ model: 'validated-provider-routes', error: String(error?.message ?? error).slice(0, 500) }],
-            };
-          }
-        })()
-        : {
-          envelope: {
-            ok: true, status: 'ok', final: '', provider: 'integritas',
-            model: 'deterministic-report-section-v1', sessionId: jobId,
-            toolSummary: { tools: [], calls: 0, failures: 0 },
-          },
-          value: reportValidator(spec, { requireMinimum: false })(deterministicProviderReportSection(spec, reviewed, critic)),
-          reused: true,
-          fallback: true,
-          failures: [],
-        };
+    const value = reportValidator(spec, { requireMinimum: false })(
+      deterministicProviderReportSection(spec, reviewed, critic),
+    );
+    const result = {
+      envelope: {
+        ok: true, status: 'ok', final: '', provider: 'integritas',
+        model: 'deterministic-evidence-led-report-section-v2', sessionId: jobId,
+        toolSummary: { tools: [], calls: 0, failures: 0 },
+      },
+      value,
+      reused: false,
+      fallback: true,
+      failures: [],
+    };
     phases.push({ phase: `report-${spec.id}`, ...result });
     await progress(jobDir, 'drafting_report', 76 + Math.round(((index + 1) / 4) * 10), 'large_sectioned_report', `section ${index + 1}/4`);
     return [spec.id, result.value];
