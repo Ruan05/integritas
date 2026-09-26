@@ -1,0 +1,39 @@
+[Unit]
+Description=Integritas outbound OpenClaw control worker
+After=network-online.target openclaw-gateway.service polkit.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=integritas-control
+Group=integritas-openclaw
+EnvironmentFile=/etc/integritas/control-worker.env
+Environment=INTEGRITAS_REPO_ROOT=/opt/integritas/current
+Environment=GOTENBERG_URL=http://127.0.0.1:3000
+LoadCredential=control-token:/etc/integritas/control-worker.token
+Environment=INTEGRITAS_CONTROL_WORKER_TOKEN_FILE=%d/control-token
+WorkingDirectory=/opt/integritas/current/infra/openclaw/control-worker
+ExecStart=/usr/bin/node /opt/integritas/current/infra/openclaw/control-worker/src/index.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=30
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/integritas-control /var/lib/integritas-runner
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

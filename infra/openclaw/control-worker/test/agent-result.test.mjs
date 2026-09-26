@@ -1,0 +1,241 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { parseAgentBundle } from '../../agent-result.mjs';
+
+const manifest = {
+  case_id: '11111111-1111-4111-8111-111111111111',
+  case_job_id: '22222222-2222-4222-8222-222222222222',
+  case_revision: 7,
+  depth: 'deep',
+  documents: [],
+};
+
+function bundle() {
+  const report = '# Draft report';
+  return {
+    schema_version: 1,
+    case_id: manifest.case_id,
+    case_job_id: manifest.case_job_id,
+    case_revision: manifest.case_revision,
+    depth: manifest.depth,
+    generated_at: '2026-09-18T08:00:00Z',
+    entities: [], relationships: [], sources: [], findings: [], checks: [],
+    contradictions: [], unresolved_checks: [], limitations: [],
+    report: { summary: 'Summary', markdown: report, status: 'draft' },
+    execution: {
+      started_at: '2026-09-18T07:59:00Z',
+      completed_at: '2026-09-18T08:00:00Z',
+      stages: ['analyzing_documents'],
+      tool_results: [],
+      warnings: [],
+      terminal_outcome: 'incomplete',
+    },
+  };
+}
+
+test('parses raw v1 JSON from successful agent-exec envelope', () => {
+  const value = bundle();
+  const envelope = JSON.stringify({
+    ok: true, status: 'ok', final: JSON.stringify(value),
+    model: 'glm-5.3-flash', provider: 'opencode-go',
+  });
+  const parsed = parseAgentBundle(envelope, manifest);
+  assert.deepEqual(parsed.bundle, value);
+  assert.equal(parsed.reportMarkdown, '# Draft report');
+});
+
+test('recovers one bounded wrapped JSON object but rejects ambiguity and manifest mismatches', () => {
+  const value = bundle();
+  const prose = parseAgentBundle(
+    JSON.stringify({ ok: true, status: 'ok', final: 'Here is the result:\n' + JSON.stringify(value) + '\nDone.' }),
+    manifest,
+  );
+  assert.deepEqual(prose.bundle, value);
+
+  const fenced = String.fromCharCode(96,96,96) + 'json\n' + JSON.stringify(value) + '\n' + String.fromCharCode(96,96,96);
+  const fencedParsed = parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: fenced }), manifest);
+  assert.deepEqual(fencedParsed.bundle, value);
+
+  const ambiguous = JSON.stringify(value) + '\n' + JSON.stringify(value);
+  assert.throws(
+    () => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: ambiguous }), manifest),
+    /must contain one valid JSON object/,
+  );
+  assert.throws(() => parseAgentBundle(JSON.stringify({ ok: false, status: 'error', final: '' }), manifest), /agent exec did not complete successfully/);
+  value.case_revision = 8;
+  assert.throws(() => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }), manifest), /bundle manifest mismatch/);
+});
+
+
+test('repairs exactly one omitted finding_key label but still validates the bundle strictly', () => {
+  const value = bundle();
+  value.findings = [{
+    finding_key: 'fnd.synthetic',
+    finding_type: 'entity_status',
+    claim: 'Synthetic finding.',
+    evidence_status: 'uncertain',
+    materiality: 'informational',
+    reliability: 'high',
+    evidence_excerpt: 'Synthetic evidence.',
+    source_keys: [],
+  }];
+  const malformed = JSON.stringify(value, null, 2)
+    .replace('"finding_key": "fnd.synthetic",', '"fnd.synthetic",');
+  const parsed = parseAgentBundle(
+    JSON.stringify({ ok: true, status: 'ok', final: malformed }),
+    manifest,
+  );
+  assert.equal(parsed.bundle.findings[0].finding_key, 'fnd.synthetic');
+
+  const two = bundle();
+  two.findings = [
+    { ...value.findings[0], finding_key: 'fnd.one' },
+    { ...value.findings[0], finding_key: 'fnd.two' },
+  ];
+  const doublyMalformed = JSON.stringify(two, null, 2)
+    .replace('"finding_key": "fnd.one",', '"fnd.one",')
+    .replace('"finding_key": "fnd.two",', '"fnd.two",');
+  assert.throws(
+    () => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: doublyMalformed }), manifest),
+    /must contain one valid JSON object/,
+  );
+});
+
+test('canonicalizes plain Integritas front-matter labels into QA-recognized Markdown headings', () => {
+  const value = bundle();
+  value.report.markdown = [
+    'MASTER SUMMARY — READ THIS FIRST',
+    'Synthetic decision summary.',
+    '',
+    'DIRECT NEXT STEPS — WHAT TO DO NOW',
+    'Verify the material claims independently.',
+    '',
+    '## Evidence Package Reviewed',
+    'Synthetic evidence.',
+  ].join('\n');
+
+  const parsed = parseAgentBundle(
+    JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }),
+    manifest,
+  );
+
+  assert.match(parsed.reportMarkdown, /^# MASTER SUMMARY — READ THIS FIRST\n/);
+  assert.match(parsed.reportMarkdown, /\n# DIRECT NEXT STEPS — WHAT TO DO NOW\n/);
+  assert.equal(parsed.bundle.report.markdown, parsed.reportMarkdown);
+});
+
+test('normalizes a completed model outcome to incomplete when unresolved work remains', () => {
+  const value = bundle();
+  value.execution.terminal_outcome = 'completed';
+  value.checks = [{
+    check_key: 'manual-registry',
+    check_type: 'registry_verification',
+    description: 'Verify the registry directly.',
+    priority: 'high',
+    required_source: 'Official registry',
+    status: 'blocked',
+    outcome: 'Registry access unavailable.',
+  }];
+  value.unresolved_checks = [{
+    unresolved_key: 'registry-unresolved',
+    description: 'Direct registry verification remains outstanding.',
+    reason: 'Registry access unavailable.',
+    attempted_methods: ['Public web lookup'],
+    blocker: 'Direct registry unavailable.',
+    next_manual_action: 'Verify with the official registry.',
+  }];
+  const parsed = parseAgentBundle(
+    JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }),
+    manifest,
+  );
+  assert.equal(parsed.bundle.execution.terminal_outcome, 'incomplete');
+});
+
+test('drops only provider-added top-level metadata before strict validation', () => {
+  const value = bundle();
+  value.metadata = { provider_note: 'non-canonical provider bookkeeping' };
+  const envelope = JSON.stringify({
+    ok: true, status: 'ok', final: JSON.stringify(value),
+    model: 'nvidia/nemotron-3-ultra-550b-a55b', provider: 'nvidia',
+  });
+  const parsed = parseAgentBundle(envelope, manifest);
+  assert.equal(Object.prototype.hasOwnProperty.call(parsed.bundle, 'metadata'), false);
+  assert.equal(parsed.bundle.schema_version, 1);
+
+  const bad = bundle();
+  bad.unexpected = {};
+  assert.throws(
+    () => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(bad) }), manifest),
+    /unknown bundle field: unexpected/,
+  );
+});
+test('fills an unambiguous submitted document_id from the signed manifest', () => {
+  const oneDocumentManifest = {
+    ...manifest,
+    documents: [{ id: '44444444-4444-4444-8444-444444444444', name: 'alpha.pdf' }],
+  };
+  const value = bundle();
+  value.sources = [{
+    source_key: 'source-alpha',
+    source_type: 'document',
+    title: 'alpha.pdf',
+    excerpt: 'Submitted evidence.',
+    reliability_note: 'Submitted document.',
+    evidence_origin: 'submitted_document',
+    retrieved_at: '2026-09-18T08:00:00Z',
+  }];
+  const parsed = parseAgentBundle(
+    JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }),
+    oneDocumentManifest,
+  );
+  assert.equal(parsed.bundle.sources[0].document_id, oneDocumentManifest.documents[0].id);
+});
+
+test('matches a missing submitted document_id by exact title when multiple documents exist', () => {
+  const multiManifest = {
+    ...manifest,
+    documents: [
+      { id: '44444444-4444-4444-8444-444444444444', name: 'alpha.pdf' },
+      { id: '55555555-5555-4555-8555-555555555555', name: 'beta.pdf' },
+    ],
+  };
+  const value = bundle();
+  value.sources = [{
+    source_key: 'source-beta',
+    source_type: 'document',
+    title: 'beta.pdf',
+    excerpt: 'Submitted evidence.',
+    reliability_note: 'Submitted document.',
+    evidence_origin: 'submitted_document',
+    retrieved_at: '2026-09-18T08:00:00Z',
+  }];
+  const parsed = parseAgentBundle(
+    JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }),
+    multiManifest,
+  );
+  assert.equal(parsed.bundle.sources[0].document_id, multiManifest.documents[1].id);
+});
+
+test('rejects ambiguous submitted evidence when document_id cannot be inferred safely', () => {
+  const multiManifest = {
+    ...manifest,
+    documents: [
+      { id: '44444444-4444-4444-8444-444444444444',  name: 'alpha.pdf' },
+      { id: '55555555-5555-4555-8555-555555555555', name: 'beta.pdf' },
+    ],
+  };
+  const value = bundle();
+  value.sources = [{
+    source_key: 'source-ambiguous',
+    source_type: 'document',
+    title: 'Evidence',
+    excerpt: 'Submitted evidence.',
+    reliability_note: 'Submitted document.',
+    evidence_origin: 'submitted_document',
+    retrieved_at: '2026-09-18T08:00:00Z',
+  }];
+  assert.throws(
+    () => parseAgentBundle(JSON.stringify({ ok: true, status: 'ok', final: JSON.stringify(value) }), multiManifest),
+    /submitted document evidence requires a document_id/,
+  );
+});

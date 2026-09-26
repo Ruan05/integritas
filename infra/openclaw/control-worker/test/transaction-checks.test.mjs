@@ -1,0 +1,127 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  ibanChecksum, imoChecksum, bicFormat, buildDeterministicChecks, applyDeterministicChecksToBundle,
+} from '../../transaction-checks.mjs';
+
+test('IBAN mod-97 catches the historical Shell-style invalid account and accepts a valid control', () => {
+  const invalid = ibanChecksum('NL91ABNA0793164363');
+  assert.equal(invalid.mod97_remainder, 35);
+  assert.equal(invalid.checksum_valid, false);
+
+  const valid = ibanChecksum('GB82 WEST 1234 5698 7654 32');
+  assert.equal(valid.mod97_remainder, 1);
+  assert.equal(valid.checksum_valid, true);
+});
+
+test('IMO checksum requires an explicit IMO label and validates the check digit', () => {
+  assert.equal(imoChecksum('9776547'), null, 'bare seven-digit identifiers must not be assumed to be vessels');
+  assert.equal(imoChecksum('company RC 1093130'), null);
+  assert.deepEqual(imoChecksum('IMO 9776547'), {
+    value: 'IMO9776547',
+    calculated_check_digit: 7,
+    checksum_valid: true,
+  });
+  assert.equal(imoChecksum('IMO 9776541').checksum_valid, false);
+});
+
+test('BIC validation is explicitly format-only', () => {
+  const result = bicFormat('ABNANL2A');
+  assert.equal(result.value, 'ABNANL2A');
+  assert.equal(result.format_valid, true);
+  assert.match(result.note, /does not establish/i);
+  assert.equal(bicFormat('not-a-bic'), null);
+});
+
+test('transaction checks preserve document provenance and detect repeated candidate identifiers', () => {
+  const plan = {
+    document_profiles: [
+      {
+        document_id: '11111111-1111-4111-8111-111111111111',
+        material_identifiers: ['NL91ABNA0793164363', 'CI 4957/1802590', 'IMO 9776547', 'ABNANL2A'],
+      },
+      {
+        document_id: '22222222-2222-4222-8222-222222222222',
+        material_identifiers: ['CI-4957-1802590'],
+      },
+    ],
+  };
+  const result = buildDeterministicChecks(plan);
+  assert.equal(result.tool, 'integritas_transaction_checks_v1');
+  assert.equal(result.iban_checks.length, 1);
+  assert.equal(result.imo_checks.length, 1);
+  assert.equal(result.bic_format_checks.length, 1);
+  assert.deepEqual(result.repeated_identifier_candidates, [{
+    normalized_value: 'CI49571802590',
+    document_ids: [
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+    ],
+  }]);
+});
+
+test('repeated structural candidates create one canonical result per value', () => {
+  const result = buildDeterministicChecks({ document_profiles: [
+    { document_id: '11111111-1111-4111-8111-111111111111', material_identifiers: ['NL91ABNA0793164363', 'ABNANL2A'] },
+    { document_id: '22222222-2222-4222-8222-222222222222', material_identifiers: ['NL91ABNA0793164363', 'ABNANL2A'] },
+  ] });
+  assert.equal(result.iban_checks.length, 1);
+  assert.equal(result.bic_format_checks.length, 1);
+});
+
+test('deterministic bundle promotion does not duplicate a semantic claim already present', () => {
+  const docId = '11111111-1111-4111-8111-111111111111';
+  const claim = 'Submitted BIC/SWIFT candidate ABNANL2A matches structural BIC format.';
+  const bundle = {
+    findings: [{ finding_key: 'existing.bic', claim }],
+    checks: [],
+  };
+  applyDeterministicChecksToBundle(bundle, {
+    iban_checks: [], imo_checks: [],
+    bic_format_checks: [{ document_id: docId, value: 'ABNANL2A', format_valid: true, note: 'Format only.' }],
+  });
+  assert.equal(bundle.findings.length, 1);
+});
+
+
+test('transaction checks extract labeled IBAN and BIC candidates from rich document summaries', () => {
+  const docId = '33333333-3333-4333-8333-333333333333';
+  const result = buildDeterministicChecks({
+    document_profiles: [{
+      document_id: docId,
+      material_identifiers: [
+        'type=IBAN; value=NL91ABNA0793164363',
+        'p.2: SWIFT/BIC: ABNANL2A',
+        'type=Bank Name; value=ABN AMRO Bank N.V.',
+      ],
+    }],
+  });
+  assert.deepEqual(result.iban_checks, [{
+    document_id: docId,
+    value: 'NL91ABNA0793164363',
+    mod97_remainder: 35,
+    checksum_valid: false,
+  }]);
+  assert.equal(result.bic_format_checks.length, 1);
+  assert.equal(result.bic_format_checks[0].document_id, docId);
+  assert.equal(result.bic_format_checks[0].value, 'ABNANL2A');
+});
+
+test('deterministic structural checks become source-linked canonical findings and checks', () => {
+  const docId = '11111111-1111-4111-8111-111111111111';
+  const bundle = { findings: [], checks: [] };
+  const deterministic = {
+    iban_checks: [{ document_id: docId, value: 'NL91ABNA0793164363', mod97_remainder: 35, checksum_valid: false }],
+    imo_checks: [{ document_id: docId, value: 'IMO9776547', calculated_check_digit: 7, checksum_valid: true }],
+    bic_format_checks: [{ document_id: docId, value: 'ABNANL2A', format_valid: true, note: 'Format only; ownership is not established.' }],
+  };
+  applyDeterministicChecksToBundle(bundle, deterministic);
+  assert.equal(bundle.findings.length, 3);
+  assert.equal(bundle.checks.length, 3);
+  const iban = bundle.findings.find((row) => row.finding_type === 'iban_checksum');
+  assert.equal(iban.evidence_status, 'verified');
+  assert.equal(iban.materiality, 'high');
+  assert.deepEqual(iban.source_keys, ['doc.11111111111141118111111111111111']);
+  assert.match(iban.claim, /remainder 35/i);
+  assert.match(bundle.checks.find((row) => row.check_type === 'iban_checksum').outcome, /requires remainder 1/i);
+});

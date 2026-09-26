@@ -1,0 +1,35 @@
+[Unit]
+Description=Integritas OpenClaw investigation runner %i
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+ConditionPathIsDirectory=/var/lib/integritas-runner/jobs/%i
+
+[Service]
+Type=oneshot
+User=openclaw
+Group=integritas-openclaw
+SupplementaryGroups=openclaw docker
+Environment=HOME=/var/lib/openclaw
+Environment=OPENCLAW_HOME=/var/lib/openclaw
+Environment=OPENCLAW_STATE_DIR=/var/lib/openclaw
+EnvironmentFile=-/etc/integritas/provider-secrets.env
+WorkingDirectory=/var/lib/integritas-runner/jobs/%i
+ExecStart=/usr/bin/node /opt/integritas/current/infra/openclaw/investigation-agent-runner.mjs %i
+TimeoutStartSec=5400
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/openclaw /var/lib/integritas-runner/jobs/%i
+UMask=0027

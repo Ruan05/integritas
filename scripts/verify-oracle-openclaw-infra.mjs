@@ -1,0 +1,154 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const required = [
+  'infra/oracle/bootstrap-oracle-linux.sh',
+  'infra/oracle/cloud-init-oracle-linux.yaml.tpl',
+  'infra/oracle/provision-always-free-a1.sh',
+  'infra/oracle/run-command.sh',
+  'infra/oracle/deploy-integritas-release.sh',
+  'infra/oracle/deploy-integritas-controlled.sh',
+  'infra/oracle/install-datadog-agent.sh',
+  'infra/oracle/test-release-rollback.sh',
+  'infra/openclaw/install-native.sh',
+  'infra/openclaw/openclaw-gateway.service',
+  'infra/openclaw/openclaw-gateway-integritas.conf',
+  'infra/openclaw/integritas-release-deploy@.service',
+  'infra/openclaw/openclaw.json5',
+  'infra/openclaw/integritas-gateway.json5',
+  'infra/openclaw/ROLLBACK.md',
+];
+
+const errors = [];
+const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+for (const file of required) {
+  if (!fs.existsSync(path.join(root, file))) errors.push(`missing ${file}`);
+}
+for (const file of [
+  'infra/oracle/deploy-integritas-release.sh',
+  'infra/oracle/install-datadog-agent.sh',
+  'infra/oracle/test-release-rollback.sh',
+]) {
+  if (fs.existsSync(path.join(root, file)) && (fs.statSync(path.join(root, file)).mode & 0o111) === 0) {
+    errors.push(`release script must be executable in the Git tree: ${file}`);
+  }
+}
+
+if (!errors.length) {
+  const config = read('infra/openclaw/openclaw.json5');
+  const unit = read('infra/openclaw/openclaw-gateway.service');
+  const gatewayConfigDropin = read('infra/openclaw/openclaw-gateway-integritas.conf');
+  const gatewayOverlay = read('infra/openclaw/integritas-gateway.json5');
+  const installer = read('infra/openclaw/install-native.sh');
+  const cloudInit = read('infra/oracle/cloud-init-oracle-linux.yaml.tpl');
+  const runCommand = read('infra/oracle/run-command.sh');
+  const releaseDeploy = read('infra/oracle/deploy-integritas-release.sh');
+  const controlledDeploy = read('infra/oracle/deploy-integritas-controlled.sh');
+  const datadogInstaller = read('infra/oracle/install-datadog-agent.sh');
+  const releaseUnit = read('infra/openclaw/integritas-release-deploy@.service');
+  const rollbackTest = read('infra/oracle/test-release-rollback.sh');
+  const rollback = read('infra/openclaw/ROLLBACK.md');
+  const provision = read('infra/oracle/provision-always-free-a1.sh');
+
+  const mustContain = [
+    [config, 'mode: "local"', 'local Gateway mode'],
+    [config, 'bind: "loopback"', 'loopback-only gateway'],
+    [config, 'backend: "docker"', 'Docker sandbox backend'],
+    [config, 'network: "none"', 'sandbox network disabled'],
+    [config, 'readOnlyRoot: true', 'read-only sandbox root'],
+    [config, 'capDrop: ["ALL"]', 'sandbox capability drop'],
+    [config, 'visibility: "tree"', 'tree session visibility'],
+    [config, 'agentToAgent: { enabled: false }', 'agent-to-agent disabled'],
+    [config, 'alsoAllow: ["browser"]', 'browser tool explicitly added above coding profile'],
+    [config, 'watch: true', 'skill watcher enabled for session refresh'],
+    [unit, 'User=openclaw', 'non-root Gateway user'],
+    [unit, 'NoNewPrivileges=true', 'systemd no-new-privileges'],
+    [unit, 'ProtectSystem=strict', 'systemd filesystem protection'],
+    [unit, 'EnvironmentFile=-/etc/integritas/provider-secrets.env', 'provider secret environment'],
+    [unit, 'OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-gateway.json', 'provider-aware Gateway config path'],
+    [gatewayConfigDropin, 'OPENCLAW_CONFIG_PATH=/etc/openclaw/integritas-gateway.json', 'authoritative Gateway config-path drop-in'],
+    [gatewayOverlay, '$include: "./openclaw.json"', 'Gateway base-config include'],
+    [gatewayOverlay, 'primary: "nvidia/nvidia/nemotron-3-ultra-550b-a55b"', 'Gateway canonical NVIDIA primary'],
+    [gatewayOverlay, '"integritas-openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"', 'Gateway fixed free Nemotron fallback'],
+    [gatewayOverlay, '"integritas-openrouter/openrouter/free"', 'Gateway dynamic free fallback'],
+    [installer, 'OPENCLAW_VERSION="2026.9.5"', 'pinned OpenClaw stable version'],
+    [installer, 'chmod 0755 "${PREFIX}/bin/openclaw"', 'readable executable OpenClaw CLI'],
+    [installer, 'v${TARGET_VERSION}', 'pinned OpenClaw source tag'],
+    [cloudInit, 'ocarun', 'OCI Run Command user'],
+    [runCommand, 'oci instance-agent command create', 'OCI Run Command create call'],
+    [releaseDeploy, '[0-9a-f]{40}', 'exact release SHA validation'],
+    [releaseDeploy, 'integritas-release-deploy@.service', 'release-unit rollback management'],
+    [releaseDeploy, 'deploy-integritas-controlled.sh', 'bounded deployment wrapper presence gate'],
+    [releaseUnit, 'ExecStartPre=/usr/bin/sleep 8', 'release command acknowledgement delay'],
+    [releaseUnit, 'ExecStart=/usr/bin/bash /opt/integritas/current/infra/oracle/deploy-integritas-controlled.sh %i', 'fixed bounded release wrapper'],
+    [controlledDeploy, 'SOURCE_URL=https://github.com/Ruan05/integritas.git', 'fixed approved release repository'],
+    [controlledDeploy, 'APPROVED_BRANCH=integritas-command-center-foundation', 'fixed approved release branch'],
+    [controlledDeploy, 'git init --quiet', 'isolated root-owned release checkout'],
+    [controlledDeploy, '--depth=512', 'bounded approved branch history fetch'],
+    [controlledDeploy, 'REMOTE_HEAD=', 'approved branch-head resolution'],
+    [controlledDeploy, 'merge-base --is-ancestor', 'automated forward-only release guard'],
+    [controlledDeploy, 'deploy-integritas-release.sh', 'existing rollback-tested release executor'],
+    [releaseDeploy, 'systemctl stop', 'worker quiesce before release switch'],
+    [releaseDeploy, 'integritas-openclaw-investigation@*.service', 'active investigation deployment guard'],
+    [releaseDeploy, 'rollback()', 'automatic release rollback handler'],
+    [releaseDeploy, 'snapshot_managed_files', 'pre-deploy managed-file snapshot'],
+    [releaseDeploy, 'restore_managed_files', 'exact managed-file rollback restore'],
+    [releaseDeploy, 'INTEGRITAS_ROLLBACK_TEST', 'explicit rollback-test gate'],
+    [releaseDeploy, 'after-install', 'post-install rollback fault injection point'],
+    [rollbackTest, 'INTEGRITAS_FAULT_INJECT_PHASE=after-install', 'privileged rollback acceptance injection'],
+    [rollbackTest, 'Injecting controlled rollback-test failure after candidate installation.', 'rollback test must prove injected fault was reached'],
+    [rollbackTest, 'diff -u', 'rollback before/after state comparison'],
+    [releaseDeploy, 'mv -Tf', 'atomic current-release symlink switch'],
+    [releaseDeploy, 'systemctl restart "${GATEWAY}"', 'provider-aware Gateway restart'],
+    [releaseDeploy, 'smoke_investigation_runtime', 'live provider and key-free web-search release gate'],
+    [releaseDeploy, 'plugins inspect parallel --json', 'deployment smoke must inspect trusted Parallel capability deterministically'],
+    [releaseDeploy, 'trustedOfficialInstall', 'deployment smoke must require official Parallel trust provenance'],
+    [releaseDeploy, 'parallel-free', 'deployment smoke must require Parallel Free search capability'],
+    [releaseDeploy, 'integrate.api.nvidia.com/v1/models', 'deployment smoke must verify the configured provider model catalog'],
+    [releaseDeploy, '--max-time 30', 'deployment provider capability smoke must remain tightly bounded'],
+    [releaseDeploy, 'provider.curlrc', 'deployment smoke must keep provider credentials out of process argv'],
+    [releaseDeploy, "'z-ai/glm-5.3' not in ids", 'deployment smoke must require the configured GLM 5.3 route'],
+    [releaseDeploy, 'RELEASES_TO_KEEP=12', 'bounded release retention count'],
+    [releaseDeploy, 'prune_old_releases', 'post-success release pruning'],
+    [releaseDeploy, 'rm -rf --one-file-system -- "${dir}"', 'bounded old-release removal'],
+    [datadogInstaller, '/etc/integritas/datadog.env', 'Datadog credentials must come from the root-only Integritas secret file'],
+    [datadogInstaller, 'DD_PROCESS_AGENT_PROCESS_COLLECTION_ENABLED=true', 'Datadog live-process collection must be enabled'],
+    [datadogInstaller, 'integritas-control-worker.service', 'Datadog journald collection must cover the control worker'],
+    [datadogInstaller, 'openclaw-gateway.service', 'Datadog journald collection must cover the Gateway'],
+    [datadogInstaller, 'openclaw-browser.service', 'Datadog journald collection must cover managed browser logs'],
+    [datadogInstaller, 'datadog-agent configcheck', 'Datadog configuration must be validated before completion'],
+    [rollback, 'previous-version', 'rollback version record'],
+    [provision, 'VM.Standard.A1.Flex', 'Always Free A1 shape'],
+  ];
+
+  for (const [text, needle, label] of mustContain) {
+    if (!text.includes(needle)) errors.push(`missing ${label}`);
+  }
+
+  if (config.includes('workspaceAccess: "rw"')) errors.push('rw workspace access is forbidden');
+  if (unit.includes('User=root')) errors.push('Gateway must not run as root');
+  if (cloudInit.includes('NOPASSWD: ALL')) errors.push('unbounded sudo is forbidden');
+  if (runCommand.includes('bash -c "$')) errors.push('arbitrary remote shell is forbidden');
+  if (runCommand.includes('commandString')) errors.push('OCI Run Command must use TEXT source only; commandString duplication is forbidden');
+  if (releaseDeploy.includes('wget ')) errors.push('release deploy must not use wget');
+  if (/curl[^\n]*(?:\|\s*(?:sh|bash)|-o\s+[^\s]+\.sh\b|--output\s+[^\s]+\.sh\b)/.test(releaseDeploy)) errors.push('release deploy must not fetch or pipe executable content from the network');
+  if (releaseDeploy.includes('--message-file')) errors.push('release admission must not depend on model-directed tool use');
+  if (releaseDeploy.includes('eval ')) errors.push('release deploy must not use eval');
+  if (/\b(curl|wget|eval)\b/.test(controlledDeploy)) errors.push('controlled deploy must not download or evaluate executable content');
+  if (!/\[\[ "\$\{SHA\}" == "\$\{REMOTE_HEAD\}" \]\]/.test(controlledDeploy)) errors.push('controlled deploy must require exact approved branch head');
+  if (!/\^\[0-9a-f\]\{40\}\$/.test(controlledDeploy)) errors.push('controlled deploy must validate an exact lowercase Git SHA');
+  if (controlledDeploy.includes('/home/opc') || controlledDeploy.includes('runuser')) errors.push('controlled deploy must not trust an operator-owned checkout');
+  if (/\blatest\b/.test(installer)) errors.push('mutable latest release reference is forbidden');
+  if (config.includes('/var/run/docker.sock')) errors.push('model config must not expose the Docker socket');
+  if (/gsk_[A-Za-z0-9_-]+|sk-or-v1-[A-Za-z0-9_-]+|nvapi-[A-Za-z0-9_-]+/.test(gatewayOverlay)) errors.push('Gateway overlay must not contain provider secret values');
+  if (gatewayOverlay.includes('opencode-go/')) errors.push('Gateway production routing must not depend on unfunded OpenCode Go models');
+  if (gatewayOverlay.includes('primary: "nvidia/nemotron-3-ultra-550b-a55b"')) errors.push('Gateway must not use the stale short NVIDIA model reference');
+}
+
+if (errors.length) {
+  console.error(errors.map((e) => `- ${e}`).join('\n'));
+  process.exit(1);
+}
+console.log('Oracle/OpenClaw infrastructure policy verified.');

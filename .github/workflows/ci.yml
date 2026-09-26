@@ -1,0 +1,188 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - name: Verify DD evidence and publication controls
+        run: |
+          python3 -m unittest discover -s tools/dd -p 'test_*.py'
+          node --test scripts/harden-opencode-worker.test.mjs
+      - name: Verify ChatGPT/OpenClaw control bridge
+        run: |
+          node --test infra/openclaw/control-worker/test/*.test.mjs
+          node --test infra/report-renderer/test/*.test.mjs
+          node scripts/test-integritas-control-contract.mjs
+          node scripts/test-integritas-document-limit-contract.mjs
+          node scripts/test-integritas-upload-capacity-contract.mjs
+          node scripts/test-integritas-external-research-provenance.mjs
+          node scripts/verify-control-bridge-policy.mjs
+          node --check infra/openclaw/investigation-agent-runner.mjs
+          node --check infra/openclaw/control-worker/src/investigation.mjs
+          node --check infra/report-renderer/render-report.mjs
+          node --check infra/report-renderer/template.mjs
+      - run: npm run build
+      - run: npm run verify:secrets
+      - run: npm run verify:secrets -- dist
+      - name: Verify Oracle/OpenClaw policy
+        run: node scripts/verify-oracle-openclaw-infra.mjs
+      - name: Syntax-check infrastructure scripts
+        run: |
+          bash -n infra/oracle/bootstrap-ubuntu.sh
+          bash -n infra/oracle/verify-host.sh
+          bash -n infra/oracle/bootstrap-oracle-linux.sh
+          bash -n infra/oracle/provision-always-free-a1.sh
+          bash -n infra/oracle/run-command.sh
+          bash -n infra/oracle/deploy-integritas-release.sh
+          bash -n infra/oracle/test-release-rollback.sh
+          bash -n infra/openclaw/verify-image.sh
+          bash -n infra/openclaw/install-native.sh
+          bash -n infra/openclaw/install-control-worker.sh
+          bash -n infra/report-renderer/install-gotenberg.sh
+          docker compose -f infra/report-renderer/gotenberg-compose.yml config >/dev/null
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:e2e
+      - run: npm run audit
+      - name: Upload Playwright report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  database-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Create disposable Integritas security fixture
+        run: psql -f supabase/tests/fixtures/integritas_rls_fixture.sql
+      - name: Apply staged browser RLS migration
+        run: psql -f supabase/migrations/0002_integritas_browser_read_policies.sql
+      - name: Verify policy contract
+        run: psql -f supabase/tests/0002_integritas_browser_read_policies.sql
+      - name: Verify authorization behavior
+        run: psql -f supabase/tests/0003_integritas_rls_behavior.sql
+      - name: Apply staged control bridge migrations
+        run: |
+          psql -f supabase/migrations/0003_integritas_control_bridge.sql
+          psql -f supabase/migrations/0004_integritas_control_api_wrappers.sql
+          psql -f supabase/migrations/0005_integritas_openclaw_investigation_runtime.sql
+          psql -f supabase/migrations/0006_integritas_investigation_persistence.sql
+          psql -f supabase/migrations/0007_integritas_document_limit.sql
+          psql -f supabase/migrations/0008_integritas_document_limit_privileges.sql
+          psql -f supabase/migrations/0009_integritas_investigation_bundle_commit.sql
+          psql -f supabase/migrations/0010_integritas_investigation_recovery.sql
+          psql -f supabase/migrations/0011_integritas_incomplete_retry.sql
+          psql -f supabase/migrations/0012_integritas_checkpoint_browser_read.sql
+          psql -f supabase/migrations/0014_integritas_external_research_provenance.sql
+          psql -f supabase/migrations/0015_integritas_draft_bundle_replacement.sql
+          psql -f supabase/migrations/0016_integritas_monotonic_checkpoint_retry.sql
+          psql -f supabase/migrations/0017_integritas_performance_hardening.sql
+          psql -f supabase/migrations/0018_integritas_report_pdf_artifact.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/0019_integritas_pause_and_document_delete.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/0024_integritas_checkpoint_resume.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/0025_integritas_attempt_scoped_resume.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/0026_integritas_true_attempt_scope.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/0027_integritas_evidence_state_and_report_guard.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/0028_integritas_attempt_scoped_failure_settlement.sql
+      - name: Verify control bridge contract
+        run: |
+          psql -f supabase/tests/0005_integritas_control_bridge.sql
+          psql -f supabase/tests/0006_integritas_control_api_wrappers.sql
+          psql -f supabase/tests/0008_integritas_openclaw_runtime.sql
+          psql -f supabase/tests/0009_integritas_investigation_persistence.sql
+          psql -f supabase/tests/0010_integritas_document_limit.sql
+          psql -f supabase/tests/0011_integritas_document_limit_privileges.sql
+          psql -f supabase/tests/0012_integritas_investigation_bundle_commit.sql
+          psql -f supabase/tests/0013_integritas_investigation_recovery.sql
+          psql -f supabase/tests/0014_integritas_incomplete_retry.sql
+          psql -f supabase/tests/0015_integritas_checkpoint_browser_read.sql
+          psql -f supabase/tests/0016_integritas_external_research_provenance.sql
+          psql -f supabase/tests/0017_integritas_draft_bundle_replacement.sql
+          psql -f supabase/tests/0018_integritas_performance_hardening.sql
+          psql -f supabase/tests/0020_integritas_report_pdf_artifact.sql
+          psql -f supabase/tests/0022_integritas_pause_and_document_delete.sql
+          psql -f supabase/tests/0023_integritas_checkpoint_resume.sql
+          psql -f supabase/tests/0023_integritas_evidence_state_report_guard.sql
+      - name: Verify investigation rollback preflight
+        run: |
+          if psql -v ON_ERROR_STOP=1 -f supabase/rollback/0005_integritas_openclaw_investigation_runtime.rollback.sql; then
+            echo "expected investigation rollback preflight to fail while durable rows exist" >&2
+            exit 1
+          fi
+          psql -c "delete from public.integritas_case_jobs where runtime_provider = 'openclaw-oracle';"
+          psql -c "delete from public.integritas_control_commands where command_type = 'run_case_investigation';"
+      - name: Roll back staged control bridge
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/rollback/0028_integritas_attempt_scoped_failure_settlement.rollback.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/rollback/0027_integritas_evidence_state_and_report_guard.rollback.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/rollback/0026_integritas_true_attempt_scope.rollback.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/rollback/0019_integritas_pause_and_document_delete.rollback.sql
+          psql -f supabase/rollback/0018_integritas_report_pdf_artifact.rollback.sql
+          psql -f supabase/tests/0021_integritas_report_pdf_artifact_rollback.sql
+          psql -f supabase/rollback/0017_integritas_performance_hardening.rollback.sql
+          psql -f supabase/rollback/0015_integritas_draft_bundle_replacement.rollback.sql
+          psql -f supabase/rollback/0014_integritas_external_research_provenance.rollback.sql
+          psql -f supabase/rollback/0012_integritas_checkpoint_browser_read.rollback.sql
+          psql -f supabase/rollback/0011_integritas_incomplete_retry.rollback.sql
+          psql -f supabase/rollback/0010_integritas_investigation_recovery.rollback.sql
+          psql -f supabase/rollback/0009_integritas_investigation_bundle_commit.rollback.sql
+          psql -f supabase/rollback/0007_integritas_document_limit.rollback.sql
+          psql -f supabase/rollback/0006_integritas_investigation_persistence.rollback.sql
+          psql -f supabase/rollback/0005_integritas_openclaw_investigation_runtime.rollback.sql
+          psql -f supabase/rollback/0004_integritas_control_api_wrappers.rollback.sql
+          psql -f supabase/rollback/0003_integritas_control_bridge.rollback.sql
+          psql -f supabase/tests/0019_integritas_performance_hardening_rollback.sql
+          psql -f supabase/tests/0007_integritas_control_bridge_rollback.sql
+      - name: Apply safe browser-policy rollback
+        run: psql -f supabase/rollback/0002_integritas_browser_read_policies.rollback.sql
+      - name: Verify safe browser-policy rollback
+        run: psql -f supabase/tests/0004_integritas_rls_rollback.sql

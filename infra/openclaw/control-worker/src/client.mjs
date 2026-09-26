@@ -1,0 +1,72 @@
+export class ControlClient {
+  constructor({ baseUrl, workerToken, workerId, fetchImpl = fetch }) {
+    if (!baseUrl) throw new Error('baseUrl is required');
+    if (!workerToken) throw new Error('workerToken is required');
+    if (!workerId) throw new Error('workerId is required');
+    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.workerToken = workerToken;
+    this.workerId = workerId;
+    this.fetch = fetchImpl;
+  }
+
+  async call(action, body = {}, { retryTransient = false } = {}) {
+    const attempts = retryTransient ? 3 : 1;
+    let lastError;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const response = await this.fetch(this.baseUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-integritas-worker-token': this.workerToken,
+          'x-integritas-worker-id': this.workerId,
+        },
+        body: JSON.stringify({ action, worker_id: this.workerId, ...body }),
+      });
+      const text = await response.text();
+      let data;
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { error: 'invalid_json_response' }; }
+      if (response.ok) return data;
+      const detail = typeof data.detail === 'string' ? data.detail.slice(0, 800) : '';
+      const message = ['control API ' + action + ' failed: ' + response.status, data.error, detail].filter(Boolean).join(' ');
+      lastError = new Error(message);
+      const retryable = response.status === 401 || response.status === 408 || response.status === 429 || response.status >= 500;
+      if (!retryTransient || !retryable || attempt === attempts - 1) throw lastError;
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+    throw lastError ?? new Error('control API request failed');
+  }
+
+  heartbeat(details) { return this.call('worker_heartbeat', details, { retryTransient: true }); }
+  lease() { return this.call('worker_lease', {}, { retryTransient: true }); }
+  touch(commandId) { return this.call('worker_touch', { command_id: commandId }, { retryTransient: true }); }
+  complete(commandId, result) { return this.call('worker_complete', { command_id: commandId, result_summary: result }, { retryTransient: true }); }
+  incomplete(commandId, result) { return this.call('worker_incomplete', { command_id: commandId, result_summary: result }, { retryTransient: true }); }
+  fail(commandId, code, summary) { return this.call('worker_fail', { command_id: commandId, error_code: code, error_summary: summary }, { retryTransient: true }); }
+  storageSelfTest(commandId) { return this.call('worker_storage_selftest', { command_id: commandId }); }
+  manifest(commandId, caseJobId) { return this.call('worker_manifest', { command_id: commandId, case_job_id: caseJobId }); }
+  checkpoint(commandId, caseJobId, caseRevision, stage, progress, safeMetadata = {}) {
+    return this.call('worker_checkpoint', { command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision, stage, progress, safe_metadata: safeMetadata }, { retryTransient: true });
+  }
+  publishOutput(commandId, caseJobId, caseRevision, outputType, contentType, content, sha256, encoding = 'utf8', safeMetadata = {}) {
+    return this.call('worker_publish_output', {
+      command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision,
+      output_type: outputType, content_type: contentType, content, sha256, encoding, safe_metadata: safeMetadata,
+    });
+  }
+  registerResearchSource(commandId, caseJobId, caseRevision, source, toolSummary) {
+    return this.call('worker_register_research_source', {
+      command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision,
+      source_key: source.source_key, url: source.url, title: source.title,
+      verification_state: source.verification_state, retrieved_at: source.retrieved_at, tool_summary: toolSummary,
+    }, { retryTransient: true });
+  }
+  commitBundle(commandId, caseJobId, caseRevision, bundleSha256, reportSha256, bundle) {
+    return this.call('worker_commit_bundle', {
+      command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision,
+      bundle_sha256: bundleSha256, report_sha256: reportSha256, bundle,
+    });
+  }
+  jobState(commandId, caseJobId) { return this.call('worker_job_state', { command_id: commandId, case_job_id: caseJobId }, { retryTransient: true }); }
+  acknowledgeCancel(commandId, caseJobId) { return this.call('worker_cancel_ack', { command_id: commandId, case_job_id: caseJobId }); }
+  acknowledgePause(commandId, caseJobId) { return this.call('worker_pause_ack', { command_id: commandId, case_job_id: caseJobId }); }
+}

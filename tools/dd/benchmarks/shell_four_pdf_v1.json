@@ -1,0 +1,46 @@
+{
+  "benchmark_id": "integritas-shell-four-pdf-2026-09-v1",
+  "description": "Hidden regression benchmark for independent reproduction of the material Shell-document diligence result from the exact four source PDFs. This benchmark is for post-run evaluation only and must never be copied into an investigation workspace or used as source evidence.",
+  "expected_documents": [
+    {"sha256": "ed80c8b95309748a4c8561f3cf0163d1444591c813ea24d55322d05841e880cf", "name": "Updated_TTVIA_EN590_RDM_SHELL TRADING INTL (1)(2)_signed.pdf"},
+    {"sha256": "6a6c1ffe4967c0e3f10af256ff8234bd951905b18f48ac9b838d263a051cf43d", "name": "CI_Global A1_Shell_Trading_International_Houston_D6_Invoice_signed.pdf"},
+    {"sha256": "0de295ac9bf452440924edba63658493692f6a00eb81bd6aeffbc8ce67e59d01", "name": "Updated_TTVIA_D6_HOUTX_SHELL TRADING INTL_signed.pdf"},
+    {"sha256": "e105196565c1334fe2ffefb3a2a52af7129221fefae1ab6e85d08de97d9959e8", "name": "RDM_CI_Global A1_Shell_Trading_International_EN590_Invoice_signed.pdf"}
+  ],
+  "minimums": {
+    "submitted_documents": 4,
+    "external_sources": 8,
+    "entities": 5,
+    "findings": 16,
+    "checks": 8,
+    "unresolved_checks": 5
+  },
+  "critical": [
+    {"id": "shell_legal_entity", "patterns": ["SHELL\\s+TRADING\\s+INTERNATIONAL", "03634752", "SHELL\\s+CENTRE|LONDON"]},
+    {"id": "communication_domain", "patterns": ["stinternationalltd\\.com", "(not\\s+.*attribut|not\\s+.*official|unverified|mismatch|independent.*confirm)"]},
+    {"id": "iban_structural_failure", "patterns": ["NL91ABNA0793164363", "(remainder\\s*35|mod[-\\s]?97.*35|checksum.*invalid|invalid.*checksum)"]},
+    {"id": "bank_bic", "patterns": ["ABNA(?:NL2A|NL2AXXX)|ABN\\s+AMRO", "(BIC|SWIFT|bank)"]},
+    {"id": "date_contradiction", "patterns": ["27\\s+(?:AUGUST|AUG)|2026-08-27|AUG(?:UST)?\\s+27,?\\s+2026", "27\\s+(?:JUNE|JUN)|2026-06-27|JUN(?:E)?\\s+27,?\\s+2026", "(contradict|preced|chronolog|signature.*date|date.*signature)"]},
+    {"id": "houston_rotterdam_logistics", "patterns": ["HOUSTON|HOUTX", "ROTTERDAM|RDM", "(logistic|terminal|location|delivery|inconsisten|reconcile)"]},
+    {"id": "document_signature_forensics", "patterns": ["cryptographic\\s+signature", "(absent|none|not\\s+present|no\\s+cryptographic)"]},
+    {"id": "vessel_evidence_gate", "patterns": ["IMO", "Q88", "(missing|blank|not\\s+provided|unverified|nomination|charter)"]},
+    {"id": "global_a1_role", "patterns": ["GLOBAL\\s+A1\\s+LLC|GLOBAL\\s+A1", "(buyer|client|context)"]},
+    {"id": "seller_capacity_gate", "patterns": ["(title|capacity|allocation|storage)", "(terminal|operator|refinery|supplier)", "(verify|unverified|confirmation|gate)"]},
+    {"id": "source_ledger", "patterns": ["Source\\s+Ledger", "Companies\\s+House|official\\s+registry", "retriev|source\\s+key|https://"]},
+    {"id": "final_control_position", "patterns": ["(HOLD|INCOMPLETE|do\\s+not\\s+proceed|not\\s+cleared)", "(verification\\s+gate|unresolved|authoritative)"]}
+  ],
+  "secondary": [
+    {"id": "invoice_value", "patterns": ["100,?000,?000", "1\\.03", "103,?000,?000"]},
+    {"id": "domain_primary_warning", "patterns": ["SHELL", "(scam|fraud|impersonat|official.*domain)"]},
+    {"id": "terminal_spoofing_context", "patterns": ["ROTTERDAM", "(storage\\s+spoof|terminal.*fraud|VOTOB|Port\\s+of\\s+Rotterdam)"]},
+    {"id": "people_authority", "patterns": ["(representative|signator|authority|director|officer)", "(verify|unverified|Companies\\s+House|official)"]},
+    {"id": "trade_finance", "patterns": ["(beneficiary|payment|banking|trade[-\\s]?finance)", "(title|inspection|release|sequence|condition)"]},
+    {"id": "cross_document_matrix", "patterns": ["(contradiction\\s+matrix|cross[-\\s]?document|claim-to-evidence)"]},
+    {"id": "positive_indicators", "patterns": ["(positive|risk[-\\s]?reducing)", "indicator"]},
+    {"id": "page_provenance", "patterns": ["p\\.[1-9]|page\\s+[1-9]", "(doc\\.|source)"]}
+  ],
+  "thresholds": {
+    "critical_required": 10,
+    "secondary_minimum": 5
+  }
+}

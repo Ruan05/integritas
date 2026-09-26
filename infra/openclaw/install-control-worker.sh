@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+  echo "Run as root" >&2
+  exit 1
+fi
+
+REPO_ROOT=${INTEGRITAS_REPO_ROOT:-/opt/integritas/current}
+SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-control-worker.service"
+GATEWAY_SERVICE_SRC="$REPO_ROOT/infra/openclaw/openclaw-gateway.service"
+GATEWAY_CONFIG_DROPIN_SRC="$REPO_ROOT/infra/openclaw/openclaw-gateway-integritas.conf"
+GATEWAY_CONFIG_DROPIN_DEST=/etc/systemd/system/openclaw-gateway.service.d/99-integritas-config.conf
+BROWSER_SERVICE_SRC="$REPO_ROOT/infra/openclaw/openclaw-browser.service"
+BROWSER_HELPER_SRC="$REPO_ROOT/infra/openclaw/integritas-browser-start.sh"
+RUNNER_SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-openclaw-investigation@.service"
+DEPLOY_SERVICE_SRC="$REPO_ROOT/infra/openclaw/integritas-release-deploy@.service"
+CONTROLLED_DEPLOY_SRC="$REPO_ROOT/infra/oracle/deploy-integritas-controlled.sh"
+RUNNER_SCRIPT_SRC="$REPO_ROOT/infra/openclaw/investigation-agent-runner.mjs"
+RUNNER_SCRIPT_DEST=/opt/integritas/current/infra/openclaw/investigation-agent-runner.mjs
+GATEWAY_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-gateway.json5"
+RUNNER_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-investigation.json5"
+ZEN_CONFIG_SRC="$REPO_ROOT/infra/openclaw/integritas-investigation-zen.json5"
+ZEN_TOOL_SRC="$REPO_ROOT/infra/openclaw/integritas-zen.sh"
+POLKIT_SRC="$REPO_ROOT/infra/openclaw/49-integritas-openclaw-control.rules"
+DATADOG_INSTALLER_SRC="$REPO_ROOT/infra/oracle/install-datadog-agent.sh"
+DATADOG_INSTALLER_DEST=/usr/local/sbin/integritas-datadog-install
+PERSONAL_ADMIN_SKILLS_SRC_DIR="$REPO_ROOT/infra/openclaw/personal-admin-skills"
+PERSONAL_ADMIN_WORKSPACE=/var/lib/openclaw/workspace-personal-admin
+ENV_DIR=/etc/integritas
+ENV_FILE="$ENV_DIR/control-worker.env"
+TOKEN_FILE="$ENV_DIR/control-worker.token"
+PROVIDER_ENV_FILE="$ENV_DIR/provider-secrets.env"
+PROVIDER_STAGING_FILE=${INTEGRITAS_PROVIDER_SECRET_STAGING:-/home/opc/.integritas-provider-secrets.env}
+STATE_DIR=/var/lib/integritas-control
+RUNNER_ROOT=/var/lib/integritas-runner
+SHARED_GROUP=integritas-openclaw
+OPENCLAW_CONFIG_DIR=/etc/openclaw
+OPENCLAW_CONFIG_PATH="$OPENCLAW_CONFIG_DIR/openclaw.json"
+GATEWAY_CONFIG_DEST="$OPENCLAW_CONFIG_DIR/integritas-gateway.json"
+RUNNER_CONFIG_DEST="$OPENCLAW_CONFIG_DIR/integritas-investigation.json"
+BROWSER_SERVICE_DEST=/etc/systemd/system/openclaw-browser.service
+BROWSER_HELPER_DEST=/usr/local/libexec/integritas-browser-start
+ZEN_CONFIG_DEST="$OPENCLAW_CONFIG_DIR/integritas-investigation-zen.json"
+ZEN_TOOL_DEST=/usr/local/sbin/integritas-zen
+ZEN_ENABLE_MARKER="$OPENCLAW_CONFIG_DIR/zen-enabled"
+
+repair_openclaw_config_permissions() {
+  install -d -o root -g openclaw -m 0750 "$OPENCLAW_CONFIG_DIR"
+  chown root:openclaw "$OPENCLAW_CONFIG_DIR"
+  chmod 0750 "$OPENCLAW_CONFIG_DIR"
+  if [[ -f "$OPENCLAW_CONFIG_PATH" ]]; then
+    chown root:openclaw "$OPENCLAW_CONFIG_PATH"
+    chmod 0640 "$OPENCLAW_CONFIG_PATH"
+  fi
+  if [[ -f "$GATEWAY_CONFIG_DEST" ]]; then
+    chown root:openclaw "$GATEWAY_CONFIG_DEST"
+    chmod 0640 "$GATEWAY_CONFIG_DEST"
+  fi
+  if [[ -f "$RUNNER_CONFIG_DEST" ]]; then
+    chown root:openclaw "$RUNNER_CONFIG_DEST"
+    chmod 0640 "$RUNNER_CONFIG_DEST"
+  fi
+  if [[ -f "$ZEN_CONFIG_DEST" ]]; then
+    chown root:openclaw "$ZEN_CONFIG_DEST"
+    chmod 0640 "$ZEN_CONFIG_DEST"
+  fi
+  if [[ -f "$ZEN_ENABLE_MARKER" ]]; then
+    chown root:openclaw "$ZEN_ENABLE_MARKER"
+    chmod 0640 "$ZEN_ENABLE_MARKER"
+  fi
+}
+
+validate_provider_env_file() {
+  local file="$1"
+  local line name
+  [[ -f "$file" ]] || { echo "Provider secret file is missing." >&2; return 1; }
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    [[ "$line" =~ ^([A-Z][A-Z0-9_]*)=.+$ ]] || {
+      echo "Provider secret file contains a malformed line." >&2
+      return 1
+    }
+    name="${BASH_REMATCH[1]}"
+    case "$name" in
+      OPENROUTER_API_KEY|NVIDIA_API_KEY|GROQ_API_KEY|OPENCODE_ZEN_API_KEY|EXA_API_KEY|FIRECRAWL_API_KEY|BRAVE_API_KEY|TAVILY_API_KEY|PARALLEL_API_KEY) ;;
+      *)
+        echo "Provider secret file contains an unapproved variable name: $name" >&2
+        return 1
+        ;;
+    esac
+  done < "$file"
+  for name in OPENROUTER_API_KEY NVIDIA_API_KEY; do
+    grep -Eq "^${name}=.+" "$file" || {
+      echo "Provider secret file is missing required variable $name." >&2
+      return 1
+    }
+  done
+}
+
+validate_openclaw_with_provider_env() {
+  local config_path="$1"
+  /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/bin PROVIDER_ENV_FILE="$PROVIDER_ENV_FILE" OPENCLAW_VALIDATE_CONFIG="$config_path" /usr/bin/bash -c '
+    set -a
+    . "$PROVIDER_ENV_FILE"
+    set +a
+    export HOME=/var/lib/openclaw
+    export OPENCLAW_HOME=/var/lib/openclaw
+    export OPENCLAW_STATE_DIR=/var/lib/openclaw
+    export OPENCLAW_CONFIG_PATH="$OPENCLAW_VALIDATE_CONFIG"
+    exec /usr/sbin/runuser --preserve-environment -u openclaw -- /opt/openclaw/bin/openclaw config validate
+  '
+}
+
+for required in /usr/bin/node /usr/bin/python3 /usr/bin/pdftotext /usr/bin/pdfinfo /usr/bin/pdftoppm /usr/bin/tesseract /usr/bin/systemctl /usr/bin/systemd-analyze /usr/bin/getent /usr/bin/env /usr/bin/bash /usr/bin/grep /usr/sbin/useradd /usr/sbin/groupadd /usr/sbin/usermod /usr/sbin/runuser; do
+  [[ -x "$required" ]] || { echo "Missing required executable: $required" >&2; exit 1; }
+done
+for required in "$SERVICE_SRC" "$GATEWAY_SERVICE_SRC" "$GATEWAY_CONFIG_DROPIN_SRC" "$BROWSER_SERVICE_SRC" "$BROWSER_HELPER_SRC" "$RUNNER_SERVICE_SRC" "$DEPLOY_SERVICE_SRC" "$CONTROLLED_DEPLOY_SRC" "$RUNNER_SCRIPT_SRC" "$GATEWAY_CONFIG_SRC" "$RUNNER_CONFIG_SRC" "$ZEN_CONFIG_SRC" "$ZEN_TOOL_SRC" "$POLKIT_SRC" "$DATADOG_INSTALLER_SRC"; do
+  [[ -f "$required" ]] || { echo "Missing required file: $required" >&2; exit 1; }
+done
+[[ -d /etc/polkit-1/rules.d ]] || { echo "Polkit rules directory is unavailable" >&2; exit 1; }
+/usr/bin/getent passwd openclaw >/dev/null || { echo "OpenClaw runtime user is missing" >&2; exit 1; }
+/usr/bin/getent group docker >/dev/null || { echo "Docker group is missing" >&2; exit 1; }
+
+if ! /usr/bin/getent passwd integritas-control >/dev/null; then
+  /usr/sbin/useradd --system --home-dir "$STATE_DIR" --create-home --shell /usr/sbin/nologin integritas-control
+fi
+if ! /usr/bin/getent group "$SHARED_GROUP" >/dev/null; then
+  /usr/sbin/groupadd --system "$SHARED_GROUP"
+fi
+/usr/sbin/usermod -a -G "$SHARED_GROUP" integritas-control
+/usr/sbin/usermod -a -G "$SHARED_GROUP" openclaw
+
+install -d -o root -g root -m 0755 "$ENV_DIR"
+install -d -o integritas-control -g integritas-control -m 0700 "$STATE_DIR"
+install -d -o integritas-control -g "$SHARED_GROUP" -m 2770 "$RUNNER_ROOT" "$RUNNER_ROOT/jobs"
+install -o root -g root -m 0644 "$SERVICE_SRC" /etc/systemd/system/integritas-control-worker.service
+install -o root -g root -m 0644 "$GATEWAY_SERVICE_SRC" /etc/systemd/system/openclaw-gateway.service
+install -d -o root -g root -m 0755 "$(dirname "$GATEWAY_CONFIG_DROPIN_DEST")"
+install -o root -g root -m 0644 "$GATEWAY_CONFIG_DROPIN_SRC" "$GATEWAY_CONFIG_DROPIN_DEST"
+install -o root -g root -m 0644 "$BROWSER_SERVICE_SRC" "$BROWSER_SERVICE_DEST"
+install -d -o root -g root -m 0755 /usr/local/libexec
+install -o root -g root -m 0755 "$BROWSER_HELPER_SRC" "$BROWSER_HELPER_DEST"
+install -o root -g root -m 0644 "$RUNNER_SERVICE_SRC" /etc/systemd/system/integritas-openclaw-investigation@.service
+install -o root -g root -m 0644 "$DEPLOY_SERVICE_SRC" /etc/systemd/system/integritas-release-deploy@.service
+chmod 0755 "$CONTROLLED_DEPLOY_SRC"
+if [[ -e "$RUNNER_SCRIPT_DEST" && "$RUNNER_SCRIPT_SRC" -ef "$RUNNER_SCRIPT_DEST" ]]; then
+  chown root:root "$RUNNER_SCRIPT_DEST"
+  chmod 0755 "$RUNNER_SCRIPT_DEST"
+else
+  install -o root -g root -m 0755 "$RUNNER_SCRIPT_SRC" "$RUNNER_SCRIPT_DEST"
+fi
+repair_openclaw_config_permissions
+install -o root -g openclaw -m 0640 "$GATEWAY_CONFIG_SRC" "$GATEWAY_CONFIG_DEST"
+install -o root -g openclaw -m 0640 "$RUNNER_CONFIG_SRC" "$RUNNER_CONFIG_DEST"
+install -o root -g openclaw -m 0640 "$ZEN_CONFIG_SRC" "$ZEN_CONFIG_DEST"
+install -o root -g root -m 0755 "$ZEN_TOOL_SRC" "$ZEN_TOOL_DEST"
+install -o root -g root -m 0750 "$DATADOG_INSTALLER_SRC" "$DATADOG_INSTALLER_DEST"
+install -d -o openclaw -g openclaw -m 0750 "$PERSONAL_ADMIN_WORKSPACE" "$PERSONAL_ADMIN_WORKSPACE/skills"
+for skill in integritas-operator-orchestrator integritas-research-router integritas-document-verifier integritas-evidence-critic; do
+  skill_src="$PERSONAL_ADMIN_SKILLS_SRC_DIR/$skill/SKILL.md"
+  [[ -f "$skill_src" ]] || { echo "Missing local operator skill: $skill_src" >&2; exit 1; }
+  skill_dest="$PERSONAL_ADMIN_WORKSPACE/skills/$skill"
+  install -d -o openclaw -g openclaw -m 0750 "$skill_dest"
+  install -o openclaw -g openclaw -m 0640 "$skill_src" "$skill_dest/SKILL.md"
+done
+repair_openclaw_config_permissions
+install -o root -g root -m 0644 "$POLKIT_SRC" /etc/polkit-1/rules.d/49-integritas-openclaw-control.rules
+
+if [[ -f "$PROVIDER_STAGING_FILE" ]]; then
+  validate_provider_env_file "$PROVIDER_STAGING_FILE"
+  install -o root -g root -m 0600 "$PROVIDER_STAGING_FILE" "$PROVIDER_ENV_FILE"
+fi
+validate_provider_env_file "$PROVIDER_ENV_FILE"
+
+if [[ ! -f "$ENV_FILE" ]]; then
+  cat >"$ENV_FILE" <<'EOF'
+# Non-secret Integritas outbound control-worker settings.
+INTEGRITAS_CONTROL_URL=
+INTEGRITAS_WORKER_ID=oracle-primary
+INTEGRITAS_CONTROL_POLL_MS=5000
+INTEGRITAS_CONTROL_WORKER_VERSION=0.2.0
+EOF
+  chmod 0600 "$ENV_FILE"
+  chown root:root "$ENV_FILE"
+fi
+if [[ ! -f "$TOKEN_FILE" ]]; then
+  install -o root -g root -m 0600 /dev/null "$TOKEN_FILE"
+  echo "Created empty $TOKEN_FILE. Provision the scoped worker token through an authenticated operator path before starting the service." >&2
+fi
+
+validate_openclaw_with_provider_env "$GATEWAY_CONFIG_DEST"
+validate_openclaw_with_provider_env "$RUNNER_CONFIG_DEST"
+
+# Keep the vetted research methodology pinned in the operator workspace. The
+# ClawHub security audit remains authoritative; --force only replaces the local
+# workspace copy and does not bypass install-policy checks.
+if ! /usr/bin/env -i PATH=/usr/local/bin:/usr/bin:/bin:/opt/openclaw/bin:/opt/openclaw/tools/node-v24.19.0/bin   HOME=/var/lib/openclaw OPENCLAW_HOME=/var/lib/openclaw OPENCLAW_STATE_DIR=/var/lib/openclaw   OPENCLAW_CONFIG_PATH="$GATEWAY_CONFIG_DEST"   /usr/sbin/runuser --preserve-environment -u openclaw --   /opt/openclaw/bin/openclaw skills install @ivangdavila/in-depth-research   --agent personal-admin --version 1.0.0 --force; then
+  echo "Warning: pinned Deep Research skill refresh failed; existing workspace copy was preserved if present." >&2
+fi
+if grep -Eq '^OPENCODE_ZEN_API_KEY=.+' "$PROVIDER_ENV_FILE"; then
+  validate_openclaw_with_provider_env "$ZEN_CONFIG_DEST"
+else
+  rm -f "$ZEN_ENABLE_MARKER"
+fi
+/usr/bin/systemctl daemon-reload
+/usr/bin/systemctl enable openclaw-browser.service >/dev/null
+/usr/bin/systemd-analyze verify /etc/systemd/system/integritas-control-worker.service >/dev/null
+/usr/bin/systemd-analyze verify /etc/systemd/system/openclaw-gateway.service >/dev/null
+/usr/bin/systemd-analyze verify "$BROWSER_SERVICE_DEST" >/dev/null
+/usr/bin/systemd-analyze verify /etc/systemd/system/integritas-openclaw-investigation@.service >/dev/null
+/usr/bin/systemd-analyze verify /etc/systemd/system/integritas-release-deploy@.service >/dev/null
+
+echo "Integritas control worker and bounded multi-provider OpenClaw investigation runner installed."
+echo "Provider secrets are stored root-only in $PROVIDER_ENV_FILE; values were not logged."
