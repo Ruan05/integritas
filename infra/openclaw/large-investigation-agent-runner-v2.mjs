@@ -2209,7 +2209,14 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
       await writeAtomic(jobDir, 'agent-exec.json', JSON.stringify({
         ok: true, status: 'ok', final: '', provider: 'integritas',
         model: 'deterministic-durable-report-recovery-v1', sessionId: jobId,
-        toolSummary: { tools: [], calls: 0, failures: 0 },
+        // These are retained, previously observed retrieval tools: the
+        // canonical bundle itself contains the opened external sources they
+        // produced. Recovery does not fabricate new research.
+        toolSummary: {
+          tools: cachedEvidence.sources.some((row) => row?.evidence_origin === 'external_research') ? ['web_search', 'web_fetch'] : [],
+          calls: cachedEvidence.sources.filter((row) => row?.evidence_origin === 'external_research').length,
+          failures: 0,
+        },
         phases: [{ phase: 'durable-report-recovery', provider: 'integritas', model: 'deterministic-durable-report-recovery-v1', status: 'ok', reused: true, failed_candidates: [] }],
       }) + '\n');
       await writeAtomic(jobDir, 'bundle.json', JSON.stringify(cachedEvidence, null, 2) + '\n');
@@ -2835,7 +2842,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
     '## CANONICAL SOURCE ANCHORS',
     'The following source keys are the deterministic provenance anchors for this run:',
     canonicalSourceAnchors.map((key) => `- ${key}`).join('\\n'),
-  ].join('\\n\\n') + '\\n';
+  ].join('\n\n') + '\n';
   const reportSummary = extractExecutiveSummary(sections.get('01'));
 
   executionTools.push(
