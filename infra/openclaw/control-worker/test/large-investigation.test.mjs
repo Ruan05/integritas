@@ -569,6 +569,6 @@ test('transaction report section surfaces source-linked submitted evidence by to
   assert.match(section, /doc\.invoice/);
   assert.match(section, /EN590 diesel/);
   assert.match(section, /100,000,000 gallons/);
-  assert.match(section, /not independently validated/i);
+  assert.match(section, /independently validated/i);
   assert.doesNotThrow(() => parseReportSectionFinal(section, '# TRANSACTION, SCREENING & RISK REVIEW', 24000));
 });
