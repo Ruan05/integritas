@@ -542,3 +542,33 @@ test('deterministic executive fallback preserves required front-matter ordering'
   assert.doesNotMatch(frontMatter, /^#{1,6}\s+/m);
   assert.ok(frontMatter.length <= 7000);
 });
+
+
+test('transaction report section surfaces source-linked submitted evidence by topic', () => {
+  const evidence = {
+    execution: { terminal_outcome: 'incomplete' },
+    entities: [],
+    relationships: [],
+    sources: [
+      { source_key: 'doc.invoice', evidence_origin: 'submitted_document', verification_state: 'submitted', title: 'Invoice', document_id: DOC1, excerpt: '' },
+      { source_key: 'doc.charter', evidence_origin: 'submitted_document', verification_state: 'submitted', title: 'Charter party', document_id: DOC2, excerpt: '' },
+    ],
+    findings: [
+      { finding_key: 'banking.1', evidence_status: 'alleged', materiality: 'high', claim: 'Invoice names Regions Bank and a LABCO MARIN LTD beneficiary account.', evidence_excerpt: 'Routing 061101375; SWIFT/BIC UPNBUS44XXX.', source_keys: ['doc.invoice'] },
+      { finding_key: 'product.1', evidence_status: 'alleged', materiality: 'high', claim: 'Charter party states EN590 diesel and Rotterdam context.', evidence_excerpt: 'EN590 10ppm Diesel; Rotterdam.', source_keys: ['doc.charter'] },
+      { finding_key: 'economics.1', evidence_status: 'alleged', materiality: 'medium', claim: 'Charter party states 100,000,000 gallons and USD 20.50/MT freight.', evidence_excerpt: 'Quantity and freight stated in the submitted charter.', source_keys: ['doc.charter'] },
+    ],
+    checks: [],
+    contradictions: [],
+    unresolved_checks: [],
+    limitations: [],
+  };
+  const section = deterministicProviderReportSection({ id: '03', focus: 'transaction review' }, evidence, { verdict: 'revise', issues: [] });
+  assert.match(section, /Submitted-evidence banking and payment details/);
+  assert.match(section, /Regions Bank/);
+  assert.match(section, /doc\.invoice/);
+  assert.match(section, /EN590 diesel/);
+  assert.match(section, /100,000,000 gallons/);
+  assert.match(section, /not independently validated/i);
+  assert.doesNotThrow(() => parseReportSectionFinal(section, '# TRANSACTION, SCREENING & RISK REVIEW', 24000));
+});
