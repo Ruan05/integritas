@@ -2190,7 +2190,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
         live_events: [{ category: 'RECOVERY', message: 'Validated canonical evidence is being reused; provider analysis will not be repeated.', state: 'success' }],
       });
       const resumedPairs = await mapLimit(LARGE_REPORT_SECTIONS, 1, async (spec, index) => {
-        const value = reportValidator(spec, { requireMinimum: false })(
+        const value = reportValidator(spec, { requireMinimum: true })(
           deterministicProviderReportSection(spec, cachedEvidence, cachedCritic),
         );
         await progress(jobDir, 'drafting_report', 76 + Math.round(((index + 1) / 4) * 10), 'large_sectioned_report', `reused section ${index + 1}/4`);
@@ -2830,7 +2830,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
   // route must never prevent a complete dossier from being assembled from the
   // canonical validated bundle.
   const sectionPairs = await mapLimit(LARGE_REPORT_SECTIONS, 1, async (spec, index) => {
-    const value = reportValidator(spec, { requireMinimum: false })(
+    const value = reportValidator(spec, { requireMinimum: true })(
       deterministicProviderReportSection(spec, reviewed, critic),
     );
     const result = {
