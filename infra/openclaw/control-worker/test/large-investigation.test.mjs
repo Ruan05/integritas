@@ -496,3 +496,27 @@ test('critic/report parsing and deterministic final assembly stay bounded', () =
   assert.match(bundle.report.markdown,/MASTER SUMMARY/);
   assert.doesNotThrow(() => validateInvestigationBundle(bundle,m,report));
 });
+
+
+test('deterministic report fallback remains comprehensive when provider report routes exhaust', () => {
+  const evidence = {
+    execution: { terminal_outcome: 'incomplete' },
+    entities: [{ entity_key: 'entity.a', display_name: 'Entity A', entity_type: 'company', match_status: 'proposed', confidence: 'low' }],
+    relationships: [],
+    sources: [{ source_key: 'doc.a', evidence_origin: 'submitted_document', verification_state: 'submitted', title: 'Submitted agreement', document_id: DOC1, excerpt: 'Document type: agreement\nIssuer claim: Entity A\nParties: Entity A\nIdentifiers: REF-1\nMaterial terms: stated capacity\nForensic/risk signals: issuer confirmation required' }],
+    findings: [{ finding_key: 'finding.a', entity_key: 'entity.a', evidence_status: 'uncertain', materiality: 'high', claim: 'Submitted agreement asserts capacity.', evidence_excerpt: 'stated capacity', source_keys: ['doc.a'] }],
+    checks: [],
+    contradictions: [],
+    unresolved_checks: [],
+    limitations: ['External verification is still required.'],
+  };
+  const section = deterministicProviderReportSection({ id: '02', focus: 'forensic and entity review' }, evidence, { verdict: 'revise', issues: [] });
+  for (const heading of [
+    '# DOCUMENT, FORENSIC & ENTITY REVIEW',
+    '## Document Forensics',
+    '## Corporate Identity and Legal Identity',
+    '## Claim-to-Evidence Matrix',
+    '## False-Positive Controls / Namesake Disambiguation',
+  ]) assert.ok(section.includes(heading));
+  assert.doesNotThrow(() => parseReportSectionFinal(section, '# DOCUMENT, FORENSIC & ENTITY REVIEW', 24000));
+});
