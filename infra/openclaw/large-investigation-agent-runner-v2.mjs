@@ -2011,15 +2011,15 @@ The current evidence supports only the claims explicitly listed in the finding l
 
 **Research coverage:** ${noExternal}
 
-### Case-specific submitted-evidence highlights
+**Case-specific submitted-evidence highlights**
 
 ${submittedHighlights}
 
-### Highest-materiality and conflicting findings
+**Highest-materiality and conflicting findings**
 
 ${findingHighlights}
 
-### Opened external research candidates
+**Opened external research candidates**
 
 ${openedHighlights}`
     : `This section addresses ${spec.focus}. It is derived from the current submitted evidence, structured findings, canonical source records and explicit unresolved gates. Claims remain bounded by their linked evidence and are not transaction clearance.`);
