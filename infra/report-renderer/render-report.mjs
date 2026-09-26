@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import {
   buildFooterHtml,
   buildHeaderHtml,
@@ -184,7 +185,7 @@ async function main() {
   process.stdout.write(`${JSON.stringify({ ok: true, ...result })}\n`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   main().catch((error) => {
     process.stderr.write(`${String(error?.stack ?? error)}\n`);
     process.exitCode = 1;
