@@ -1984,6 +1984,21 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
   const openedHighlights = openedExternalSources.slice(0, 16).map((row) =>
     `- **${markdownCell(row.title, 260)}:** ${markdownCell(row.excerpt, 520)} — ${markdownCell(row.url, 500)} [${row.source_key}]`
   ).join('\\n') || '- No opened external source was retained.';
+  // Keep the executive front matter concise enough to be read before the
+  // mandated next-steps heading. Full document, finding and source detail is
+  // retained in the later evidence-led sections.
+  const executiveSubmittedHighlights = submittedSources.slice(0, 3).map((row) => {
+    const excerpt = String(row.excerpt ?? '').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+    return `- **${markdownCell(row.title, 180)}:** ${markdownCell(excerpt, 320)} [${row.source_key}]`;
+  }).join('\\n') || '- No submitted-document highlights were extracted.';
+  const executiveFindingHighlights = findings
+    .filter((row) => row.evidence_status === 'conflicting' || row.materiality === 'high' || row.materiality === 'critical')
+    .slice(0, 5)
+    .map((row) => `- **${String(row.evidence_status).toUpperCase()} / ${row.materiality}:** ${markdownCell(row.claim, 240)} — ${markdownCell(row.evidence_excerpt, 240)} [${evidenceSourceLabels(row.source_keys, sourceTitle).slice(0, 180)}]`)
+    .join('\\n') || '- No high-materiality or conflicting finding was recorded.';
+  const executiveOpenedHighlights = openedExternalSources.slice(0, 3).map((row) =>
+    `- **${markdownCell(row.title, 180)}:** ${markdownCell(row.excerpt, 260)} — ${markdownCell(row.url, 240)} [${row.source_key}]`
+  ).join('\\n') || '- No opened external source was retained.';
   const baseStatus = `Terminal outcome: ${status}. The bundle contains ${submittedSources.length} submitted document source(s), ${validatedExternalSources.length} validated external source(s), ${discoveryExternalSources.length} discovery-only external source(s), ${entities.length} entity record(s), ${findings.length} finding(s), ${contradictions.length} contradiction row(s), and ${unresolved.length} unresolved gate(s). This is a draft work product, not transaction clearance.`;
   const noExternal = validatedExternalSources.length
     ? `Validated external research sources are present: ${validatedExternalSources.length}. Opened sources: ${openedExternalSources.length}. Discovery-only sources: ${discoveryExternalSources.length}.`
@@ -2013,15 +2028,15 @@ The current evidence supports only the claims explicitly listed in the finding l
 
 **Case-specific submitted-evidence highlights**
 
-${submittedHighlights}
+${executiveSubmittedHighlights}
 
 **Highest-materiality and conflicting findings**
 
-${findingHighlights}
+${executiveFindingHighlights}
 
 **Opened external research candidates**
 
-${openedHighlights}`
+${executiveOpenedHighlights}`
     : `This section addresses ${spec.focus}. It is derived from the current submitted evidence, structured findings, canonical source records and explicit unresolved gates. Claims remain bounded by their linked evidence and are not transaction clearance.`);
   if (spec.id === '01') {
     sections.set(headings[1], `Complete the following before any approval or release:\n\n${nextSteps}\n\nThe independent review result was ${critic?.verdict || 'revise'}. ${criticSummary}`);
