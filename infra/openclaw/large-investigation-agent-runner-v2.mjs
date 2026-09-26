@@ -1972,6 +1972,18 @@ export function deterministicProviderReportSection(spec, evidence, critic) {
   const entityNames = entities.map((row) => `${row.display_name} (${row.entity_key})`).join(', ') || 'No entity was safely resolved.';
   const statusSummary = [...statusCounts.entries()].map(([key, value]) => `${key}: ${value}`).join('; ') || 'No findings';
   const materialitySummary = [...materialityCounts.entries()].map(([key, value]) => `${key}: ${value}`).join('; ') || 'No findings';
+  const submittedHighlights = submittedSources.map((row) => {
+    const excerpt = String(row.excerpt ?? '').replace(/\\n+/g, ' ').replace(/\\s+/g, ' ').trim();
+    return `- **${row.title}:** ${markdownCell(excerpt, 900)} [${row.source_key}]`;
+  }).join('\\n') || '- No submitted-document highlights were extracted.';
+  const findingHighlights = findings
+    .filter((row) => row.evidence_status === 'conflicting' || row.materiality === 'high' || row.materiality === 'critical')
+    .slice(0, 18)
+    .map((row) => `- **${String(row.evidence_status).toUpperCase()} / ${row.materiality}:** ${markdownCell(row.claim, 500)} — ${markdownCell(row.evidence_excerpt, 500)} [${evidenceSourceLabels(row.source_keys, sourceTitle)}]`)
+    .join('\\n') || '- No high-materiality or conflicting finding was recorded.';
+  const openedHighlights = openedExternalSources.slice(0, 16).map((row) =>
+    `- **${markdownCell(row.title, 260)}:** ${markdownCell(row.excerpt, 520)} — ${markdownCell(row.url, 500)} [${row.source_key}]`
+  ).join('\\n') || '- No opened external source was retained.';
   const baseStatus = `Terminal outcome: ${status}. The bundle contains ${submittedSources.length} submitted document source(s), ${validatedExternalSources.length} validated external source(s), ${discoveryExternalSources.length} discovery-only external source(s), ${entities.length} entity record(s), ${findings.length} finding(s), ${contradictions.length} contradiction row(s), and ${unresolved.length} unresolved gate(s). This is a draft work product, not transaction clearance.`;
   const noExternal = validatedExternalSources.length
     ? `Validated external research sources are present: ${validatedExternalSources.length}. Opened sources: ${openedExternalSources.length}. Discovery-only sources: ${discoveryExternalSources.length}.`
@@ -1997,7 +2009,19 @@ The current evidence supports only the claims explicitly listed in the finding l
 
 **Finding status:** ${statusSummary}. **Materiality:** ${materialitySummary}.
 
-**Research coverage:** ${noExternal}`
+**Research coverage:** ${noExternal}
+
+### Case-specific submitted-evidence highlights
+
+${submittedHighlights}
+
+### Highest-materiality and conflicting findings
+
+${findingHighlights}
+
+### Opened external research candidates
+
+${openedHighlights}`
     : `This section addresses ${spec.focus}. It is derived from the current submitted evidence, structured findings, canonical source records and explicit unresolved gates. Claims remain bounded by their linked evidence and are not transaction clearance.`);
   if (spec.id === '01') {
     sections.set(headings[1], `Complete the following before any approval or release:\n\n${nextSteps}\n\nThe independent review result was ${critic?.verdict || 'revise'}. ${criticSummary}`);
@@ -2029,7 +2053,7 @@ The current evidence supports only the claims explicitly listed in the finding l
   } else if (spec.id === '03') {
     sections.set(headings[1], `Immediate disposition: hold for human review. ${noExternal} This section records transaction, research and contradiction evidence without granting clearance.`);
     sections.set(headings[2], `No banking-specific finding or payment instrument was validated in the current bundle. This is not a banking clearance; obtain bank, payment, beneficiary and authority evidence before relying on the transaction.`);
-    sections.set(headings[3], `The submitted package contains the product/transaction terms recorded in the document register. The current structured findings are reproduced below; product capability, title, custody, storage and delivery remain unresolved without authoritative operator and logistics evidence.\n\n${findingTable}`);
+    sections.set(headings[3], `The submitted package contains the product/transaction terms recorded in the document register. The current structured findings are reproduced below; product capability, title, custody, storage and delivery remain unresolved without authoritative operator and logistics evidence.\n\n### Case-specific transaction findings\n\n${findingTable}\n\n### Opened research candidates relevant to the transaction\n\n${openedHighlights}`);
     sections.set(headings[4], 'No independently validated price, margin, volume-capacity or economic benchmark was committed in this run. Do not infer commercial feasibility from document formatting or stated terms alone.');
     sections.set(headings[5], 'No payment instrument or trade-finance source was validated. Confirm the contracting chain, beneficiary, bank, instrument, conditions precedent and authority through independent evidence.');
     sections.set(headings[6], `No external sanctions, PEP, adverse-media, enforcement or litigation source was committed. The correct status is unverified, not clear. ${noExternal}`);
