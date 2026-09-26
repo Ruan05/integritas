@@ -2158,7 +2158,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
         current_task: { id: 'report.resume', label: 'Reassemble report from validated work', status: 'active', detail: 'Reusing completed evidence, research lanes and critic output.' },
         live_events: [{ category: 'RECOVERY', message: 'Validated canonical evidence is being reused; provider analysis will not be repeated.', state: 'success' }],
       });
-      const resumedPairs = await mapLimit(LARGE_REPORT_SECTIONS, 2, async (spec, index) => {
+      const resumedPairs = await mapLimit(LARGE_REPORT_SECTIONS, 1, async (spec, index) => {
         const value = reportValidator(spec, { requireMinimum: false })(
           deterministicProviderReportSection(spec, cachedEvidence, cachedCritic),
         );
@@ -2205,9 +2205,10 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
       });
       return;
     }
-  } catch {
-    // No compatible final evidence exists yet; continue with the normal
-    // evidence-led investigation path.
+  } catch (error) {
+    // Preserve a bounded diagnostic for recovery without exposing evidence or
+    // credentials, then continue with the normal evidence-led path.
+    await writeAtomic(jobDir, 'durable-report-recovery-error.txt', safeLiveText(error?.message ?? error, 1000) + '\n').catch(() => {});
   }
 
   await progress(jobDir, 'extracting', 18, 'large_document_shards', 'Reviewing submitted evidence page-by-page.', {
@@ -2790,7 +2791,7 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
   // assist upstream with bounded extraction and analysis, but an exhausted report
   // route must never prevent a complete dossier from being assembled from the
   // canonical validated bundle.
-  const sectionPairs = await mapLimit(LARGE_REPORT_SECTIONS, 2, async (spec, index) => {
+  const sectionPairs = await mapLimit(LARGE_REPORT_SECTIONS, 1, async (spec, index) => {
     const value = reportValidator(spec, { requireMinimum: false })(
       deterministicProviderReportSection(spec, reviewed, critic),
     );
