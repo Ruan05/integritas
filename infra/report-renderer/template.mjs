@@ -111,7 +111,7 @@ function compact(value, limit = 220) {
 
 function subjectStatusMatrix(bundle) {
   const findings = Array.isArray(bundle?.findings) ? bundle.findings : [];
-  const rows = (bundle?.entities ?? []).slice(0, 50).map((entity) => {
+  const rows = (bundle?.entities ?? []).map((entity) => {
     const entityFindings = findings.filter((finding) => finding?.entity_key === entity?.entity_key);
     const material = entityFindings.filter((finding) => ['critical', 'high'].includes(String(finding?.materiality))).length;
     const linked = entityFindings.filter((finding) => Array.isArray(finding?.source_keys) && finding.source_keys.length).length;
@@ -129,7 +129,7 @@ function claimEvidenceMatrix(bundle) {
   const weight = { critical: 5, high: 4, medium: 3, low: 2, informational: 1 };
   const ordered = [...(bundle?.findings ?? [])]
     .sort((a, b) => (weight[b?.materiality] ?? 0) - (weight[a?.materiality] ?? 0))
-    .slice(0, 35);
+    ;
   const rows = ordered.map((finding) => {
     const labels = (finding?.source_keys ?? []).slice(0, 5).map((key) => {
       const source = sources.get(key);
@@ -153,7 +153,7 @@ function transactionControlMatrix(bundle) {
 }
 
 function evidenceRegister(bundle) {
-  const sources = (bundle?.sources ?? []).slice(0, 50);
+  const sources = (bundle?.sources ?? []);
   if (!sources.length) return '';
   const rows = sources.map((row) => `<tr><td class="mono-key">${escapeHtml(row?.source_key || '')}</td><td>${escapeHtml(row?.evidence_origin || '')}</td><td>${escapeHtml(row?.verification_state || (row?.evidence_origin === 'submitted_document' ? 'submitted' : 'unknown'))}</td><td>${escapeHtml(compact(row?.title, 220))}</td><td>${escapeHtml(row?.page_reference || '—')}</td><td>${escapeHtml(compact(row?.reliability_note, 280))}</td></tr>`).join('');
   return `<section class="report-visual"><div class="visual-title"><div><div class="eyebrow">Evidence register</div><h2>Source coverage</h2></div><span>${(bundle?.sources ?? []).length} source(s)</span></div><table><thead><tr><th>Source key</th><th>Origin</th><th>Verification</th><th>Title</th><th>Page</th><th>Reliability / caveat</th></tr></thead><tbody>${rows}</tbody></table></section>`;
@@ -161,7 +161,7 @@ function evidenceRegister(bundle) {
 
 function relationshipMap(bundle) {
   const entities = new Map((bundle?.entities ?? []).map((row) => [row?.entity_key, row?.display_name || row?.entity_key]));
-  const rows = (bundle?.relationships ?? []).slice(0, 80).map((row) => {
+  const rows = (bundle?.relationships ?? []).map((row) => {
     const from = entities.get(row?.from_entity_key) || row?.from_entity_key || 'Unknown entity';
     const to = entities.get(row?.to_entity_key) || row?.to_entity_key || 'Unknown entity';
     return `<tr><td>${escapeHtml(from)}</td><td class="edge">${escapeHtml(row?.relationship_type || 'related to')}</td><td>${escapeHtml(to)}</td><td><span class="status-pill ${statusClass(row?.evidence_status)}">${escapeHtml(row?.evidence_status || 'uncertain')}</span></td></tr>`;
@@ -171,13 +171,13 @@ function relationshipMap(bundle) {
 }
 
 function contradictionMatrix(bundle) {
-  const rows = (bundle?.contradictions ?? []).slice(0, 60).map((row) => `<tr><td>${escapeHtml(row?.contradiction_key || 'Contradiction')}</td><td>${escapeHtml(compact(row?.description, 420))}</td><td>${escapeHtml((row?.finding_keys ?? []).join(', '))}</td></tr>`).join('');
+  const rows = (bundle?.contradictions ?? []).map((row) => `<tr><td>${escapeHtml(row?.contradiction_key || 'Contradiction')}</td><td>${escapeHtml(compact(row?.description, 420))}</td><td>${escapeHtml((row?.finding_keys ?? []).join(', '))}</td></tr>`).join('');
   if (!rows) return '';
   return `<section class="report-visual"><div class="visual-title"><div><div class="eyebrow">Conflict review</div><h2>Contradiction matrix</h2></div><span>${(bundle?.contradictions ?? []).length} item(s)</span></div><table><thead><tr><th>Conflict</th><th>What conflicts</th><th>Linked findings</th></tr></thead><tbody>${rows}</tbody></table></section>`;
 }
 
 function unresolvedGates(bundle) {
-  const rows = (bundle?.unresolved_checks ?? []).slice(0, 60).map((row, index) => `<li><strong>${index + 1}. ${escapeHtml(compact(row?.description, 300))}</strong><span><b>Blocker:</b> ${escapeHtml(compact(row?.blocker || row?.reason, 240))}</span><span><b>Required action:</b> ${escapeHtml(compact(row?.next_manual_action, 360))}</span></li>`).join('');
+  const rows = (bundle?.unresolved_checks ?? []).map((row, index) => `<li><strong>${index + 1}. ${escapeHtml(compact(row?.description, 300))}</strong><span><b>Blocker:</b> ${escapeHtml(compact(row?.blocker || row?.reason, 240))}</span><span><b>Required action:</b> ${escapeHtml(compact(row?.next_manual_action, 360))}</span></li>`).join('');
   if (!rows) return '';
   return `<section class="report-visual gates"><div class="visual-title"><div><div class="eyebrow">Closure controls</div><h2>Unresolved verification gates</h2></div><span>${(bundle?.unresolved_checks ?? []).length} gate(s)</span></div><ol>${rows}</ol></section>`;
 }
