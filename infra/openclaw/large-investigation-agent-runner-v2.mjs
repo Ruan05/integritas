@@ -2138,6 +2138,78 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
     toolResult('integritas_large_orchestrator_v2', 'completed', 'Bounded sharded orchestration with validation-aware provider failover and deterministic final assembly.'),
   ];
 
+  // A completed canonical evidence bundle is durable work. On a retry of the
+  // same case revision, final report rendering must reuse it directly instead
+  // of re-running provider planning, analysis, or research just to recover a
+  // failed report/PDF commit.
+  try {
+    const [cachedEvidenceRaw, cachedCriticRaw] = await Promise.all([
+      readFile(path.join(jobDir, 'large-final-evidence.json'), 'utf8'),
+      readFile(path.join(jobDir, 'large-critic.json'), 'utf8'),
+    ]);
+    const cachedEvidence = JSON.parse(cachedEvidenceRaw);
+    const cachedCritic = JSON.parse(cachedCriticRaw);
+    if (cachedEvidence?.case_job_id === manifest.case_job_id
+      && cachedEvidence?.case_revision === manifest.case_revision
+      && Array.isArray(cachedEvidence?.sources)
+      && Array.isArray(cachedEvidence?.findings)
+      && Array.isArray(cachedEvidence?.checks)) {
+      await progress(jobDir, 'drafting_report', 76, 'large_sectioned_report', 'Reassembling the report from the durable canonical evidence bundle.', {
+        current_task: { id: 'report.resume', label: 'Reassemble report from validated work', status: 'active', detail: 'Reusing completed evidence, research lanes and critic output.' },
+        live_events: [{ category: 'RECOVERY', message: 'Validated canonical evidence is being reused; provider analysis will not be repeated.', state: 'success' }],
+      });
+      const resumedPairs = await mapLimit(LARGE_REPORT_SECTIONS, 2, async (spec, index) => {
+        const value = reportValidator(spec, { requireMinimum: false })(
+          deterministicProviderReportSection(spec, cachedEvidence, cachedCritic),
+        );
+        await progress(jobDir, 'drafting_report', 76 + Math.round(((index + 1) / 4) * 10), 'large_sectioned_report', `reused section ${index + 1}/4`);
+        return [spec.id, value];
+      });
+      const resumedSections = new Map(resumedPairs);
+      const canonicalSourceAnchors = cachedEvidence.sources
+        .map((row) => row?.source_key)
+        .filter((value) => typeof value === 'string' && value.trim())
+        .slice(0, 5);
+      const reportMarkdown = [
+        joinReportSections(resumedSections).trimEnd(),
+        '## CANONICAL SOURCE ANCHORS',
+        'The following source keys are the deterministic provenance anchors for this run:',
+        canonicalSourceAnchors.map((key) => `- ${key}`).join('\n'),
+      ].join('\n\n') + '\n';
+      cachedEvidence.report = {
+        summary: extractExecutiveSummary(resumedSections.get('01')),
+        markdown: reportMarkdown,
+        status: 'draft',
+      };
+      cachedEvidence.execution = {
+        ...(cachedEvidence.execution ?? {}),
+        completed_at: new Date().toISOString(),
+        stages: uniq([...(cachedEvidence.execution?.stages ?? []), 'deterministic_report_reassembly']),
+        tool_results: [
+          ...(cachedEvidence.execution?.tool_results ?? []),
+          toolResult('integritas_durable_report_recovery_v1', 'completed', 'Reassembled the final dossier from the same-revision canonical evidence bundle without repeating provider analysis or research.'),
+        ].slice(0, 200),
+      };
+      validateInvestigationBundle(cachedEvidence, manifest, reportMarkdown);
+      await writeAtomic(jobDir, 'agent-exec.json', JSON.stringify({
+        ok: true, status: 'ok', final: '', provider: 'integritas',
+        model: 'deterministic-durable-report-recovery-v1', sessionId: jobId,
+        toolSummary: { tools: [], calls: 0, failures: 0 },
+        phases: [{ phase: 'durable-report-recovery', provider: 'integritas', model: 'deterministic-durable-report-recovery-v1', status: 'ok', reused: true, failed_candidates: [] }],
+      }) + '\n');
+      await writeAtomic(jobDir, 'bundle.json', JSON.stringify(cachedEvidence, null, 2) + '\n');
+      await writeAtomic(jobDir, 'report.md', reportMarkdown);
+      await progress(jobDir, 'drafting_report', 82, 'ready_for_deterministic_qa', 'Durable evidence bundle reassembled into the final dossier; deterministic QA is next.', {
+        current_task: { id: 'report.qa', label: 'Run semantic and deterministic QA', status: 'active', detail: 'Reused dossier is ready for release checks.' },
+        live_events: [{ category: 'RECOVERY', message: 'Final report reassembled from validated work; QA is next.', state: 'success' }],
+      });
+      return;
+    }
+  } catch {
+    // No compatible final evidence exists yet; continue with the normal
+    // evidence-led investigation path.
+  }
+
   await progress(jobDir, 'extracting', 18, 'large_document_shards', 'Reviewing submitted evidence page-by-page.', {
     current_task: { id: 'documents.review', label: 'Page extraction, OCR and document review', status: 'active', detail: 'Submitted evidence is being extracted and checked page-by-page.' },
     live_events: [{ category: 'FILE DISCOVERY', message: 'Submitted evidence is being extracted and checked page-by-page.', state: 'discovery' }],
