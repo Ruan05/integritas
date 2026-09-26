@@ -2899,35 +2899,6 @@ export async function runLargeInvestigationV2({ jobId, jobDir, manifest, trusted
     live_events: [{ category: 'REPORT', message: 'Draft due-diligence dossier assembled; deterministic and semantic QA are next.', state: 'success' }],
   });
 }
-, 'freight', 'mt', 'bbl', 'gallon', 'quantity', 'volume', 'value', 'price', 'pricing', 'fee'], 'No source-linked price, quantity, volume, freight, value or fee detail was extracted.', 8)}`);
-    sections.set(headings[5], `No payment instrument or trade-finance source was independently validated. The following contract, invoice, payment-sequence and release terms are recorded as submitted-evidence assertions only. Confirm the contracting chain, beneficiary, bank, instrument, conditions precedent, title sequence and authority through independent evidence.\n\n### Submitted-evidence procedure and trade-finance details\n\n${submittedTopicHighlights(['invoice', 'contract', 'ttvia', 'release', 'payment', 'title', 'charter', 'bank', 'beneficiary'], 'No source-linked invoice, contract, payment, title, release or trade-finance detail was extracted.', 8)}`);
-    sections.set(headings[6], `No external sanctions, PEP, adverse-media, enforcement or litigation source was committed. The correct status is unverified, not clear. ${noExternal}`);
-    sections.set(headings[7], `Potential document-integrity indicators below are source-linked risk indicators requiring corroboration, not final fraud conclusions.\n\n### Submitted-evidence integrity and contradiction indicators\n\n${submittedTopicHighlights(['signature', 'governing', 'indemnification', 'conflict', 'boilerplate', 'phone', 'certificate', 'format', 'document'], 'No source-linked document-integrity or contradiction indicator was extracted.', 8)}\n\n${(evidence.limitations ?? []).join(' ')}`);
-    sections.set(headings[8], 'No independent positive indicator was validated. Shared names, product labels or repeated formatting are not risk-reducing proof.');
-    sections.set(headings[9], `${markdownTable(['Materiality', 'Count'], [...materialityCounts.entries()])}\n\n${markdownTable(['Evidence status', 'Count'], [...statusCounts.entries()])}`);
-    sections.set(headings[10], gateTable);
-    sections.set(headings[11], `Submitted evidence sources: ${submittedSources.length}. Validated external research sources: ${validatedExternalSources.length}. Opened external research sources: ${openedExternalSources.length}. Discovery-only external sources: ${discoveryExternalSources.length}. ${noExternal} Research completeness must be measured by claim-to-source coverage, not by elapsed time or a completed job state.`);
-    sections.set(headings[12], gateTable + `\n\nNext closure actions:\n\n${nextSteps}`);
-  } else {
-    sections.set(headings[1], entityTable);
-    sections.set(headings[2], sourceTable);
-    sections.set(headings[3], `${contradictions.length ? markdownTable(['Contradiction', 'Description', 'Linked findings'], contradictions.map((row) => [row.contradiction_key, row.description, row.finding_keys.join(', ')])) : 'No structured contradiction rows were committed. This is not proof of consistency; it means the current deterministic/model pass did not promote a contradiction row.'}\n\n### Unresolved gates\n\n${gateTable}`);
-    sections.set(headings[4], nextSteps);
-    sections.set(headings[5], `**Final conclusion:** retain the case as incomplete until the unresolved gates are closed with authoritative evidence and a healthy independent review. ${(evidence.limitations ?? []).join(' ')} This conclusion is limited to the evidence and gates recorded in this bundle.`);
-  }
-  const rows = headings.map((heading) => sections.get(heading) || 'No validated detail was produced for this subsection.');
-  const blocks = rows.map((content, index) => `${headings[index]}\n\n${content}`);
-  const result = blocks.join('\n\n');
-  if (result.length <= SECTION_MAX) return result;
-  // Preserve the complete heading contract under very large evidence ledgers.
-  // Truncate subsection bodies proportionally instead of slicing the assembled
-  // Markdown and accidentally deleting required trailing sections.
-  const headingChars = headings.reduce((sum, heading) => sum + heading.length + 2, 0)
-    + Math.max(0, headings.length - 1) * 2;
-  const bodyBudget = Math.max(120 * headings.length, SECTION_MAX - headingChars);
-  const perBody = Math.max(120, Math.floor(bodyBudget / headings.length));
-  return rows.map((content, index) => `${headings[index]}\n\n${String(content).slice(0, perBody)}`).join('\n\n').slice(0, SECTION_MAX);
-}
 function reportTask(spec) {
   const headings = SECTION_HEADINGS[spec.id].join('\n');
   return `# Integritas Prototype-1 report section ${spec.id}
