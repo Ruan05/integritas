@@ -36,16 +36,16 @@ export class ControlClient {
     throw lastError ?? new Error('control API request failed');
   }
 
-  heartbeat(details) { return this.call('worker_heartbeat', details); }
-  lease() { return this.call('worker_lease'); }
-  touch(commandId) { return this.call('worker_touch', { command_id: commandId }); }
-  complete(commandId, result) { return this.call('worker_complete', { command_id: commandId, result_summary: result }); }
-  incomplete(commandId, result) { return this.call('worker_incomplete', { command_id: commandId, result_summary: result }); }
-  fail(commandId, code, summary) { return this.call('worker_fail', { command_id: commandId, error_code: code, error_summary: summary }); }
+  heartbeat(details) { return this.call('worker_heartbeat', details, { retryTransient: true }); }
+  lease() { return this.call('worker_lease', {}, { retryTransient: true }); }
+  touch(commandId) { return this.call('worker_touch', { command_id: commandId }, { retryTransient: true }); }
+  complete(commandId, result) { return this.call('worker_complete', { command_id: commandId, result_summary: result }, { retryTransient: true }); }
+  incomplete(commandId, result) { return this.call('worker_incomplete', { command_id: commandId, result_summary: result }, { retryTransient: true }); }
+  fail(commandId, code, summary) { return this.call('worker_fail', { command_id: commandId, error_code: code, error_summary: summary }, { retryTransient: true }); }
   storageSelfTest(commandId) { return this.call('worker_storage_selftest', { command_id: commandId }); }
   manifest(commandId, caseJobId) { return this.call('worker_manifest', { command_id: commandId, case_job_id: caseJobId }); }
   checkpoint(commandId, caseJobId, caseRevision, stage, progress, safeMetadata = {}) {
-    return this.call('worker_checkpoint', { command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision, stage, progress, safe_metadata: safeMetadata });
+    return this.call('worker_checkpoint', { command_id: commandId, case_job_id: caseJobId, case_revision: caseRevision, stage, progress, safe_metadata: safeMetadata }, { retryTransient: true });
   }
   publishOutput(commandId, caseJobId, caseRevision, outputType, contentType, content, sha256, encoding = 'utf8', safeMetadata = {}) {
     return this.call('worker_publish_output', {
@@ -66,7 +66,7 @@ export class ControlClient {
       bundle_sha256: bundleSha256, report_sha256: reportSha256, bundle,
     });
   }
-  jobState(commandId, caseJobId) { return this.call('worker_job_state', { command_id: commandId, case_job_id: caseJobId }); }
+  jobState(commandId, caseJobId) { return this.call('worker_job_state', { command_id: commandId, case_job_id: caseJobId }, { retryTransient: true }); }
   acknowledgeCancel(commandId, caseJobId) { return this.call('worker_cancel_ack', { command_id: commandId, case_job_id: caseJobId }); }
   acknowledgePause(commandId, caseJobId) { return this.call('worker_pause_ack', { command_id: commandId, case_job_id: caseJobId }); }
 }
