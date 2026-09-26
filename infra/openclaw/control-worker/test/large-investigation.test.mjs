@@ -538,5 +538,5 @@ test('deterministic executive fallback preserves required front-matter ordering'
   const master = section.indexOf('# MASTER SUMMARY — READ THIS FIRST');
   const next = section.indexOf('## DIRECT NEXT STEPS — WHAT TO DO NOW');
   assert.ok(master >= 0 && next > master);
-  assert.doesNotMatch(section.slice(master, next), /^#{1,6}\s+/m);
+  assert.doesNotMatch(section.slice(master + '# MASTER SUMMARY — READ THIS FIRST'.length, next), /^#{1,6}\s+/m);
 });
